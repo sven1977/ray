@@ -5,6 +5,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 
 import numpy as np
 import pytest
@@ -15,6 +16,7 @@ import ray.ray_constants as ray_constants
 from ray.cluster_utils import Cluster
 from ray.test_utils import (
     relevant_errors,
+    wait_for_condition,
     wait_for_errors,
     RayTestTimeoutException,
 )
@@ -79,6 +81,56 @@ def test_failed_task(ray_start_regular):
     else:
         # ray.get should throw an exception.
         assert False
+
+
+def test_get_throws_quickly_when_found_exception(ray_start_regular):
+    def random_path():
+        return os.path.join(tempfile.gettempdir(), uuid.uuid4().hex)
+
+    def touch(path):
+        with open(path, "w"):
+            pass
+
+    def wait_for_file(path):
+        while True:
+            if os.path.exists(path):
+                break
+            time.sleep(0.1)
+
+    # We use an actor instead of functions here. If we use functions, it's
+    # very likely that two normal tasks are submitted before the first worker
+    # is registered to Raylet. Since `maximum_startup_concurrency` is 1,
+    # the worker pool will wait for the registration of the first worker
+    # and skip starting new workers. The result is, the two tasks will be
+    # executed sequentially, which breaks an assumption of this test case -
+    # the two tasks run in parallel.
+    @ray.remote
+    class Actor(object):
+        def bad_func1(self):
+            raise Exception("Test function intentionally failed.")
+
+        def bad_func2(self):
+            os._exit(0)
+
+        def slow_func(self, path):
+            wait_for_file(path)
+
+    def expect_exception(objects, exception):
+        with pytest.raises(ray.exceptions.RayError) as err:
+            ray.get(objects)
+        assert err.type is exception
+
+    f = random_path()
+    actor = Actor.options(is_direct_call=True, max_concurrency=2).remote()
+    expect_exception([actor.bad_func1.remote(),
+                      actor.slow_func.remote(f)], ray.exceptions.RayTaskError)
+    touch(f)
+
+    f = random_path()
+    actor = Actor.options(is_direct_call=True, max_concurrency=2).remote()
+    expect_exception([actor.bad_func2.remote(),
+                      actor.slow_func.remote(f)], ray.exceptions.RayActorError)
+    touch(f)
 
 
 def test_fail_importing_remote_function(ray_start_2_cpus):
@@ -989,6 +1041,84 @@ def test_serialized_id(ray_start_cluster):
 
     obj = ray.put(1)
     ray.get(get.remote([obj], True))
+
+
+def test_fate_sharing(ray_start_cluster):
+    config = json.dumps({
+        "num_heartbeats_timeout": 10,
+        "raylet_heartbeat_timeout_milliseconds": 100,
+    })
+    cluster = Cluster()
+    # Head node with no resources.
+    cluster.add_node(num_cpus=0, _internal_config=config)
+    # Node to place the parent actor.
+    node_to_kill = cluster.add_node(num_cpus=1, resources={"parent": 1})
+    # Node to place the child actor.
+    cluster.add_node(num_cpus=1, resources={"child": 1})
+    cluster.wait_for_nodes()
+    ray.init(address=cluster.address)
+
+    @ray.remote
+    def sleep():
+        time.sleep(1000)
+
+    @ray.remote(resources={"child": 1})
+    def probe():
+        return
+
+    @ray.remote
+    class Actor(object):
+        def __init__(self):
+            return
+
+        def start_child(self, use_actors):
+            if use_actors:
+                child = Actor.options(resources={"child": 1}).remote()
+                ray.get(child.sleep.remote())
+            else:
+                ray.get(sleep.options(resources={"child": 1}).remote())
+
+        def sleep(self):
+            time.sleep(1000)
+
+        def get_pid(self):
+            return os.getpid()
+
+    # Returns whether the "child" resource is available.
+    def child_resource_available():
+        p = probe.remote()
+        ready, _ = ray.wait([p], timeout=1)
+        return len(ready) > 0
+
+    # Test fate sharing if the parent process dies.
+    def test_process_failure(use_actors):
+        a = Actor.options(resources={"parent": 1}).remote()
+        pid = ray.get(a.get_pid.remote())
+        a.start_child.remote(use_actors=use_actors)
+        # Wait for the child to be scheduled.
+        assert wait_for_condition(
+            lambda: not child_resource_available(), timeout_ms=10000)
+        # Kill the parent process.
+        os.kill(pid, 9)
+        assert wait_for_condition(child_resource_available, timeout_ms=10000)
+
+    # Test fate sharing if the parent node dies.
+    def test_node_failure(node_to_kill, use_actors):
+        a = Actor.options(resources={"parent": 1}).remote()
+        a.start_child.remote(use_actors=use_actors)
+        # Wait for the child to be scheduled.
+        assert wait_for_condition(
+            lambda: not child_resource_available(), timeout_ms=10000)
+        # Kill the parent process.
+        cluster.remove_node(node_to_kill, allow_graceful=False)
+        node_to_kill = cluster.add_node(num_cpus=1, resources={"parent": 1})
+        assert wait_for_condition(child_resource_available, timeout_ms=10000)
+        return node_to_kill
+
+    test_process_failure(use_actors=True)
+    test_process_failure(use_actors=False)
+    node_to_kill = test_node_failure(node_to_kill, use_actors=True)
+    node_to_kill = test_node_failure(node_to_kill, use_actors=False)
 
 
 if __name__ == "__main__":

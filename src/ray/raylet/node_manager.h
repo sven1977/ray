@@ -55,6 +55,9 @@ struct NodeManagerConfig {
   uint64_t heartbeat_period_ms;
   /// The time between debug dumps in milliseconds, or -1 to disable.
   uint64_t debug_dump_period_ms;
+  /// The time between attempts to eagerly evict objects from plasma in
+  /// milliseconds, or -1 to disable.
+  int64_t free_objects_period_ms;
   /// Whether to enable fair queueing between task classes in raylet.
   bool fair_queueing_enabled;
   /// Whether to enable pinning for plasma objects.
@@ -77,7 +80,7 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   /// \param object_manager A reference to the local object manager.
   NodeManager(boost::asio::io_service &io_service, const ClientID &self_node_id,
               const NodeManagerConfig &config, ObjectManager &object_manager,
-              std::shared_ptr<gcs::RedisGcsClient> gcs_client,
+              std::shared_ptr<gcs::GcsClient> gcs_client,
               std::shared_ptr<ObjectDirectoryInterface> object_directory_);
 
   /// Process a new client connection.
@@ -121,10 +124,8 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
 
   /// Handle an unexpected failure notification from GCS pubsub.
   ///
-  /// \param worker_id The ID of the failed worker.
-  /// \param worker_data Data associated with the worker failure.
-  void HandleUnexpectedWorkerFailure(const WorkerID &worker_id,
-                                     const gcs::WorkerFailureData &worker_failed_data);
+  /// \param worker_address The address of the worker that died.
+  void HandleUnexpectedWorkerFailure(const rpc::Address &worker_address);
 
   /// Handler for the addition of a new node.
   ///
@@ -161,6 +162,10 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
 
   /// Write out debug state to a file.
   void DumpDebugState() const;
+
+  /// Flush objects that are out of scope in the application. This will attempt
+  /// to eagerly evict all plasma copies of the object from the cluster.
+  void FlushObjectsToFree();
 
   /// Get profiling information from the object manager and push it to the GCS.
   ///
@@ -498,13 +503,6 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   /// \param message_data A pointer to the message data.
   void ProcessNotifyActorResumedFromCheckpoint(const uint8_t *message_data);
 
-  /// Process client message of ReportActiveObjectIDs.
-  ///
-  /// \param client The client that sent the message.
-  /// \param message_data A pointer to the message data.
-  void ProcessReportActiveObjectIDs(const std::shared_ptr<LocalClientConnection> &client,
-                                    const uint8_t *message_data);
-
   /// Update actor frontier when a task finishes.
   /// If the task is an actor creation task and the actor was resumed from a checkpoint,
   /// restore the frontier from the checkpoint. Otherwise, just extend actor frontier.
@@ -578,6 +576,9 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   /// Repeat the process as long as we can schedule a task.
   void NewSchedulerSchedulePendingTasks();
 
+  /// Whether a task is an direct actor creation task.
+  bool IsDirectActorCreationTask(const TaskID &task_id);
+
   /// ID of this node.
   ClientID self_node_id_;
   boost::asio::io_service &io_service_;
@@ -587,7 +588,7 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   /// actor died) and to pin objects that are in scope in the cluster.
   plasma::PlasmaClient store_client_;
   /// A client connection to the GCS.
-  std::shared_ptr<gcs::RedisGcsClient> gcs_client_;
+  std::shared_ptr<gcs::GcsClient> gcs_client_;
   /// The object table. This is shared with the object manager.
   std::shared_ptr<ObjectDirectoryInterface> object_directory_;
   /// The timer used to send heartbeats.
@@ -596,6 +597,8 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   std::chrono::milliseconds heartbeat_period_;
   /// The period between debug state dumps.
   int64_t debug_dump_period_;
+  /// The period between attempts to eagerly evict objects from plasma.
+  int64_t free_objects_period_;
   /// Whether to enable fair queueing between task classes in raylet.
   bool fair_queueing_enabled_;
   /// Whether to enable pinning for plasma objects.
@@ -614,6 +617,9 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   uint64_t last_heartbeat_at_ms_;
   /// The time that the last debug string was logged to the console.
   uint64_t last_debug_dump_at_ms_;
+  /// The time that we last sent a FreeObjects request to other nodes for
+  /// objects that have gone out of scope in the application.
+  uint64_t last_free_objects_at_ms_;
   /// Initial node manager configuration.
   const NodeManagerConfig initial_config_;
   /// The resources (and specific resource IDs) that are currently available.
@@ -656,6 +662,10 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
   /// Map of workers leased out to direct call clients.
   std::unordered_map<WorkerID, std::shared_ptr<Worker>> leased_workers_;
 
+  /// Map from owner worker ID to a list of worker IDs that the owner has a
+  /// lease on.
+  absl::flat_hash_map<WorkerID, std::vector<WorkerID>> leased_workers_by_owner_;
+
   /// Whether new schedule is enabled.
   const bool new_scheduler_enabled_;
 
@@ -684,8 +694,20 @@ class NodeManager : public rpc::NodeManagerServiceHandler {
 
   absl::flat_hash_map<ObjectID, std::unique_ptr<RayObject>> pinned_objects_;
 
-  /// XXX
+  /// Wait for a task's arguments to become ready.
   void WaitForTaskArgsRequests(std::pair<ScheduleFn, Task> &work);
+
+  // TODO(swang): Evict entries from these caches.
+  /// Cache for the WorkerFailureTable in the GCS.
+  absl::flat_hash_set<WorkerID> failed_workers_cache_;
+  /// Cache for the ClientTable in the GCS.
+  absl::flat_hash_set<ClientID> failed_nodes_cache_;
+
+  /// Objects that are out of scope in the application and that should be freed
+  /// from plasma. The cache is flushed when it reaches the config's
+  /// free_objects_batch_size, or if objects have been in the cache for longer
+  /// than the config's free_objects_period, whichever occurs first.
+  std::vector<ObjectID> objects_to_free_;
 };
 
 }  // namespace raylet

@@ -22,7 +22,7 @@ APEX_DEFAULT_CONFIG = merge_dicts(
         "sample_batch_size": 50,
         "target_network_update_freq": 500000,
         "timesteps_per_iteration": 25000,
-        "per_worker_exploration": True,
+        "exploration_config": {"type": "PerWorkerEpsilonGreedy"},
         "worker_side_prioritization": True,
         "min_iter_time_s": 30,
     },
@@ -33,7 +33,7 @@ APEX_DEFAULT_CONFIG = merge_dicts(
 
 def defer_make_workers(trainer, env_creator, policy, config):
     # Hack to workaround https://github.com/ray-project/ray/issues/2541
-    # The workers will be creatd later, after the optimizer is created
+    # The workers will be created later, after the optimizer is created
     return trainer._make_workers(env_creator, policy, config, 0)
 
 

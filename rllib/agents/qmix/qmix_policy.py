@@ -10,13 +10,14 @@ import ray
 from ray.rllib.agents.qmix.mixers import VDNMixer, QMixer
 from ray.rllib.agents.qmix.model import RNNModel, _get_size
 from ray.rllib.evaluation.metrics import LEARNER_STATS_KEY
-from ray.rllib.policy.policy import TupleActions, Policy
+from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.rnn_sequencing import chop_into_sequences
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.models.catalog import ModelCatalog
 from ray.rllib.models.model import _unpack_obs
 from ray.rllib.env.constants import GROUP_REWARDS
 from ray.rllib.utils.annotations import override
+from ray.rllib.utils.tuple_actions import TupleActions
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,7 @@ class QMixLoss(nn.Module):
         return loss, mask, masked_td_error, chosen_action_qvals, targets
 
 
+# TODO(sven): Make this a TorchPolicy child.
 class QMixTorchPolicy(Policy):
     """QMix impl. Assumes homogeneous agents for now.
 
@@ -158,9 +160,8 @@ class QMixTorchPolicy(Policy):
     def __init__(self, obs_space, action_space, config):
         _validate(obs_space, action_space)
         config = dict(ray.rllib.agents.qmix.qmix.DEFAULT_CONFIG, **config)
-        self.config = config
-        self.observation_space = obs_space
-        self.action_space = action_space
+        self.framework = "torch"
+        super().__init__(obs_space, action_space, config)
         self.n_agents = len(obs_space.original_space.spaces)
         self.n_actions = action_space.spaces[0].n
         self.h_size = config["model"]["lstm_cell_size"]
@@ -253,7 +254,9 @@ class QMixTorchPolicy(Policy):
                         prev_reward_batch=None,
                         info_batch=None,
                         episodes=None,
+                        explore=None,
                         **kwargs):
+        explore = explore if explore is not None else self.config["explore"]
         obs_batch, action_mask, _ = self._unpack_observation(obs_batch)
         # We need to ensure we do not use the env global state
         # to compute actions
@@ -273,7 +276,8 @@ class QMixTorchPolicy(Policy):
             masked_q_values[avail == 0.0] = -float("inf")
             # epsilon-greedy action selector
             random_numbers = th.rand_like(q_values[:, :, 0])
-            pick_random = (random_numbers < self.cur_epsilon).long()
+            pick_random = (random_numbers < (self.cur_epsilon
+                                             if explore else 0.0)).long()
             random_actions = Categorical(avail).sample().long()
             actions = (pick_random * random_actions +
                        (1 - pick_random) * masked_q_values.argmax(dim=2))

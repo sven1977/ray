@@ -5,7 +5,6 @@ import sys
 import time
 
 import ray
-from ray.function_manager import FunctionDescriptor
 
 from ray import (
     gcs_utils,
@@ -336,6 +335,7 @@ class GlobalState:
             },
             "IsDirectCall": actor_table_data.is_direct_call,
             "State": actor_table_data.state,
+            "Timestamp": actor_table_data.timestamp,
         }
 
         return actor_info
@@ -392,9 +392,7 @@ class GlobalState:
 
         task = ray._raylet.TaskSpec.from_string(
             task_table_data.task.task_spec.SerializeToString())
-        function_descriptor_list = task.function_descriptor_list()
-        function_descriptor = FunctionDescriptor.from_bytes_list(
-            function_descriptor_list)
+        function_descriptor = task.function_descriptor()
 
         task_spec_info = {
             "JobID": task.job_id().hex(),
@@ -411,11 +409,7 @@ class GlobalState:
             "Args": task.arguments(),
             "ReturnObjectIDs": task.returns(),
             "RequiredResources": task.required_resources(),
-            "FunctionID": function_descriptor.function_id.hex(),
-            "FunctionHash": binary_to_hex(function_descriptor.function_hash),
-            "ModuleName": function_descriptor.module_name,
-            "ClassName": function_descriptor.class_name,
-            "FunctionName": function_descriptor.function_name,
+            "FunctionDescriptor": function_descriptor.to_dict(),
         }
 
         execution_spec = ray._raylet.TaskExecutionSpec.from_string(

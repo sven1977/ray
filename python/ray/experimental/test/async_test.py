@@ -1,5 +1,6 @@
 import asyncio
 import time
+import os
 
 import pytest
 
@@ -9,6 +10,7 @@ from ray.experimental import async_api
 
 @pytest.fixture
 def init():
+    os.environ["RAY_FORCE_DIRECT"] = "0"
     ray.init(num_cpus=4)
     async_api.init()
     asyncio.get_event_loop().set_debug(False)
@@ -44,42 +46,6 @@ def test_gather(init):
     futures = [async_api.as_future(obj_id) for obj_id in tasks]
     results = loop.run_until_complete(asyncio.gather(*futures))
     assert all(a == b for a, b in zip(results, ray.get(tasks)))
-
-
-def test_gather_benchmark(init):
-    @ray.remote
-    def f(n):
-        time.sleep(0.001 * n)
-        return 42
-
-    async def test_async():
-        sum_time = 0.
-        for _ in range(50):
-            tasks = [f.remote(n) for n in range(20)]
-            start = time.time()
-            futures = [async_api.as_future(obj_id) for obj_id in tasks]
-            await asyncio.gather(*futures)
-            sum_time += time.time() - start
-        return sum_time
-
-    def baseline():
-        sum_time = 0.
-        for _ in range(50):
-            tasks = [f.remote(n) for n in range(20)]
-            start = time.time()
-            ray.get(tasks)
-            sum_time += time.time() - start
-        return sum_time
-
-    # warm up
-    baseline()
-    # async get
-    sum_time_1 = asyncio.get_event_loop().run_until_complete(test_async())
-    # get
-    sum_time_2 = baseline()
-
-    # Ensure the new implementation is not too slow.
-    assert sum_time_2 * 1.2 > sum_time_1
 
 
 def test_wait(init):
