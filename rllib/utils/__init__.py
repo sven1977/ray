@@ -3,6 +3,8 @@ from functools import partial
 from ray.rllib.utils.annotations import override, PublicAPI, DeveloperAPI
 from ray.rllib.utils.framework import try_import_tf, try_import_tfp, \
     try_import_torch, check_framework
+from ray.rllib.utils.distributions import Categorical, \
+    DiagGaussian, Dirichlet, MultiCategorical
 from ray.rllib.utils.deprecation import deprecation_warning, renamed_agent, \
     renamed_class, renamed_function
 from ray.rllib.utils.filter_manager import FilterManager
@@ -56,6 +58,7 @@ def force_list(elements=None, to_tuple=False):
 
 force_tuple = partial(force_list, to_tuple=True)
 
+
 __all__ = [
     "add_mixins",
     "check",
@@ -78,13 +81,18 @@ __all__ = [
     "try_import_tf",
     "try_import_tfp",
     "try_import_torch",
+    "Categorical",
     "ConstantSchedule",
     "DeveloperAPI",
+    "DiagGaussian",
+    "Dirichlet",
+    "Distribution",
     "ExponentialSchedule",
     "Filter",
     "FilterManager",
     "LARGE_INTEGER",
     "LinearSchedule",
+    "MultiCategorical",
     "PiecewiseSchedule",
     "PolicyClient",
     "PolicyServer",
