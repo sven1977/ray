@@ -8,11 +8,10 @@ from ray.tune.registry import RLLIB_MODEL, RLLIB_PREPROCESSOR, \
 
 from ray.rllib.models.extra_spaces import Simplex
 from ray.rllib.models.action_dist import ActionDistribution
-from ray.rllib.models.torch.torch_action_dist import (TorchCategorical,
-                                                      TorchDiagGaussian)
+from ray.rllib.models.torch.torch_action_dist import TorchDiagGaussian
 from ray.rllib.models.tf.fcnet_v2 import FullyConnectedNetwork as FCNetV2
 from ray.rllib.models.tf.visionnet_v2 import VisionNetwork as VisionNetV2
-from ray.rllib.models.tf.tf_action_dist import Categorical, MultiCategorical, \
+from ray.rllib.models.tf.tf_action_dist import MultiCategorical, \
     Deterministic, DiagGaussian, MultiActionDistribution, Dirichlet
 from ray.rllib.models.preprocessors import get_preprocessor
 from ray.rllib.models.tf.fcnet_v1 import FullyConnectedNetwork
@@ -23,6 +22,7 @@ from ray.rllib.models.tf.visionnet_v1 import VisionNetwork
 from ray.rllib.models.modelv2 import ModelV2
 from ray.rllib.utils import try_import_tf
 from ray.rllib.utils.annotations import DeveloperAPI, PublicAPI
+from ray.rllib.utils.distribution.categorical import Categorical
 from ray.rllib.utils.error import UnsupportedSpaceException
 
 tf = try_import_tf()
@@ -154,7 +154,7 @@ class ModelCatalog:
                 dist = Deterministic
         # Discrete Space -> Categorical.
         elif isinstance(action_space, gym.spaces.Discrete):
-            dist = Categorical if framework == "tf" else TorchCategorical
+            dist = Categorical
         # Tuple Space -> MultiAction.
         elif dist_type is MultiActionDistribution or \
                 isinstance(action_space, gym.spaces.Tuple):

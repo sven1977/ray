@@ -38,22 +38,22 @@ class TorchDistributionWrapper(ActionDistribution):
         return self.logp(self.last_sample)
 
 
-class TorchCategorical(TorchDistributionWrapper):
-    """Wrapper class for PyTorch Categorical distribution."""
+#class TorchCategorical(TorchDistributionWrapper):
+#    """Wrapper class for PyTorch Categorical distribution."""
 
-    @override(ActionDistribution)
-    def __init__(self, inputs, model):
-        super().__init__(inputs, model)
-        self.dist = torch.distributions.categorical.Categorical(logits=inputs)
+#    @override(ActionDistribution)
+#    def __init__(self, inputs, model):
+#        super().__init__(inputs, model)
+#        self.dist = torch.distributions.categorical.Categorical(logits=inputs)
 
-    @override(ActionDistribution)
-    def deterministic_sample(self):
-        return self.dist.probs.argmax(dim=1)
+#    @override(ActionDistribution)
+#    def deterministic_sample(self):
+#        return self.dist.probs.argmax(dim=1)
 
-    @staticmethod
-    @override(ActionDistribution)
-    def required_model_output_shape(action_space, model_config):
-        return action_space.n
+#    @staticmethod
+#    @override(ActionDistribution)
+#    def required_model_output_shape(action_space, model_config):
+#        return action_space.n
 
 
 class TorchDiagGaussian(TorchDistributionWrapper):

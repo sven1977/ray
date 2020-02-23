@@ -1,6 +1,6 @@
 import numpy as np
 
-from ray.rllib.utils.distributions.distribution import Distribution
+from ray.rllib.utils.distribution.distribution import Distribution
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils import try_import_tf, try_import_torch
 

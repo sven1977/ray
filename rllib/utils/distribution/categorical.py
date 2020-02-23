@@ -1,4 +1,4 @@
-from ray.rllib.utils.distributions.distribution import Distribution
+from ray.rllib.utils.distribution.distribution import Distribution
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils import try_import_tf, try_import_torch
 
@@ -12,11 +12,18 @@ class Categorical(Distribution):
     probabilities summing to 1.0).
     """
     @override(Distribution)
+    def __init__(self, inputs, model=None, temperature=1.0, framework="tf"):
+        temperature = max(0.0001, temperature)  # Clamp for stability reasons.
+        # Allow softmax formula w/ temperature != 1.0:
+        # Divide inputs by temperature.
+        super().__init__(inputs / temperature, model, framework=framework)
+
+    @override(Distribution)
     def deterministic_sample(self):
         if self.framework == "tf":
             return tf.math.argmax(self.inputs, axis=1)
         else:
-            return self.torch_dist.probs.argmax(dim=1)
+            return self.dist.probs.argmax(dim=1)
 
     #@override(Distribution)
     #def logp(self, x):
@@ -34,7 +41,7 @@ class Categorical(Distribution):
     @override(Distribution)
     def _build_tf_sample_op(self):
         # TODO(sven): use tfp.
-        return tf.squeeze(tf.multinomial(self.inputs, 1), axis=1)
+        return tf.squeeze(tf.random.categorical(self.inputs, 1), axis=1)
 
     @override(Distribution)
     def _tf_logp(self, x):

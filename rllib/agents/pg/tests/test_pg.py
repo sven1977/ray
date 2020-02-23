@@ -5,10 +5,9 @@ import ray
 import ray.rllib.agents.pg as pg
 from ray.rllib.agents.pg import PGPipeline
 from ray.rllib.evaluation.postprocessing import Postprocessing
-from ray.rllib.models.tf.tf_action_dist import Categorical
-from ray.rllib.models.torch.torch_action_dist import TorchCategorical
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils import check, fc
+from ray.rllib.utils.distribution.categorical import Categorical
 
 
 class TestPG(unittest.TestCase):
@@ -97,10 +96,11 @@ class TestPG(unittest.TestCase):
         results = pg.pg_torch_loss(
             policy,
             policy.model,
-            dist_class=TorchCategorical,
+            dist_class=Categorical,
             train_batch=train_batch)
         expected_logits = policy.model.last_output()
-        expected_logp = TorchCategorical(expected_logits, policy.model).logp(
+        expected_logp = Categorical(
+            expected_logits, policy.model, framework="torch").logp(
             train_batch[SampleBatch.ACTIONS])
         expected_loss = -np.mean(
             expected_logp.detach().numpy() *

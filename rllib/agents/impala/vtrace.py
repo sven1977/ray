@@ -30,8 +30,8 @@ tensors.
 
 import collections
 
-from ray.rllib.models.tf.tf_action_dist import Categorical
 from ray.rllib.utils import try_import_tf
+from ray.rllib.utils.distribution.categorical import Categorical
 
 tf = try_import_tf()
 

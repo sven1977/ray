@@ -41,6 +41,7 @@ class TestDQN(unittest.TestCase):
             if fw == "torch":
                 continue
 
+            print("framework={}".format(fw))
             config["eager"] = True if fw == "eager" else False
             config["use_pytorch"] = True if fw == "torch" else False
 

@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 
 from ray.rllib.utils.annotations import DeveloperAPI
+from ray.rllib.utils.deprecation import deprecation_warning
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 
 tf = try_import_tf()
@@ -28,14 +29,14 @@ class Distribution(metaclass=ABCMeta):
         self.model = model
         self.framework = framework
         self.tf_sample_op = None
-        self.torch_dist = None
-        self.torch_last_sample = None
+        self.dist = None
+        self.last_sample = None
 
-        if self.framework == "tf":
+        if self.framework == "tf" and not tf.executing_eagerly():
             self.tf_sample_op = self._build_tf_sample_op()
         elif self.framework == "torch":
             self.inputs = torch.Tensor(self.inputs)
-            self.torch_dist = self._get_torch_dist()
+            self.dist = self._get_torch_dist()
 
     @DeveloperAPI
     def sample(self):
@@ -48,7 +49,7 @@ class Distribution(metaclass=ABCMeta):
             return self.tf_sample_op
         else:
             # Store the last sample to serve calls to `self.sample_logp`.
-            self.torch_last_sample = self.torch_dist.sample()
+            self.torch_last_sample = self.dist.sample()
             return self.torch_last_sample
 
     @abstractmethod
@@ -62,6 +63,13 @@ class Distribution(metaclass=ABCMeta):
         raise NotImplementedError
 
     @DeveloperAPI
+    def sampled_action_logp(self):
+        deprecation_warning(
+            "Distribution.sampled_action_logp",
+            "Distribution.sampled_logp")
+        return self.sampled_logp()
+
+    @DeveloperAPI
     def sampled_logp(self):
         """
         Returns:
@@ -70,7 +78,7 @@ class Distribution(metaclass=ABCMeta):
         if self.framework == "tf":
             if tf.executing_eagerly():
                 return self.logp(self._build_tf_sample_op())
-            return self.logp(self.sample_op)
+            return self.logp(self.tf_sample_op)
         else:
             assert self.torch_last_sample is not None
             return self.logp(self.torch_last_sample)
@@ -84,7 +92,7 @@ class Distribution(metaclass=ABCMeta):
         if self.framework == "tf":
             return self._tf_logp(x)
         else:
-            return self.torch_dist.log_prob(torch.Tensor(x))
+            return self.dist.log_prob(torch.Tensor(x))
 
     @DeveloperAPI
     def kl(self, other):
@@ -96,7 +104,7 @@ class Distribution(metaclass=ABCMeta):
             return self._tf_kl(other)
         else:
             return torch.distributions.kl.kl_divergence(
-                self.torch_dist, other.torch_dist
+                self.dist, other.dist
             )
 
     @DeveloperAPI
@@ -107,7 +115,7 @@ class Distribution(metaclass=ABCMeta):
         if self.framework == "tf":
             return self._tf_entropy()
         else:
-            return self.torch_dist.entropy()
+            return self.dist.entropy()
 
     def multi_kl(self, other):
         """

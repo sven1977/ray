@@ -4,6 +4,7 @@ import functools
 from ray.rllib.models.action_dist import ActionDistribution
 from ray.rllib.utils.annotations import override, DeveloperAPI
 from ray.rllib.utils import try_import_tf
+from ray.rllib.utils.distribution.categorical import Categorical
 from ray.rllib.utils.tuple_actions import TupleActions
 
 tf = try_import_tf()
@@ -38,52 +39,55 @@ class TFActionDistribution(ActionDistribution):
         return self.logp(self.sample_op)
 
 
-class Categorical(TFActionDistribution):
-    """Categorical distribution for discrete action spaces."""
+#class Categorical(TFActionDistribution):
+#    """Categorical distribution for discrete action spaces."""
 
-    @DeveloperAPI
-    def __init__(self, inputs, model=None, temperature=1.0):
-        temperature = max(0.0001, temperature)  # clamp for stability reasons
-        # Allow softmax formula w/ temperature != 1.0:
-        # Divide inputs by temperature.
-        super().__init__(inputs / temperature, model)
-
-    @override(ActionDistribution)
-    def deterministic_sample(self):
-        return tf.math.argmax(self.inputs, axis=1)
-
-    @override(ActionDistribution)
-    def logp(self, x):
-        return -tf.nn.sparse_softmax_cross_entropy_with_logits(
-            logits=self.inputs, labels=tf.cast(x, tf.int32))
-
-    @override(ActionDistribution)
-    def entropy(self):
-        a0 = self.inputs - tf.reduce_max(self.inputs, axis=1, keep_dims=True)
-        ea0 = tf.exp(a0)
-        z0 = tf.reduce_sum(ea0, axis=1, keep_dims=True)
-        p0 = ea0 / z0
-        return tf.reduce_sum(p0 * (tf.log(z0) - a0), axis=1)
-
-    @override(ActionDistribution)
-    def kl(self, other):
-        a0 = self.inputs - tf.reduce_max(self.inputs, axis=1, keep_dims=True)
-        a1 = other.inputs - tf.reduce_max(other.inputs, axis=1, keep_dims=True)
-        ea0 = tf.exp(a0)
-        ea1 = tf.exp(a1)
-        z0 = tf.reduce_sum(ea0, axis=1, keep_dims=True)
-        z1 = tf.reduce_sum(ea1, axis=1, keep_dims=True)
-        p0 = ea0 / z0
-        return tf.reduce_sum(p0 * (a0 - tf.log(z0) - a1 + tf.log(z1)), axis=1)
-
-    @override(TFActionDistribution)
-    def _build_sample_op(self):
-        return tf.squeeze(tf.multinomial(self.inputs, 1), axis=1)
-
-    @staticmethod
-    @override(ActionDistribution)
-    def required_model_output_shape(action_space, model_config):
-        return action_space.n
+#    @DeveloperAPI
+#    def __init__(self, inputs, model=None, temperature=1.0):
+#        deprecation_warning(
+#            "ray.rllib.model.tf.tf_action_dist",
+#            "ray.rllib.utils.distribution.categorical", error=True)
+#        temperature = max(0.0001, temperature)  # clamp for stability reasons
+#        # Allow softmax formula w/ temperature != 1.0:
+#        # Divide inputs by temperature.
+#        super().__init__(inputs / temperature, model)
+#
+#    @override(ActionDistribution)
+#    def deterministic_sample(self):
+#        return tf.math.argmax(self.inputs, axis=1)
+#
+#    @override(ActionDistribution)
+#    def logp(self, x):
+#        return -tf.nn.sparse_softmax_cross_entropy_with_logits(
+#            logits=self.inputs, labels=tf.cast(x, tf.int32))
+#
+#    @override(ActionDistribution)
+#    def entropy(self):
+#        a0 = self.inputs - tf.reduce_max(self.inputs, axis=1, keep_dims=True)
+#        ea0 = tf.exp(a0)
+#        z0 = tf.reduce_sum(ea0, axis=1, keep_dims=True)
+#        p0 = ea0 / z0
+#        return tf.reduce_sum(p0 * (tf.log(z0) - a0), axis=1)
+#
+#    @override(ActionDistribution)
+#    def kl(self, other):
+#        a0 = self.inputs - tf.reduce_max(self.inputs, axis=1, keep_dims=True)
+#        a1 = other.inputs - tf.reduce_max(other.inputs, axis=1, keep_dims=True)
+#        ea0 = tf.exp(a0)
+#        ea1 = tf.exp(a1)
+#        z0 = tf.reduce_sum(ea0, axis=1, keep_dims=True)
+#        z1 = tf.reduce_sum(ea1, axis=1, keep_dims=True)
+#        p0 = ea0 / z0
+#        return tf.reduce_sum(p0 * (a0 - tf.log(z0) - a1 + tf.log(z1)), axis=1)
+#
+#    @override(TFActionDistribution)
+#    def _build_sample_op(self):
+#        return tf.squeeze(tf.multinomial(self.inputs, 1), axis=1)
+#
+#    @staticmethod
+#    @override(ActionDistribution)
+#    def required_model_output_shape(action_space, model_config):
+#        return action_space.n
 
 
 class MultiCategorical(TFActionDistribution):

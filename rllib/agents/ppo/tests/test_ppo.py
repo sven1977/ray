@@ -9,11 +9,10 @@ from ray.rllib.agents.ppo.ppo_tf_policy import postprocess_ppo_gae as \
 from ray.rllib.agents.ppo.ppo_torch_policy import postprocess_ppo_gae as \
     postprocess_ppo_gae_torch, ppo_surrogate_loss as ppo_surrogate_loss_torch
 from ray.rllib.evaluation.postprocessing import Postprocessing
-from ray.rllib.models.tf.tf_action_dist import Categorical
 from ray.rllib.models.torch.torch_modelv2 import TorchModelV2
-from ray.rllib.models.torch.torch_action_dist import TorchCategorical
 from ray.rllib.policy.policy import ACTION_LOGP
 from ray.rllib.policy.sample_batch import SampleBatch
+from ray.rllib.utils.distribution.categorical import Categorical
 from ray.rllib.utils.framework import try_import_tf
 from ray.rllib.utils.numpy import fc
 from ray.rllib.utils.test_utils import check
@@ -159,12 +158,12 @@ class TestPPO(unittest.TestCase):
 
         # Calculate actual PPO loss (results are stored in policy.loss_obj)
         # for tf.
-        ppo_surrogate_loss_torch(policy, policy.model, TorchCategorical,
-                                 train_batch)
+        ppo_surrogate_loss_torch(
+            policy, policy.model, Categorical, train_batch)
 
         kl, entropy, pg_loss, vf_loss, overall_loss = \
             self._ppo_loss_helper(
-                policy, policy.model, TorchCategorical, train_batch,
+                policy, policy.model, Categorical, train_batch,
                 policy.model.last_output(),
                 policy.model.value_function().detach().numpy()
             )

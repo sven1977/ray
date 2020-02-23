@@ -2,10 +2,10 @@ from gym.spaces import Box
 import numpy as np
 import unittest
 
-from ray.rllib.utils.distributions import Categorical
-from ray.rllib.utils.test_utils import check
+from ray.rllib.utils.distribution.categorical import Categorical
 from ray.rllib.utils.framework import try_import_tf
 from ray.rllib.utils.numpy import softmax
+from ray.rllib.utils.test_utils import check
 
 tf = try_import_tf()
 if tf:
@@ -87,7 +87,9 @@ class TestDistributions(unittest.TestCase):
             input_ = input_space.sample()
             categorical = Categorical(input_, None, framework=fw)
             out = categorical.sample()
-            check(np.mean(out.numpy()), 1.0, decimals=1)
+            out = np.mean(out.numpy()) if fw != "tf" else \
+                tf.reduce_mean(tf.cast(out, tf.float32))
+            check(out, 1.0, decimals=1)
 
             # Test log-likelihood outputs.
             input_ = input_space.sample()

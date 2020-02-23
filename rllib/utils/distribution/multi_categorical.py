@@ -1,7 +1,7 @@
 import numpy as np
 
-from ray.rllib.utils.distributions.categorical import Categorical
-from ray.rllib.utils.distributions.distribution import Distribution
+from ray.rllib.utils.distribution.categorical import Categorical
+from ray.rllib.utils.distribution.distribution import Distribution
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils import try_import_tf, try_import_torch
 
@@ -15,12 +15,12 @@ class MultiCategorical(Distribution):
     probabilities summing to 1.0).
     """
     @override(Distribution)
-    def __init__(self, inputs, framework="tf"):
+    def __init__(self, inputs, model, framework="tf"):
         self.cats = [
-            Categorical(input_)
+            Categorical(input_, model, framework=framework)
             for input_ in tf.split(inputs, input_lens, axis=1)
         ] if framework == "tf" else None
-        super(Distribution, self).__init__(inputs, framework=framework)
+        super().__init__(inputs, model, framework=framework)
 
     @override(Distribution)
     def deterministic_sample(self):
