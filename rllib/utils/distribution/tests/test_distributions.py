@@ -2,9 +2,11 @@ from gym.spaces import Box
 import numpy as np
 import unittest
 
-from ray.rllib.utils.distribution.categorical import Categorical
+from ray.rllib.utils.distribution import Bernoulli, Categorical, \
+    SquashedGaussian
 from ray.rllib.utils.framework import try_import_tf
-from ray.rllib.utils.numpy import softmax
+from ray.rllib.utils.numpy import softmax, sigmoid, MIN_LOG_NN_OUTPUT, \
+    MAX_LOG_NN_OUTPUT
 from ray.rllib.utils.test_utils import check
 
 tf = try_import_tf()
@@ -17,50 +19,54 @@ class TestDistributions(unittest.TestCase):
     Tests our various distribution classes passing them parameterization inputs
     that would normally come from a NN.
     """
-    """def test_bernoulli(self):
-        # Create 5 bernoulli distributions (or a multiple thereof if we use
-        # batch-size > 1).
-        param_space = Float(-1.0, 1.0, shape=(5,), main_axes="B")
+    def test_bernoulli(self):
+        # Create a bernoulli distribution (batch size=100).
+        input_space = Box(-1.0, 1.0, (100,), np.float32)
 
-        # The Component to test.
-        bernoulli = Bernoulli()
-        # Batch of size=6 and deterministic (True).
-        input_ = param_space.sample(6)
-        expected = sigmoid(input_) > 0.5
-        # Sample n times, expect always max value (max likelihood for
-        # deterministic draw).
-        for _ in range(10):
-            out = bernoulli.sample(input_, deterministic=True)
+        for fw in ["torch", "tf", "eager"]:
+            print("framework={}".format(fw))
+            eager_ctx = None
+            if fw == "eager":
+                eager_ctx = eager_mode()
+                eager_ctx.__enter__()
+                fw = "tf"
+
+            # Deterministic sampling.
+            inputs = input_space.sample()
+            expected = sigmoid(inputs) > 0.5
+            bernoulli = Bernoulli(inputs, None, framework=fw)
+            # Sample n times, expect always max value (max likelihood for
+            # deterministic draw).
+            out = bernoulli.deterministic_sample()
             check(out, expected)
-            out = bernoulli.sample_deterministic(input_)
-            check(out, expected)
+    
+            # Stochastic sampling -> expect roughly the mean.
+            inputs = input_space.sample()
+            bernoulli = Bernoulli(inputs, None, framework=fw)
+            out = bernoulli.sample()
+            out = np.mean(out.numpy()) if fw != "tf" else \
+                tf.reduce_mean(tf.cast(out, tf.float32))
+            check(out, 0.5, decimals=1)
 
-        # Batch of size=6 and non-deterministic -> expect roughly the mean.
-        input_ = param_space.sample(6)
-        outs = []
-        for _ in range(100):
-            out = bernoulli.sample(input_, deterministic=False)
-            outs.append(out)
-            out = bernoulli.sample_stochastic(input_)
-            outs.append(out)
+            # Test log-likelihood outputs.
+            input_ = input_space.sample()
+            bernoulli = Bernoulli(input_, None, framework=fw)
+            probs = sigmoid(input_)
+            values = np.random.choice([True, False], size=100, p=[0.3, 0.7])
+            out = bernoulli.logp(values)
+            expected_log_probs = np.log(np.where(values, probs, 1.0 - probs))
+            check(out, expected_log_probs)
 
-        check(np.mean(outs), 0.5, decimals=1)
+            # Test entropy outputs.
+            # Binary Entropy with natural log.
+            expected_entropy = -(probs * np.log(probs)) - \
+                ((1.0 - probs) * np.log(1.0 - probs))
+            out = bernoulli.entropy()
+            check(out, expected_entropy)
 
-        logits = np.array([[0.1, -0.2, 0.3, -4.4, 2.0]])
-        probs = sigmoid(logits)
+            if eager_ctx is not None:
+                eager_ctx.__exit__(None, None, None)
 
-        # Test log-likelihood outputs.
-        values = np.array([[True, False, False, True, True]])
-        out = bernoulli.log_prob(logits, values=values)
-        expected_log_probs = np.log(np.where(values, probs, 1.0 - probs))
-        check(out, expected_log_probs)
-
-        # Test entropy outputs.
-        # Binary Entropy with natural log.
-        expected_entropy = -(probs * np.log(probs)) - ((1.0 - probs) * np.log(1.0 - probs))
-        out = bernoulli.entropy(logits)
-        check(out, expected_entropy)
-    """
     def test_categorical(self):
         # Create a categorical distribution of 3 categories (batch size=100).
         input_space = Box(-1.0, 2.0, (100, 3), np.float32)
@@ -112,7 +118,6 @@ class TestDistributions(unittest.TestCase):
                 eager_ctx.__exit__(None, None, None)
 
     def test_multi_categorical(self):
-
         # Create 5 categorical distributions of 3 categories each.
         param_space = Float(shape=(5, 3), low=-1.0, high=2.0, main_axes="B")
         values_space = Int(3, shape=(5,), main_axes="B")
@@ -254,6 +259,89 @@ class TestDistributions(unittest.TestCase):
         check(out, np.sum(np.log(norm.pdf(values, means, stds)), axis=-1), decimals=4)
 
         # TODO: entropy and KL-Divergence test cases.
+
+    def test_squashed_gaussian(self):
+        """Tests the SquashedGaussia ActionDistribution."""
+
+        # Create a 5-variate squashed gaussian (batch size=100).
+        input_space = Box(-20.0, 20.0, (100, 10), np.float32)
+        low, high = -2.0, 1.0
+
+        for fw in ["torch", "tf", "eager"]:
+            print("framework={}".format(fw))
+            eager_ctx = None
+            if fw == "eager":
+                eager_ctx = eager_mode()
+                eager_ctx.__enter__()
+                fw = "tf"
+    
+            # Deterministic sampling.
+            inputs = input_space.sample()
+            means, _ = np.split(inputs, 2, axis=-1)
+            squashed_distribution = SquashedGaussian(
+                inputs, {}, low=low, high=high, framework=fw)
+            expected = ((np.tanh(means) + 1.0) / 2.0) * (high - low) + low
+            # Sample n times, expect always mean value (deterministic draw).
+            out = squashed_distribution.deterministic_sample()
+            check(out, expected)
+
+            continue
+            # Batch of size=n and non-deterministic -> expect roughly the mean.
+            inputs = input_space.sample()
+            means, log_stds = np.split(inputs, 2, axis=-1)
+            squashed_distribution = SquashedGaussian(
+                inputs, {}, low=low, high=high)
+            expected = ((np.tanh(means) + 1.0) / 2.0) * (high - low) + low
+            values = squashed_distribution.sample()
+            self.assertTrue(np.max(values) < high)
+            self.assertTrue(np.min(values) > low)
+        
+            check(np.mean(values), expected.mean(), decimals=1)
+        
+            # Test log-likelihood outputs.
+            sampled_action_logp = squashed_distribution.sampled_action_logp()
+            # Convert to parameters for distr.
+            stds = np.exp(
+                np.clip(log_stds, MIN_LOG_NN_OUTPUT, MAX_LOG_NN_OUTPUT))
+            # Unsquash values, then get log-llh from regular gaussian.
+            unsquashed_values = np.arctanh((values - low) /
+                                           (high - low) * 2.0 - 1.0)
+            log_prob_unsquashed = \
+                np.sum(np.log(norm.pdf(unsquashed_values, means, stds)),
+                       -1)
+            log_prob = log_prob_unsquashed - \
+                       np.sum(np.log(1 - np.tanh(unsquashed_values) ** 2),
+                              axis=-1)
+            check(np.mean(sampled_action_logp), np.mean(log_prob),
+                  rtol=0.01)
+        
+            # NN output.
+            means = np.array([[0.1, 0.2, 0.3, 0.4, 50.0],
+                              [-0.1, -0.2, -0.3, -0.4, -1.0]])
+            log_stds = np.array([[0.8, -0.2, 0.3, -1.0, 2.0],
+                                 [0.7, -0.3, 0.4, -0.9, 2.0]])
+            squashed_distribution = SquashedGaussian(
+                np.concatenate([means, log_stds], axis=-1), {},
+                low=low,
+                high=high)
+            # Convert to parameters for distr.
+            stds = np.exp(log_stds)
+            # Values to get log-likelihoods for.
+            values = np.array([[0.9, 0.2, 0.4, -0.1, -1.05],
+                               [-0.9, -0.2, 0.4, -0.1, -1.05]])
+        
+            # Unsquash values, then get log-llh from regular gaussian.
+            unsquashed_values = np.arctanh((values - low) /
+                                           (high - low) * 2.0 - 1.0)
+            log_prob_unsquashed = \
+                np.sum(np.log(norm.pdf(unsquashed_values, means, stds)),
+                       -1)
+            log_prob = log_prob_unsquashed - \
+                       np.sum(np.log(1 - np.tanh(unsquashed_values) ** 2),
+                              axis=-1)
+        
+            out = squashed_distribution.logp(values)
+            check(out, log_prob)
 
     def test_beta(self):
         # Create 5 beta distributions (2 parameters (alpha and beta) each).
@@ -402,64 +490,6 @@ class TestDistributions(unittest.TestCase):
             print("{}: out={} expected={}".format(i, out, expected))
             check(out, np.array([expected]), atol=0.25)
 
-    def test_squashed_normal(self):
-        param_space = Tuple(Float(-1.0, 1.0, shape=(5,)), Float(0.5, 1.0, shape=(5,)), main_axes="B")
-
-        low, high = -2.0, 1.0
-        squashed_distribution = SquashedNormal(low=low, high=high)
-
-        # Batch of size=2 and deterministic (True).
-        input_ = param_space.sample(2)
-        expected = ((np.tanh(input_[0]) + 1.0) / 2.0) * (high - low) + low   # [0] = mean
-        # Sample n times, expect always mean value (deterministic draw).
-        for _ in range(50):
-            out = squashed_distribution.sample(input_, deterministic=True)
-            check(out, expected)
-            out = squashed_distribution.sample_deterministic(input_)
-            check(out, expected)
-
-        # Batch of size=1 and non-deterministic -> expect roughly the mean.
-        input_ = param_space.sample(1)
-        expected = ((np.tanh(input_[0]) + 1.0) / 2.0) * (high - low) + low  # [0] = mean
-        outs = []
-        for _ in range(500):
-            out = squashed_distribution.sample(input_, deterministic=False)
-            outs.append(out)
-            self.assertTrue(np.max(out) <= high)
-            self.assertTrue(np.min(out) >= low)
-            out = squashed_distribution.sample_stochastic(input_)
-            outs.append(out)
-            self.assertTrue(np.max(out) <= high)
-            self.assertTrue(np.min(out) >= low)
-
-        check(np.mean(outs), expected.mean(), decimals=1)
-
-        means = np.array([[0.1, 0.2, 0.3, 0.4, 50.0], [-0.1, -0.2, -0.3, -0.4, -1.0]])
-        log_stds = np.array([[0.8, -0.2, 0.3, -1.0, 10.0], [0.7, -0.3, 0.4, -0.9, 8.0]])
-        # The normal-adapter does this following line with the NN output (interpreted as log(stddev)):
-        # Doesn't really matter here in this test case, though.
-        stds = np.exp(np.clip(log_stds, a_min=MIN_LOG_NN_OUTPUT, a_max=MAX_LOG_NN_OUTPUT))
-        # Make sure values are within low and high.
-        values = np.array([[0.9, 0.2, 0.4, -0.1, -1.05], [-0.9, -0.2, 0.4, -0.1, -1.05]])
-
-        # Test log-likelihood outputs.
-        # TODO: understand and comment the following formula to get the log-prob.
-        # Unsquash values, then get log-llh from regular gaussian.
-        unsquashed_values = np.arctanh((values - low) / (high - low) * 2.0 - 1.0)
-        log_prob_unsquashed = np.log(norm.pdf(unsquashed_values, means, stds))
-        log_prob = log_prob_unsquashed - np.sum(np.log(1 - np.tanh(unsquashed_values) ** 2), axis=-1, keepdims=True)
-
-        out = squashed_distribution.log_prob((means, stds), values)
-        check(out, log_prob)
-
-        # Test entropy outputs.
-        # TODO
-        return
-        #out = squashed_distribution.entropy((means, stds))
-        ## See: https://en.wikipedia.org/wiki/Normal_distribution#Maximum_entropy
-        #expected_entropy = 0.5 * (1 + np.log(2 * np.square(stds) * np.pi))
-        #check(out, expected_entropy)
-
     def test_gumbel_softmax_distribution(self):
         # 5-categorical Gumble-Softmax.
         param_space = Float(shape=(5,), main_axes="B")
@@ -591,3 +621,8 @@ class TestDistributions(unittest.TestCase):
 
         out = cumulative_distribution.log_prob(params, values)
         check(out, expected_log_llh, decimals=0)
+
+
+if __name__ == "__main__":
+    import unittest
+    unittest.main(verbosity=1)

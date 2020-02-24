@@ -32,8 +32,10 @@ class Distribution(metaclass=ABCMeta):
         self.dist = None
         self.last_sample = None
 
-        if self.framework == "tf" and not tf.executing_eagerly():
-            self.tf_sample_op = self._build_tf_sample_op()
+        if self.framework == "tf":
+            self.dist = self._get_tfp_dist()
+            if not tf.executing_eagerly():
+                self.tf_sample_op = self._build_tf_sample_op()
         elif self.framework == "torch":
             self.inputs = torch.Tensor(self.inputs)
             self.dist = self._get_torch_dist()
@@ -138,8 +140,9 @@ class Distribution(metaclass=ABCMeta):
     @DeveloperAPI
     def required_model_output_shape(space, model_config):
         """
-        Returns the required shape of an input parameter tensor for a
-        particular Space and an optional dict of distribution-specific
+        Returns the required shape of a distribution input parameter tensor
+        (`self.inputs`) such that this distribution outputs samples for
+        the given `space` and an optional dict of distribution-specific
         options.
 
         Args:
@@ -154,15 +157,17 @@ class Distribution(metaclass=ABCMeta):
         """
         raise NotImplementedError
 
-    @abstractmethod
     def _build_tf_sample_op(self):
         """
         Returns:
             tfp.??: The tfp.distributions sampling op given `self.inputs`.
         """
+        # Try possible tfp distribution object.
+        if self.dist is not None:
+            return self.dist.sample()
+        # Otherwise: Error.
         raise NotImplementedError
 
-    @abstractmethod
     def _tf_logp(self, x):
         """
         Args:
@@ -172,17 +177,23 @@ class Distribution(metaclass=ABCMeta):
             tf.Tensor: The log-likelihood of the sampled `x`, given
                 `self.inputs`.
         """
+        # Try possible tfp distribution object.
+        if self.dist is not None:
+            return self.dist.log_prob(x)
+        # Otherwise: Error.
         raise NotImplementedError
 
-    @abstractmethod
     def _tf_entropy(self):
         """
         Returns:
             tf.Tensor: The entropy of the distribution given `self.inputs`.
         """
+        # Try possible tfp distribution object.
+        if self.dist is not None:
+            return self.dist.entropy()
+        # Otherwise: Error.
         raise NotImplementedError
 
-    @abstractmethod
     def _tf_kl(self, other):
         """
         Args:
@@ -192,7 +203,19 @@ class Distribution(metaclass=ABCMeta):
         Returns:
             tf.Tensor: The KL-divergence between this dist and `other`.
         """
+        # Try possible tfp distribution object.
+        if self.dist and hasattr(other, "dist") and other.dist:
+            return self.dist.kl(other.dist)
+        # Otherwise: Error.
         raise NotImplementedError
+
+    def _get_tfp_dist(self):
+        """
+        Returns:
+            Optional[tfp.distribution.Distribution]: A tfp distribution object
+                that may depend on `self.inputs`.
+        """
+        pass
 
     @abstractmethod
     def _get_torch_dist(self):
