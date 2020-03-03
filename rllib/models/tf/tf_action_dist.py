@@ -197,7 +197,8 @@ class DiagGaussian(TFActionDistribution):
 class Deterministic(TFActionDistribution):
     """Action distribution that returns the input values directly.
 
-    This is similar to DiagGaussian with standard deviation zero.
+    This is similar to DiagGaussian with standard deviation zero (thus only
+    requiring the "mean" values as NN output).
     """
 
     @override(ActionDistribution)
