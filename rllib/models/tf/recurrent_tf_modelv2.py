@@ -66,7 +66,7 @@ class RecurrentTFModelV2(TFModelV2):
 
         Arguments:
             inputs (dict): observation tensor with shape [B, T, obs_size].
-            state (list): list of state tensors, each with shape [B, T, size].
+            state (list): list of state tensors, each with shape [B, size].
             seq_lens (Tensor): 1d tensor holding input sequence lengths.
 
         Returns:
