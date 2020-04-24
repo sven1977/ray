@@ -1,5 +1,5 @@
-humanoid-es:
-    env: Humanoid-v1
+humanoid-v2-es:
+    env: Humanoid-v2
     run: ES
     stop:
         episode_reward_mean: 6000
