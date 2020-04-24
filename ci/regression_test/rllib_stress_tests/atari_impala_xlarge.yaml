@@ -1,4 +1,4 @@
-# Taken from rllib/tuned_examples/atari_impala_large.yaml
+# Taken from rllib/tuned_configs/atari_impala_large.yaml
 # Runs on a g3.16xl node with 5 m5.24xl workers
 # Takes roughly 10 minutes. x10?
 atari-impala:

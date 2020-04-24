@@ -170,7 +170,7 @@ matrix:
         # Explicitly sleep 60 seconds for logs to go through
         - ./ci/travis/test-wheels.sh || { cat /tmp/ray/session_latest/logs/* && sleep 60 && false; }
 
-    # RLlib: Learning tests (from rllib/tuned_examples/regression_tests/*.yaml).
+    # RLlib: Learning tests (from rllib/tuned_configs/regression_tests/*.yaml).
     - os: linux
       env:
         - RLLIB_TESTING=1
@@ -188,7 +188,7 @@ matrix:
         - . ./ci/travis/ci.sh preload
         - travis_wait 120 bazel test --config=ci --test_output=streamed --build_tests_only --test_tag_filters=learning_tests rllib/...
 
-    # RLlib: Learning tests with tf=1.x (from rllib/tuned_examples/regression_tests/*.yaml).
+    # RLlib: Learning tests with tf=1.x (from rllib/tuned_configs/regression_tests/*.yaml).
     # Requested by Edi (MS): Test all learning capabilities with tf1.x
     - os: linux
       env:
