@@ -37,7 +37,7 @@
 # Tag: learning_tests
 #
 # This will test all yaml files (via `rllib train`)
-# inside rllib/tuned_configs/regression_tests for actual learning success.
+# inside rllib/tuned_configs/OBSOLETE_regression_tests for actual learning success.
 # --------------------------------------------------------------------
 
 py_test(
@@ -46,9 +46,9 @@ py_test(
     tags = ["learning_tests", "learning_tests_cartpole"],
     size = "enormous",  # = 60min timeout
     srcs = ["tests/run_regression_tests.py"],
-    data = glob(["tuned_configs/regression_tests/cartpole-*.yaml"]),
+    data = glob(["tuned_configs/OBSOLETE_regression_tests/cartpole-*.yaml"]),
     # Pass `BAZEL` option and the path to look for yaml regression files.
-    args = ["BAZEL", "tuned_configs/regression_tests"]
+    args = ["BAZEL", "tuned_configs/OBSOLETE_regression_tests"]
 )
 
 py_test(
@@ -57,9 +57,9 @@ py_test(
     tags = ["learning_tests", "learning_tests_pendulum"],
     size = "enormous",  # = 60min timeout
     srcs = ["tests/run_regression_tests.py"],
-    data = glob(["tuned_configs/regression_tests/pendulum-*.yaml"]),
+    data = glob(["tuned_configs/OBSOLETE_regression_tests/pendulum-*.yaml"]),
     # Pass `BAZEL` option and the path to look for yaml regression files.
-    args = ["BAZEL", "tuned_configs/regression_tests"]
+    args = ["BAZEL", "tuned_configs/OBSOLETE_regression_tests"]
 )
 
 # --------------------------------------------------------------------
