@@ -187,12 +187,13 @@ class ValueNetworkMixin:
 
             def value(ob, prev_action, prev_reward, *state):
                 model_out, _ = self.model({
-                    SampleBatch.CUR_OBS     : convert_to_torch_tensor(np.asarray([ob])),
+                    SampleBatch.CUR_OBS: convert_to_torch_tensor(
+                        np.asarray([ob])),
                     SampleBatch.PREV_ACTIONS: convert_to_torch_tensor(
                         np.asarray([prev_action])),
                     SampleBatch.PREV_REWARDS: convert_to_torch_tensor(
                         np.asarray([prev_reward])),
-                    "is_training"           : False,
+                    "is_training": False,
                 }, [convert_to_torch_tensor(np.asarray(s)) for s in state],
                     convert_to_torch_tensor(np.asarray([1])))
                 return self.model.value_function()[0]

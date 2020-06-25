@@ -115,7 +115,7 @@ class TorchPolicy(Policy):
             seq_lens = torch.ones(len(obs_batch), dtype=torch.int32)
             input_dict = self._lazy_tensor_dict({
                 SampleBatch.CUR_OBS: np.asarray(obs_batch),
-                "is_training"      : False,
+                "is_training": False,
             })
             if prev_action_batch is not None:
                 input_dict[SampleBatch.PREV_ACTIONS] = \
