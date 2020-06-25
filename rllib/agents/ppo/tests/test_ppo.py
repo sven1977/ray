@@ -47,17 +47,29 @@ class TestPPO(unittest.TestCase):
         ray.shutdown()
 
     def test_ppo_compilation(self):
-        """Test whether a PPOTrainer can be built with both frameworks."""
+        """Test whether a PPOTrainer can be built with all frameworks."""
         config = copy.deepcopy(ppo.DEFAULT_CONFIG)
         config["num_workers"] = 1
+        config["num_sgd_iter"] = 2
+        # Settings in case we use an LSTM.
+        config["model"]["lstm_cell_size"] = 10
+        config["model"]["max_seq_len"] = 20
         num_iterations = 2
 
         for _ in framework_iterator(config):
-            trainer = ppo.PPOTrainer(config=config, env="CartPole-v0")
-            for i in range(num_iterations):
-                trainer.train()
-            check_compute_single_action(
-                trainer, include_prev_action_reward=True)
+            for env in ["CartPole-v0", "MsPacmanNoFrameskip-v4"]:
+                print("Env={}".format(env))
+                for lstm in [True, False]:
+                    print("LSTM={}".format(lstm))
+                    config["model"]["use_lstm"] = lstm
+                    config["model"]["lstm_use_prev_action_reward"] = lstm
+                    trainer = ppo.PPOTrainer(config=config, env=env)
+                    for i in range(num_iterations):
+                        trainer.train()
+                    check_compute_single_action(
+                        trainer,
+                        include_prev_action_reward=True,
+                        include_state=lstm)
 
     def test_ppo_fake_multi_gpu_learning(self):
         """Test whether PPOTrainer can learn CartPole w/ faked multi-GPU."""
