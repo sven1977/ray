@@ -256,7 +256,7 @@ def check_learning_achieved(tune_results, min_reward):
         tune_results: The tune.run returned results object.
         min_reward (float): The min reward that must be reached.
 
-    Throws:
+    Raises:
         ValueError: If `min_reward` not reached.
     """
     if tune_results.trials[0].last_result["episode_reward_mean"] < min_reward:
@@ -276,7 +276,7 @@ def check_compute_single_action(trainer,
         include_prev_action_reward (bool): Whether to include the prev-action
             and -reward in the `compute_action` call.
 
-    Throws:
+    Raises:
         ValueError: If anything unexpected happens.
     """
     try:
