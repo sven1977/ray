@@ -14,6 +14,8 @@ from ray.exceptions import RayError
 from ray.rllib.agents.callbacks import DefaultCallbacks
 from ray.rllib.env.normalize_actions import NormalizeActionWrapper
 from ray.rllib.env.env_context import EnvContext
+from ray.rllib.evaluation.collectors.simple_list_collector import \
+    _SimpleListCollector
 from ray.rllib.models import MODEL_DEFAULTS
 from ray.rllib.policy import Policy
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
@@ -217,6 +219,7 @@ COMMON_CONFIG: TrainerConfigDict = {
     # contain different information on the ongoing episode.
     # NOTE: Only supported for PyTorch so far.
     "_use_trajectory_view_api": False,
+    "_sample_collector": _SimpleListCollector,
 
     # Element-wise observation filter, either "NoFilter" or "MeanStdFilter".
     "observation_filter": "NoFilter",

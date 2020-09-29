@@ -6,7 +6,7 @@ import queue
 import threading
 import time
 from typing import Any, Callable, Dict, List, Iterable, Optional, Set, Tuple,\
-    TYPE_CHECKING, Union
+    Type, TYPE_CHECKING, Union
 
 from ray.util.debug import log_once
 from ray.rllib.evaluation.collectors.sample_collector import \
@@ -137,7 +137,10 @@ class SyncSampler(SamplerInput):
                  soft_horizon: bool = False,
                  no_done_at_end: bool = False,
                  observation_fn: "ObservationFunction" = None,
-                 _use_trajectory_view_api: bool = False):
+                 _use_trajectory_view_api: bool = False,
+                 _sample_collector: Optional[Type[
+                     _SampleCollector]] = _SimpleListCollector,
+                 ):
         """Initializes a SyncSampler object.
 
         Args:
@@ -177,6 +180,10 @@ class SyncSampler(SamplerInput):
             _use_trajectory_view_api (bool): Whether to use the (experimental)
                 `_use_trajectory_view_api` to make generic trajectory views
                 available to Models. Default: False.
+            _sample_collector (Optional[Type[_SampleCollector]]): The
+                _SampleCollector class to use for storing and retrieving
+                samples from the envs. Only used iff `_use_trajectory_view_api`
+                is True.
         """
 
         self.base_env = BaseEnv.to_base_env(env)
@@ -189,7 +196,10 @@ class SyncSampler(SamplerInput):
         self.extra_batches = queue.Queue()
         self.perf_stats = _PerfStats()
         if _use_trajectory_view_api:
-            self.sample_collector = _SimpleListCollector(
+            if _sample_collector is None:
+                raise ValueError("When using the Trajectory View API, "
+                                 "`_sample_collector` must be specified!")
+            self.sample_collector = _sample_collector(
                 policies, clip_rewards, callbacks, multiple_episodes_in_batch,
                 rollout_fragment_length)
         else:
@@ -263,7 +273,10 @@ class AsyncSampler(threading.Thread, SamplerInput):
                  soft_horizon: bool = False,
                  no_done_at_end: bool = False,
                  observation_fn: "ObservationFunction" = None,
-                 _use_trajectory_view_api: bool = False):
+                 _use_trajectory_view_api: bool = False,
+                _sample_collector: Optional[Type[
+                    _SampleCollector]] = _SimpleListCollector,
+                ):
         """Initializes a AsyncSampler object.
 
         Args:
@@ -305,6 +318,10 @@ class AsyncSampler(threading.Thread, SamplerInput):
             _use_trajectory_view_api (bool): Whether to use the (experimental)
                 `_use_trajectory_view_api` to make generic trajectory views
                 available to Models. Default: False.
+            _sample_collector (Optional[Type[_SampleCollector]]): The
+                _SampleCollector class to use for storing and retrieving
+                samples from the envs. Only used iff `_use_trajectory_view_api`
+                is True.
         """
         for _, f in obs_filters.items():
             assert getattr(f, "is_concurrent", False), \
@@ -335,7 +352,10 @@ class AsyncSampler(threading.Thread, SamplerInput):
         self.observation_fn = observation_fn
         self._use_trajectory_view_api = _use_trajectory_view_api
         if _use_trajectory_view_api:
-            self.sample_collector = _SimpleListCollector(
+            if _sample_collector is None:
+                raise ValueError("When using the Trajectory View API, "
+                                 "`_sample_collector` must be specified!")
+            self.sample_collector = _sample_collector(
                 policies, clip_rewards, callbacks, multiple_episodes_in_batch,
                 rollout_fragment_length)
         else:

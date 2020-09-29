@@ -275,14 +275,9 @@ class _SimpleListCollector(_SampleCollector):
             callbacks (DefaultCallbacks): RLlib callbacks.
         """
 
-        self.policy_map = policy_map
-        self.clip_rewards = clip_rewards
-        self.callbacks = callbacks
-        self.multiple_episodes_in_batch = multiple_episodes_in_batch
-        self.rollout_fragment_length = rollout_fragment_length
-        self.large_batch_threshold: int = max(
-            1000, rollout_fragment_length *
-            10) if rollout_fragment_length != float("inf") else 5000
+        super().__init__(
+            policy_map, clip_rewards, callbacks, multiple_episodes_in_batch,
+            rollout_fragment_length)
 
         # Build each Policies' single collector.
         self.policy_collectors = {
