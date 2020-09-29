@@ -56,9 +56,9 @@ void GcsNodeManager::NodeFailureDetector::HandleHeartbeat(
 
   iter->second = num_heartbeats_timeout_;
   if (!light_heartbeat_enabled_ || heartbeat_data.should_global_gc() ||
-      heartbeat_data.resources_available_size() > 0 ||
       heartbeat_data.resources_total_size() > 0 ||
-      heartbeat_data.resource_load_size() > 0) {
+      heartbeat_data.resources_available_changed() ||
+      heartbeat_data.resource_load_changed()) {
     heartbeat_buffer_[node_id] = heartbeat_data;
   }
 }
@@ -405,7 +405,8 @@ std::shared_ptr<rpc::GcsNodeInfo> GcsNodeManager::RemoveNode(
       std::ostringstream error_message;
       error_message << "The node with node id " << node_id
                     << " has been marked dead because the detector"
-                    << " has missed too many heartbeats from it.";
+                    << " has missed too many heartbeats from it. This can happen when a "
+                       "raylet crashes unexpectedly or has lagging heartbeats.";
       auto error_data_ptr =
           gcs::CreateErrorTableData(type, error_message.str(), current_time_ms());
       RAY_CHECK_OK(gcs_pub_sub_->Publish(ERROR_INFO_CHANNEL, node_id.Hex(),
@@ -459,9 +460,12 @@ void GcsNodeManager::StartNodeFailureDetector() {
 
 void GcsNodeManager::UpdateNodeRealtimeResources(
     const NodeID &node_id, const rpc::HeartbeatTableData &heartbeat) {
-  auto resources_available = MapFromProtobuf(heartbeat.resources_available());
-  cluster_realtime_resources_[node_id] =
-      std::make_shared<ResourceSet>(resources_available);
+  if (!RayConfig::instance().light_heartbeat_enabled() ||
+      heartbeat.resources_available_changed()) {
+    auto resources_available = MapFromProtobuf(heartbeat.resources_available());
+    cluster_realtime_resources_[node_id] =
+        std::make_shared<ResourceSet>(resources_available);
+  }
 }
 
 const absl::flat_hash_map<NodeID, std::shared_ptr<ResourceSet>>
