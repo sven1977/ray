@@ -1,11 +1,15 @@
 from abc import abstractmethod, ABCMeta
 import logging
-from typing import Dict, Union
+from typing import Dict, TYPE_CHECKING, Union
 
 from ray.rllib.evaluation.episode import MultiAgentEpisode
+from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import MultiAgentBatch, SampleBatch
 from ray.rllib.utils.typing import AgentID, EnvID, EpisodeID, PolicyID, \
     TensorType
+
+if TYPE_CHECKING:
+    from ray.rllib.agents.callbacks import DefaultCallbacks
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,31 @@ class _SampleCollector(metaclass=ABCMeta):
     inputs fed into different policies (e.g. multi-agent case with inter-agent
     communication channel).
     """
+
+    def __init__(self,
+                 policy_map: Dict[PolicyID, Policy],
+                 clip_rewards: Union[bool, float],
+                 callbacks: "DefaultCallbacks",
+                 multiple_episodes_in_batch: bool = True,
+                 rollout_fragment_length: int = 200):
+        """Initializes a _SimpleListCollector instance.
+
+        Args:
+            policy_map (Dict[str, Policy]): Maps policy ids to policy
+                instances.
+            clip_rewards (Union[bool, float]): Whether to clip rewards before
+                postprocessing (at +/-1.0) or the actual value to +/- clip.
+            callbacks (DefaultCallbacks): RLlib callbacks.
+        """
+
+        self.policy_map = policy_map
+        self.clip_rewards = clip_rewards
+        self.callbacks = callbacks
+        self.multiple_episodes_in_batch = multiple_episodes_in_batch
+        self.rollout_fragment_length = rollout_fragment_length
+        self.large_batch_threshold: int = max(
+            1000, rollout_fragment_length *
+            10) if rollout_fragment_length != float("inf") else 5000
 
     @abstractmethod
     def add_init_obs(self, episode: MultiAgentEpisode, agent_id: AgentID,

@@ -5,6 +5,8 @@ from typing import List, Any, Dict, Tuple, TYPE_CHECKING, Union
 
 from ray.rllib.env.base_env import _DUMMY_AGENT_ID
 from ray.rllib.evaluation.collectors.sample_collector import _SampleCollector
+from ray.rllib.evaluation.collectors.simple_list_collector import \
+    _AgentCollector, _SimpleListCollector
 from ray.rllib.evaluation.episode import MultiAgentEpisode
 from ray.rllib.policy.policy import Policy
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
@@ -34,69 +36,17 @@ def to_float_np_array(v: List[Any]) -> np.ndarray:
     return arr
 
 
-class _AgentCollector:
-    """Collects samples for one agent in one trajectory (episode).
+class _AgentCollectorForPreallocPolicyCollector(_AgentCollector):
+    """Same as AgentCollector, but builds directly into prealloc Policy buffer.
 
+    Collects samples for one agent in one trajectory (episode).
     The agent may be part of a multi-agent environment. Samples are stored in
     lists including some possible automatic "shift" buffer at the beginning to
     be able to save memory when storing things like NEXT_OBS, PREV_REWARDS,
     etc.., which are specified using the trajectory view API.
     """
 
-    _next_unroll_id = 0  # disambiguates unrolls within a single episode
-
-    def __init__(self, shift_before: int = 0):
-        self.shift_before = max(shift_before, 1)
-        self.buffers: Dict[str, List] = {}
-        # The simple timestep count for this agent. Gets increased by one
-        # each time a (non-initial!) observation is added.
-        self.count = 0
-
-    def add_init_obs(self, episode_id: EpisodeID, agent_id: AgentID,
-                     env_id: EnvID, init_obs: TensorType,
-                     view_requirements: Dict[str, ViewRequirement]) -> None:
-        """Adds an initial observation (after reset) to the Agent's trajectory.
-
-        Args:
-            episode_id (EpisodeID): Unique ID for the episode we are adding the
-                initial observation for.
-            agent_id (AgentID): Unique ID for the agent we are adding the
-                initial observation for.
-            env_id (EnvID): The environment index (in a vectorized setup).
-            init_obs (TensorType): The initial observation tensor (after
-            `env.reset()`).
-            view_requirements (Dict[str, ViewRequirements])
-        """
-        if SampleBatch.OBS not in self.buffers:
-            self._build_buffers(
-                single_row={
-                    SampleBatch.OBS: init_obs,
-                    SampleBatch.EPS_ID: episode_id,
-                    SampleBatch.AGENT_INDEX: agent_id,
-                    "env_id": env_id,
-                })
-        self.buffers[SampleBatch.OBS].append(init_obs)
-
-    def add_action_reward_next_obs(self, values: Dict[str, TensorType]) -> \
-            None:
-        """Adds the given dictionary (row) of values to the Agent's trajectory.
-
-        Args:
-            values (Dict[str, TensorType]): Data dict (interpreted as a single
-                row) to be added to buffer. Must contain keys:
-                SampleBatch.ACTIONS, REWARDS, DONES, and NEXT_OBS.
-        """
-
-        assert SampleBatch.OBS not in values
-        values[SampleBatch.OBS] = values[SampleBatch.NEXT_OBS]
-        del values[SampleBatch.NEXT_OBS]
-
-        for k, v in values.items():
-            if k not in self.buffers:
-                self._build_buffers(single_row=values)
-            self.buffers[k].append(v)
-        self.count += 1
-
+    @override(_AgentCollector)
     def build(self, view_requirements: Dict[str, ViewRequirement]) -> \
             SampleBatch:
         """Builds a SampleBatch from the thus-far collected agent data.
@@ -159,44 +109,13 @@ class _AgentCollector:
 
         return batch
 
-    def _build_buffers(self, single_row: Dict[str, TensorType]) -> None:
-        """Builds the buffers for sample collection, given an example data row.
 
-        Args:
-            single_row (Dict[str, TensorType]): A single row (keys=column
-                names) of data to base the buffers on.
-        """
-        for col, data in single_row.items():
-            if col in self.buffers:
-                continue
-            shift = self.shift_before - (1 if col == SampleBatch.OBS else 0)
-            # Python primitive.
-            if isinstance(data, (int, float, bool, str)):
-                self.buffers[col] = [0 for _ in range(shift)]
-            # np.ndarray, torch.Tensor, or tf.Tensor.
-            else:
-                shape = data.shape
-                dtype = data.dtype
-                if torch and isinstance(data, torch.Tensor):
-                    self.buffers[col] = \
-                        [torch.zeros(shape, dtype=dtype, device=data.device)
-                         for _ in range(shift)]
-                elif tf and isinstance(data, tf.Tensor):
-                    self.buffers[col] = \
-                        [tf.zeros(shape=shape, dtype=dtype)
-                         for _ in range(shift)]
-                else:
-                    self.buffers[col] = \
-                        [np.zeros(shape=shape, dtype=dtype)
-                         for _ in range(shift)]
-
-
-class _PolicyCollector:
+class _PreAllocPolicyCollector:
     """Collects already postprocessed (single agent) samples for one policy.
 
-    Samples come in through already postprocessed SampleBatches, which
-    contain single episode/trajectory data for a single agent and are then
-    appended to this policy's buffers.
+    Holds pre-allocated numpy/torch buffers for direct insertion of data coming
+    from postprocessed SampleBatches, which contain single episode/trajectory
+    data for a single agent.
     """
 
     def __init__(self):
@@ -250,7 +169,7 @@ class _PolicyCollector:
         return batch
 
 
-class _SimpleListCollector(_SampleCollector):
+class _PreAllocBufferCollector(_SimpleListCollector):
     """Util to build SampleBatches for each policy in a multi-agent env.
 
     Input data is per-agent, while output data is per-policy. There is an M:N
@@ -273,20 +192,20 @@ class _SimpleListCollector(_SampleCollector):
             clip_rewards (Union[bool, float]): Whether to clip rewards before
                 postprocessing (at +/-1.0) or the actual value to +/- clip.
             callbacks (DefaultCallbacks): RLlib callbacks.
+            multiple_episodes_in_batch (bool): Whether to pack multiple
+                episodes into each batch. This guarantees batches will be
+                exactly `rollout_fragment_length` in size.
+            rollout_fragment_length (int): The length of a fragment to collect
+                before building a SampleBatch from the data and resetting.
         """
 
-        self.policy_map = policy_map
-        self.clip_rewards = clip_rewards
-        self.callbacks = callbacks
-        self.multiple_episodes_in_batch = multiple_episodes_in_batch
-        self.rollout_fragment_length = rollout_fragment_length
-        self.large_batch_threshold: int = max(
-            1000, rollout_fragment_length *
-            10) if rollout_fragment_length != float("inf") else 5000
+        super().__init__(
+            policy_map, clip_rewards, callbacks, multiple_episodes_in_batch,
+            rollout_fragment_length)
 
         # Build each Policies' single collector.
         self.policy_collectors = {
-            pid: _PolicyCollector()
+            pid: _PreAllocPolicyCollector()
             for pid in policy_map.keys()
         }
         self.policy_collectors_env_steps = 0
