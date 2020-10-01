@@ -11,7 +11,6 @@ from ray.rllib.models.torch.torch_action_dist import TorchDistributionWrapper
 from ray.rllib.policy.policy import Policy, LEARNER_STATS_KEY
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.rnn_sequencing import pad_batch_to_sequences_of_same_size
-from ray.rllib.policy.view_requirement import ViewRequirement
 from ray.rllib.utils import force_list
 from ray.rllib.utils.annotations import override, DeveloperAPI
 from ray.rllib.utils.framework import try_import_torch
@@ -30,8 +29,6 @@ logger = logging.getLogger(__name__)
 @DeveloperAPI
 class TorchPolicy(Policy):
     """Template for a PyTorch policy and loss to use with RLlib.
-
-    This is similar to TFPolicy, but for PyTorch.
 
     Attributes:
         observation_space (gym.Space): observation space of the policy.
@@ -114,16 +111,7 @@ class TorchPolicy(Policy):
             self.device = torch.device("cpu")
         self.model = model.to(self.device)
         # Combine view_requirements for Model and Policy.
-        self.view_requirements = dict(
-            **{
-                SampleBatch.ACTIONS: ViewRequirement(
-                    space=self.action_space, shift=0),
-                SampleBatch.REWARDS: ViewRequirement(shift=0),
-                SampleBatch.DONES: ViewRequirement(shift=0),
-                SampleBatch.EPS_ID: ViewRequirement(shift=0),
-                SampleBatch.AGENT_INDEX: ViewRequirement(shift=0),
-            },
-            **self.model.inference_view_requirements)
+        self.view_requirements.update(self.model.inference_view_requirements)
 
         self.exploration = self._create_exploration()
         self.unwrapped_model = model  # used to support DistributedDataParallel
