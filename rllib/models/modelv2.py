@@ -133,7 +133,7 @@ class ModelV2:
         raise NotImplementedError
 
     @PublicAPI
-    def custom_loss(self, policy_loss: TensorType,
+    def custom_loss(self, policy_loss: Union[List[Tensor],Tensor],
                     loss_inputs: Dict[str, TensorType]) -> TensorType:
         """Override to customize the loss function used to optimize this model.
 

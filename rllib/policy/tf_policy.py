@@ -12,6 +12,7 @@ from ray.rllib.policy.policy import Policy, LEARNER_STATS_KEY
 from ray.rllib.policy.rnn_sequencing import pad_batch_to_sequences_of_same_size
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.models.modelv2 import ModelV2
+from ray.rllib.utils import force_list
 from ray.rllib.utils.annotations import override, DeveloperAPI
 from ray.rllib.utils.debug import summarize
 from ray.rllib.utils.framework import try_import_tf, get_variable
@@ -99,7 +100,7 @@ class TFPolicy(Policy):
                 postprocess_trajectory(), and has shape [BATCH_SIZE, data...].
                 These keys will be read from postprocessed sample batches and
                 fed into the specified placeholders during loss computation.
-            model (ModelV2): used to integrate custom losses and
+            model (ModelV2): Used to integrate custom losses and
                 stats from user-defined RLlib models.
             sampled_action_logp (Optional[TensorType]): log probability of the
                 sampled action.
@@ -137,7 +138,11 @@ class TFPolicy(Policy):
         """
         self.framework = "tf"
         super().__init__(observation_space, action_space, config)
+
+        assert isinstance(model, ModelV2), \
+            "`model` ({}) must be of type: ModelV2!".format(model)
         self.model = model
+
         self.exploration = self._create_exploration()
         self._sess = sess
         self._obs_input = obs_input
@@ -179,7 +184,7 @@ class TFPolicy(Policy):
         self._timestep = timestep if timestep is not None else \
             tf1.placeholder(tf.int64, (), name="timestep")
 
-        self._optimizer = None
+        self._optimizers = None
         self._grads_and_vars = None
         self._grads = None
         # Policy tf-variables (weights), whose values to get/set via
@@ -189,7 +194,7 @@ class TFPolicy(Policy):
         # Will be stored alongside `self._variables` when checkpointing.
         self._optimizer_variables = None
 
-        # The loss tf-op.
+        # The loss tf-op(s).
         self._loss = None
         # A batch dict passed into loss function as input.
         self._loss_input_dict = None
@@ -254,29 +259,38 @@ class TFPolicy(Policy):
         for i, ph in enumerate(self._state_inputs):
             self._loss_input_dict["state_in_{}".format(i)] = ph
 
+
+        # Call Model's custom-loss with Policy loss outputs and train_batch.
         if self.model:
             self._loss = self.model.custom_loss(loss, self._loss_input_dict)
             self._stats_fetches.update({
                 "model": self.model.metrics() if isinstance(
                     self.model, ModelV2) else self.model.custom_stats()
             })
+        # No `model`: Store loss as given.
         else:
             self._loss = loss
 
-        self._optimizer = self.optimizer()
-        self._grads_and_vars = [
-            (g, v) for (g, v) in self.gradients(self._optimizer, self._loss)
-            if g is not None
-        ]
-        self._grads = [g for (g, v) in self._grads_and_vars]
+        self._loss = force_list(self._loss)
+        self._optimizers = force_list(self.optimizer())
 
-        # TODO(sven/ekl): Deprecate support for v1 models.
-        if hasattr(self, "model") and isinstance(self.model, ModelV2):
+        # Give Exploration component that chance to modify the loss (or add
+        # its own terms).
+        if hasattr(self, "exploration"):
+            self._loss = self.exploration.get_exploration_loss(
+                self._loss, self._loss_input_dict)
+        assert len(self._loss) == len(self._optimizers)
+
+        self._grads_and_vars = [[
+            (g, v) for (g, v) in self.gradients(optim, self._loss[i])
+            if g is not None
+        ] for i, optim in enumerate(self._optimizers)]
+        self._grads = [[g for (g, v) in g_and_v] for g_and_v in
+                       self._grads_and_vars]
+
+        if self.model:
             self._variables = ray.experimental.tf_utils.TensorFlowVariables(
                 [], self._sess, self.variables())
-        else:
-            self._variables = ray.experimental.tf_utils.TensorFlowVariables(
-                self._loss, self._sess)
 
         # gather update ops for any batch norm layers
         if not self._update_ops:
@@ -286,7 +300,7 @@ class TFPolicy(Policy):
             logger.info("Update ops to run on apply gradient: {}".format(
                 self._update_ops))
         with tf1.control_dependencies(self._update_ops):
-            self._apply_op = self.build_apply_op(self._optimizer,
+            self._apply_op = self.build_apply_op(self._optimizers,
                                                  self._grads_and_vars)
 
         if log_once("loss_used"):

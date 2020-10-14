@@ -91,9 +91,7 @@ class Curiosity(Exploration):
                 DQN). If None, uses the FromSpecDict provided in the Policy's
                 default config.
         """
-        if framework != "torch":
-            raise ValueError("Only torch is currently supported for Curiosity")
-        elif not isinstance(action_space, (Discrete, MultiDiscrete)):
+        if not isinstance(action_space, (Discrete, MultiDiscrete)):
             raise ValueError(
                 "Only (Multi)Discrete action spaces supported for Curiosity "
                 "so far!")
