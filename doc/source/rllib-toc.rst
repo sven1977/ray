@@ -211,10 +211,17 @@ the stack traces of all Ray workers on the current node, ``ray timeline`` to dum
 a timeline visualization of tasks to a file, and ``ray memory`` to list all object
 references in the cluster.
 
-TensorFlow 2.0
+TensorFlow 2.x
 ~~~~~~~~~~~~~~
 
-RLlib currently runs in ``tf.compat.v1`` mode. This means eager execution is disabled by default, and RLlib imports TF with ``import tensorflow.compat.v1 as tf; tf.disable_v2_behaviour()``. Eager execution can be enabled manually by calling ``tf.enable_eager_execution()`` or setting the ``"eager": True`` trainer config.
+RLlib (since version 0.8.7) supports both TensorFlow static-graph as well as
+eager modes, regardless of the actual TF version being installed.
+*  To run in static-graph mode, set the ``framework`` config parameter to "tf" (default value).
+   RLlib will then use the ``tf.compat.v1`` mode to disable eager execution by default
+   (even if tf2.x is installed).
+*  Eager execution can be enabled by setting ``framework=tfe`` (for tf1.x) or
+   ``framework=tf2`` (for tf2.x). In these cases, an eager version of the respective
+   TFPolicy class (depending on the agent) will be used by the Trainer.
 
 .. |tensorflow| image:: tensorflow.png
     :class: inline-figure
