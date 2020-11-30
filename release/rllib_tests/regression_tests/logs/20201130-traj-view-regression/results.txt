@@ -1,0 +1,28 @@
+
+== Status ==
+Memory usage on this node: 9.1/480.3 GiB
+Using FIFO scheduling algorithm.
+Resources requested: 0/64 CPUs, 0.0/4 GPUs, 0.0/325.68 GiB heap, 0.0/99.02 GiB objects (0/1.0 accelerator_type:M60)
+Result logdir: /home/ubuntu/ray_results/a2c-tf-atari
+Result logdir: /home/ubuntu/ray_results/apex-dqn-tf-atari
+Result logdir: /home/ubuntu/ray_results/dqn-tf-atari
+Result logdir: /home/ubuntu/ray_results/impala-tf-atari
+Result logdir: /home/ubuntu/ray_results/ppo-tf-atari
+Result logdir: /home/ubuntu/ray_results/sac-tf-halfcheetah-pybullet
+Number of trials: 12/12 (12 TERMINATED)
++-------------------------------------------+------------+-------+----------------------------+--------+------------------+----------+----------+----------------------+----------------------+--------------------+
+| Trial name                                | status     | loc   | _use_trajectory_view_api   |   iter |   total time (s) |       ts |   reward |   episode_reward_max |   episode_reward_min |   episode_len_mean |
+|-------------------------------------------+------------+-------+----------------------------+--------+------------------+----------+----------+----------------------+----------------------+--------------------|
+| A2C_BreakoutNoFrameskip-v4_a1c31_00000    | TERMINATED |       | True                       |    354 |          3601.25 |  4183500 |  137.77  |              392     |               13     |            5389.85 |
+| A2C_BreakoutNoFrameskip-v4_a1c31_00001    | TERMINATED |       | False                      |    351 |          3609.88 |  3293000 |  144.06  |              341     |               23     |            5703.44 |
+| APEX_BreakoutNoFrameskip-v4_a1c31_00002   | TERMINATED |       | True                       |    104 |          3608.89 |  7820160 |   14.79  |               34     |                4     |            2092.99 |
+| APEX_BreakoutNoFrameskip-v4_a1c31_00003   | TERMINATED |       | False                      |    105 |          3618.5  |  7948480 |   81.57  |              394     |               20     |            3997.23 |
+| DQN_BreakoutNoFrameskip-v4_a1c31_00004    | TERMINATED |       | True                       |     31 |          3619.96 |   320000 |   13.61  |               32     |                5     |            2017.52 |
+| DQN_BreakoutNoFrameskip-v4_a1c31_00005    | TERMINATED |       | False                      |     30 |          3720.54 |   310000 |   17.88  |               39     |                7     |            2350.49 |
+| IMPALA_BreakoutNoFrameskip-v4_a1c31_00006 | TERMINATED |       | True                       |    360 |          3608.69 | 12193000 |  404.32  |              813     |              109     |           11489.6  |
+| IMPALA_BreakoutNoFrameskip-v4_a1c31_00007 | TERMINATED |       | False                      |    360 |          3609.88 | 12396500 |  373.64  |              607     |                2     |           10672.5  |
+| PPO_BreakoutNoFrameskip-v4_a1c31_00008    | TERMINATED |       | True                       |    674 |          3605.09 |  3370000 |   33.39  |              251     |                4     |            3111.21 |
+| PPO_BreakoutNoFrameskip-v4_a1c31_00009    | TERMINATED |       | False                      |    548 |          3600.72 |  2740000 |   13.79  |               28     |                5     |            2146.02 |
+| SAC_HalfCheetahBulletEnv-v0_a1c31_00010   | TERMINATED |       | True                       |     64 |          3628.85 |    73000 |  655.396 |              701.227 |              571.577 |            1000    |
+| SAC_HalfCheetahBulletEnv-v0_a1c31_00011   | TERMINATED |       | False                      |     63 |          3637.82 |    72000 |  883.906 |              938.454 |              846.413 |            1000    |
++-------------------------------------------+------------+-------+----------------------------+--------+------------------+----------+----------+----------------------+----------------------+--------------------+
