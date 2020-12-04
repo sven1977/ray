@@ -6,7 +6,7 @@ steps:
       - docker build -f .buildkite/Dockerfile -t 029272617770.dkr.ecr.us-east-2.amazonaws.com/ray_build_env .
       - docker push 029272617770.dkr.ecr.us-east-2.amazonaws.com/ray_build_env
     agents:
-      queue: default
+      queue: svens-queue
   - wait
   - label: "Build shared container"
     commands:
@@ -33,7 +33,7 @@ steps:
       CI: "true"
       RAY_DEFAULT_BUILD: "1"
     agents:
-      queue: default
+      queue: svens-queue
   - wait
   - label: "Run RLlib tests"
     commands:
@@ -47,4 +47,4 @@ steps:
           shm-size: 2g
           propagate-environment: true
     agents:
-      queue: default
+      queue: svens-queue
