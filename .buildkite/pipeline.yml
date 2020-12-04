@@ -6,7 +6,7 @@ steps:
       - docker build -f .buildkite/Dockerfile -t 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_build_env .
       - docker push 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_build_env
     agents:
-      queue: simon-agent-q
+      queue: default
   - wait
   - label: "Build shared container"
     commands:
@@ -33,7 +33,7 @@ steps:
       CI: "true"
       RAY_DEFAULT_BUILD: "1"
     agents:
-      queue: simon-build-farm-q
+      queue: default
   - wait
   - label: "Run Ray core test"
     commands:
@@ -49,4 +49,4 @@ steps:
           shm-size: 2g
           propagate-environment: true
     agents:
-      queue: simon-agent-q
+      queue: default
