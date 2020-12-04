@@ -1,0 +1,52 @@
+steps:
+  - label: "Setting up bootstrap env"
+    commands:
+      - mv /tmp/bazel-credential.json .
+      - aws ecr get-login-password --region us-west-2 > ecr_password.txt
+      - docker build -f .buildkite/Dockerfile -t 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_build_env .
+      - docker push 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_build_env
+    agents:
+      queue: simon-agent-q
+  - wait
+  - label: "Build shared container"
+    commands:
+      # Setup bazel cache so re-mounting still works
+      - /bin/docker ps
+      # Run legacy environment setup
+      - ./ci/travis/ci.sh init
+      - ./ci/travis/ci.sh build
+      # Commit this container
+      - /bin/docker tag $(docker commit --pause=false $(hostname)) 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_test_env:$BUILDKITE_COMMIT
+      - /bin/docker push 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_test_env:$BUILDKITE_COMMIT
+    plugins:
+      - docker#v3.7.0:
+          image: 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_build_env
+          debug: true
+          user: root
+          shell: ["/bin/bash", "-e", "-c"]
+          propagate-environment: true
+          always-pull: true
+          volumes:
+            - "/var/run/docker.sock:/var/run/docker.sock"
+    env:
+      PYTHON: "3.6"
+      CI: "true"
+      RAY_DEFAULT_BUILD: "1"
+    agents:
+      queue: simon-build-farm-q
+  - wait
+  - label: "Run Ray core test"
+    commands:
+      - bazel test --config=ci $(./scripts/bazel_export_options) --build_tests_only -- //:all -rllib/...
+      - bazel test --config=ci $(./scripts/bazel_export_options) --test_tag_filters=-jenkins_only python/ray/serve/...
+      - bazel test --config=ci $(./scripts/bazel_export_options) python/ray/new_dashboard/...
+    plugins:
+      - docker#v3.7.0:
+          image: 029272617770.dkr.ecr.us-west-2.amazonaws.com/ray_test_env:$BUILDKITE_COMMIT
+          debug: true
+          user: root
+          shell: ["/bin/bash", "-e", "-c"]
+          shm-size: 2g
+          propagate-environment: true
+    agents:
+      queue: simon-agent-q
