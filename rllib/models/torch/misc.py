@@ -136,24 +136,24 @@ class SlimFC(nn.Module):
             bias_init (float): Initalize bias weights to bias_init const
         """
         super(SlimFC, self).__init__()
-        layers = []
         # Actual nn.Linear layer (including correct initialization logic).
-        linear = nn.Linear(in_size, out_size, bias=use_bias)
+        self._slim_fc = nn.Linear(in_size, out_size, bias=use_bias)
         if initializer:
-            initializer(linear.weight)
+            initializer(self._slim_fc.weight)
         if use_bias is True:
-            nn.init.constant_(linear.bias, bias_init)
-        layers.append(linear)
+            nn.init.constant_(self._slim_fc.bias, bias_init)
         # Activation function (if any; default=None (linear)).
         if isinstance(activation_fn, str):
             activation_fn = get_activation_fn(activation_fn, "torch")
+        self.activation_fn = None
         if activation_fn is not None:
-            layers.append(activation_fn())
-        # Put everything in sequence.
-        self._model = nn.Sequential(*layers)
+            self.activation_fn = activation_fn()
 
     def forward(self, x: TensorType) -> TensorType:
-        return self._model(x)
+        out = self._slim_fc(x)
+        if self.activation_fn:
+            out = self.activation_fn(out)
+        return out
 
 
 class AppendBiasLayer(nn.Module):

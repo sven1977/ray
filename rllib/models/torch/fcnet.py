@@ -39,7 +39,7 @@ class FullyConnectedNetwork(TorchModelV2, nn.Module):
 
         layers = []
         prev_layer_size = int(np.product(obs_space.shape))
-        self._logits = None
+        self.fc_out = None
 
         # Create layers 0 to second-last.
         for size in hiddens[:-1]:
@@ -73,7 +73,7 @@ class FullyConnectedNetwork(TorchModelV2, nn.Module):
                         activation_fn=activation))
                 prev_layer_size = hiddens[-1]
             if num_outputs:
-                self._logits = SlimFC(
+                self.fc_out = SlimFC(
                     in_size=prev_layer_size,
                     out_size=num_outputs,
                     initializer=normc_initializer(0.01),
@@ -83,7 +83,7 @@ class FullyConnectedNetwork(TorchModelV2, nn.Module):
                     [int(np.product(obs_space.shape))] + hiddens[-1:])[-1]
 
         # Layer to add the log std vars to the state-dependent means.
-        if self.free_log_std and self._logits:
+        if self.free_log_std and self.fc_out:
             self._append_free_log_std = AppendBiasLayer(num_outputs)
 
         self._hidden_layers = nn.Sequential(*layers)
@@ -103,7 +103,7 @@ class FullyConnectedNetwork(TorchModelV2, nn.Module):
                 prev_vf_layer_size = size
             self._value_branch_separate = nn.Sequential(*vf_layers)
 
-        self._value_branch = SlimFC(
+        self.value_out = SlimFC(
             in_size=prev_layer_size,
             out_size=1,
             initializer=normc_initializer(1.0),
@@ -120,7 +120,7 @@ class FullyConnectedNetwork(TorchModelV2, nn.Module):
         obs = input_dict["obs_flat"].float()
         self._last_flat_in = obs.reshape(obs.shape[0], -1)
         self._features = self._hidden_layers(self._last_flat_in)
-        logits = self._logits(self._features) if self._logits else \
+        logits = self.fc_out(self._features) if self.fc_out else \
             self._features
         if self.free_log_std:
             logits = self._append_free_log_std(logits)
@@ -130,7 +130,7 @@ class FullyConnectedNetwork(TorchModelV2, nn.Module):
     def value_function(self) -> TensorType:
         assert self._features is not None, "must call forward() first"
         if self._value_branch_separate:
-            return self._value_branch(
+            return self.value_out(
                 self._value_branch_separate(self._last_flat_in)).squeeze(1)
         else:
-            return self._value_branch(self._features).squeeze(1)
+            return self.value_out(self._features).squeeze(1)

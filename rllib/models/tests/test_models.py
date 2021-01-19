@@ -3,7 +3,8 @@ import numpy as np
 import unittest
 
 from ray.rllib.models.tf.tf_modelv2 import TFModelV2
-from ray.rllib.models.tf.fcnet import FullyConnectedNetwork
+from ray.rllib.models.tf.fcnet import FullyConnectedNetwork as FC
+from ray.rllib.models.torch.fcnet import FullyConnectedNetwork as TorchFC
 from ray.rllib.utils.framework import try_import_tf
 
 tf1, tf, tfv = try_import_tf()
@@ -20,8 +21,7 @@ class TestTFModel(TFModelV2):
         self.keras_model = tf.keras.models.Model([input_], [output])
         # A RLlib FullyConnectedNetwork (tf) inside (which is also a keras
         # Model).
-        self.fc_net = FullyConnectedNetwork(obs_space, action_space, 3, {},
-                                            "fc1")
+        self.fc_net = FC(obs_space, action_space, 3, {}, "fc1")
 
     def forward(self, input_dict, state, seq_lens):
         obs = input_dict["obs_flat"]
@@ -33,13 +33,14 @@ class TestTFModel(TFModelV2):
 class TestModels(unittest.TestCase):
     """Tests ModelV2 classes and their modularization capabilities."""
 
+    obs_space = Box(-1.0, 1.0, (3,))
+    action_space = Box(-1.0, 1.0, (2,))
+
     def test_tf_modelv2(self):
-        obs_space = Box(-1.0, 1.0, (3, ))
-        action_space = Box(-1.0, 1.0, (2, ))
-        my_tf_model = TestTFModel(obs_space, action_space, 5, {},
+        my_tf_model = TestTFModel(self.obs_space, self.action_space, 5, {},
                                   "my_tf_model")
         # Call the model.
-        out, states = my_tf_model({"obs": np.array([obs_space.sample()])})
+        out, states = my_tf_model({"obs": np.array([self.obs_space.sample()])})
         self.assertTrue(out.shape == (1, 5))
         self.assertTrue(out.dtype == tf.float32)
         self.assertTrue(states == [])
@@ -51,6 +52,22 @@ class TestModels(unittest.TestCase):
         self.assertTrue("fc_net.base_model.fc_out.bias:0" in vars)
         self.assertTrue("fc_net.base_model.value_out.kernel:0" in vars)
         self.assertTrue("fc_net.base_model.value_out.bias:0" in vars)
+
+    def test_fcnet_var_names(self):
+        tf1.enable_eager_execution()
+        fcnet_tf = FC(self.obs_space, self.action_space, 5, {}, "fcnet")
+        tf_vars = fcnet_tf.variables(as_dict=True)
+        fcnet_torch = TorchFC(self.obs_space, self.action_space, 5, {},
+                              "torch_fcnet")
+        torch_vars = fcnet_torch.variables(as_dict=True)
+        print()
+        #self.assertTrue(len(vars) == 6)
+        #self.assertTrue("keras_model.dense.kernel:0" in vars)
+        #self.assertTrue("keras_model.dense.bias:0" in vars)
+        #self.assertTrue("fc_net.base_model.fc_out.kernel:0" in vars)
+        #self.assertTrue("fc_net.base_model.fc_out.bias:0" in vars)
+        #self.assertTrue("fc_net.base_model.value_out.kernel:0" in vars)
+        #self.assertTrue("fc_net.base_model.value_out.bias:0" in vars)
 
 
 if __name__ == "__main__":
