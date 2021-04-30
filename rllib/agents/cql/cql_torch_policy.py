@@ -59,7 +59,7 @@ def q_values_repeat(model, obs, actions, twin=False):
 def cql_loss(policy: Policy, model: ModelV2,
              dist_class: Type[TorchDistributionWrapper],
              train_batch: SampleBatch) -> Union[TensorType, List[TensorType]]:
-    logger.info(f"Current iteration = {policy.cur_iter}")
+    print(f"Current iteration = {policy.cur_iter}")
     policy.cur_iter += 1
 
     # For best performance, turn deterministic off
