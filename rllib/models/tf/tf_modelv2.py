@@ -13,6 +13,8 @@ from ray.rllib.utils.typing import ModelConfigDict, TensorType
 tf1, tf, tfv = try_import_tf()
 
 
+# TODO: (sven) Deprecate once we fully support native models via
+#  the "ModelV3" API.
 @PublicAPI
 class TFModelV2(ModelV2):
     """TF version of ModelV2, which is always also a keras Model.

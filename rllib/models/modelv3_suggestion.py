@@ -261,12 +261,17 @@ config = {
 }
 
 # Model-based RL: Transition dynamics model (e.g. VAE):
+# Ideal: Use (planned) event API to hook into model creation fn,
+#        in which we'll add the VAE model to the policy's models registry
+#        (dict).
+#        Then do another hook into the exec. plan to execute the VAE update
+#        from batches sampled by the rollout workers.
+
+# Curiosity (ICM) module:
+# See Model-based RL above.
 
 
-#TODO: mode examples:
-# 1) model custom loss (VAE setup).
-# 2) Curiosity (ICM).
-# 3)
+
 
 
 # Algo default model building fn:
