@@ -34,6 +34,11 @@ class RNNModel(tf.keras.models.Model if tf else object):
             num_outputs, activation=tf.keras.activations.linear, name="logits")
         self.values = tf.keras.layers.Dense(1, activation=None, name="values")
 
+        #self.view_requirements = {}
+        #self.view_requirements["state_in_0"] = ViewRequirement(
+        #    data_col="state_out_0", 
+        #)
+
     def call(self, sample_batch):
         dense_out = self.dense(sample_batch["obs"])
         B = tf.shape(sample_batch["seq_lens"])[0]
