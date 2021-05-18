@@ -81,6 +81,7 @@ class TestModels(unittest.TestCase):
             print(results)
 
     def test_ppo_w_shared_value_fn(self):
+        # TODO: Remove this test once PPO does the following by default.
         config = {
             "env": "CartPole-v0",
             "_models": {
