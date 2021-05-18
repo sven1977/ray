@@ -103,6 +103,9 @@ COMMON_CONFIG: TrainerConfigDict = {
     # Arguments to pass to the policy model. See models/catalog.py for a full
     # list of the available model options.
     "model": MODEL_DEFAULTS,
+    # New experimental "ModelV3" API. Will replace "model" key in the future.
+    # If not None, will use this instead of anything under "model".
+    "_models": None,
     # Arguments to pass to the policy optimizer. These vary by optimizer.
     "optimizer": {},
 

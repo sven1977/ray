@@ -80,6 +80,37 @@ class TestModels(unittest.TestCase):
             results = trainer.train()
             print(results)
 
+    def test_ppo_w_shared_value_fn(self):
+        config = {
+            "env": "CartPole-v0",
+            "_models": {
+                "core": True,  # Will automatically use `MODELV3_DEFAULTS`.
+                "policy_model": {
+                    # Get input from "core" output.
+                    "input_source": "core",
+                    # No additional layers (already setup in "core"'s config).
+                    # Feel free to add more (non-vf-shared!) layers here, though.
+                    "fcnet_hiddens": [],
+                    # Special key: Get necessary units from given action-space.
+                    "output_layer_size": "action_space",
+                },
+                "value_function": {
+                    # Get input from "core" output.
+                    "input_source": "core",
+                    # Same here, no more layers after "core"'s layers, just the
+                    # output node (see `output_layer_size` below).
+                    "fcnet_hiddens": [],
+                    # 1 node for vf output.
+                    "output_layer_size": 1,
+                }
+            }
+        }
+
+        trainer = ppo.PPOTrainer(config=config)
+        for _ in range(2):
+            results = trainer.train()
+            print(results)
+
 
 if __name__ == "__main__":
     import pytest
