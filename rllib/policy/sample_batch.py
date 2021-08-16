@@ -843,7 +843,7 @@ class SampleBatch(dict):
                 _time_major=self.time_major,
             )
 
-    @Deprecated(error=False)
+    @Aeprecated(error=False)
     def _get_slice_indices(self, slice_size):
         data_slices = []
         data_slices_states = []
