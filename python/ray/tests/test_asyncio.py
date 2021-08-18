@@ -2,6 +2,7 @@
 import asyncio
 import sys
 import threading
+import time
 
 import pytest
 
@@ -222,10 +223,23 @@ async def test_asyncio_exit_actor(ray_start_regular_shared):
     a = Actor.options(max_task_retries=0).remote()
     a.loop_forever.remote()
     # Make sure exit_actor exits immediately, not once all tasks completed.
-    ray.get(a.exit.remote())
+    with pytest.raises(ray.exceptions.RayError):
+        ray.get(a.exit.remote())
 
-    with pytest.raises(ray.exceptions.RayActorError):
+    # New calls should just error.
+    with pytest.raises(ray.exceptions.RayError):
         ray.get(a.ping.remote())
+
+    # The actor should be dead in the actor table.
+    # Using ray task so it works in Ray Client as well.
+    @ray.remote
+    def check_actor_gone_now():
+        def cond():
+            return ray.state.actors()[a._ray_actor_id.hex()]["State"] != 2
+
+        wait_for_condition(cond)
+
+    ray.get(check_actor_gone_now.remote())
 
 
 def test_async_callback(ray_start_regular_shared):
@@ -281,6 +295,27 @@ async def test_async_obj_unhandled_errors(ray_start_regular_shared):
     del x1
     await asyncio.sleep(1)
     assert num_exceptions == 1, num_exceptions
+
+
+# This case tests that the asyncio actor shouldn't create thread
+# pool with max_concurrency threads. Otherwise it will allocate
+# too many resources for threads to lead worker crash.
+def test_asyncio_actor_with_large_concurrency(ray_start_regular_shared):
+    @ray.remote
+    class Actor:
+        def sync_thread_id(self):
+            time.sleep(2)
+            return threading.current_thread().ident
+
+        async def async_thread_id(self):
+            time.sleep(2)
+            return threading.current_thread().ident
+
+    a = Actor.options(max_concurrency=100000).remote()
+    sync_id, async_id = ray.get(
+        [a.sync_thread_id.remote(),
+         a.async_thread_id.remote()])
+    assert sync_id == async_id
 
 
 if __name__ == "__main__":

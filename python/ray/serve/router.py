@@ -1,4 +1,5 @@
 import asyncio
+import pickle
 import itertools
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
@@ -36,6 +37,10 @@ class RequestMetadata:
     # used to maintain backward compatibility and will be removed in the
     # future.
     use_serve_request: bool = True
+
+    # This flag will be set to true if the input argument is manually pickled
+    # and it needs to be deserialized by the backend worker.
+    http_arg_is_pickled: bool = False
 
     def __post_init__(self):
         self.http_headers.setdefault("X-Serve-Call-Method", self.call_method)
@@ -77,13 +82,13 @@ class ReplicaSet:
         self.config_updated_event = asyncio.Event(loop=event_loop)
         self.num_queued_queries = 0
         self.num_queued_queries_gauge = metrics.Gauge(
-            "serve_backend_queued_queries",
+            "serve_deployment_queued_queries",
             description=(
-                "The current number of queries to this backend waiting"
+                "The current number of queries to this deployment waiting"
                 " to be assigned to a replica."),
-            tag_keys=("backend", "endpoint"))
+            tag_keys=("deployment", "endpoint"))
         self.num_queued_queries_gauge.set_default_tags({
-            "backend": self.backend_tag
+            "deployment": self.backend_tag
         })
 
         self.long_poll_client = LongPollClient(
@@ -140,7 +145,7 @@ class ReplicaSet:
                          f"to replica {replica}.")
             # Directly passing args because it might contain an ObjectRef.
             tracker_ref, user_ref = replica.handle_request.remote(
-                query.metadata, *query.args, **query.kwargs)
+                pickle.dumps(query.metadata), *query.args, **query.kwargs)
             self.in_flight_queries[replica].add(tracker_ref)
             return user_ref
         return None

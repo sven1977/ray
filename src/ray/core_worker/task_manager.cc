@@ -21,6 +21,7 @@
 #include "msgpack.hpp"
 
 namespace ray {
+namespace core {
 
 // Start throttling task failure logs once we hit this threshold.
 const int64_t kTaskFailureThrottlingThreshold = 50;
@@ -63,8 +64,8 @@ void TaskManager::AddPendingTask(const rpc::Address &caller_address,
     for (size_t i = 0; i < num_returns; i++) {
       // We pass an empty vector for inner IDs because we do not know the return
       // value of the task yet. If the task returns an ID(s), the worker will
-      // notify us via the WaitForRefRemoved RPC that we are now a borrower for
-      // the inner IDs. Note that this RPC can be received *before* the
+      // publish the WaitForRefRemoved message that we are now a borrower for
+      // the inner IDs. Note that this message can be received *before* the
       // PushTaskReply.
       reference_counter_->AddOwnedObject(spec.ReturnId(i),
                                          /*inner_ids=*/{}, caller_address, call_site, -1,
@@ -185,6 +186,11 @@ void TaskManager::CompletePendingTask(const TaskID &task_id,
     const auto &return_object = reply.return_objects(i);
     ObjectID object_id = ObjectID::FromBinary(return_object.object_id());
     reference_counter_->UpdateObjectSize(object_id, return_object.size());
+    RAY_LOG(DEBUG) << "Task return object " << object_id << " has size "
+                   << return_object.size();
+
+    std::vector<ObjectID> nested_ids =
+        IdVectorFromProtobuf<ObjectID>(return_object.nested_inlined_ids());
 
     if (return_object.in_plasma()) {
       const auto pinned_at_raylet_id = NodeID::FromBinary(worker_addr.raylet_id());
@@ -194,8 +200,8 @@ void TaskManager::CompletePendingTask(const TaskID &task_id,
         RAY_CHECK(in_memory_store_->Put(RayObject(rpc::ErrorType::OBJECT_IN_PLASMA),
                                         object_id));
       } else {
-        RAY_LOG(INFO) << "Task " << task_id << " returned object " << object_id
-                      << " in plasma on a dead node, attempting to recover";
+        RAY_LOG(DEBUG) << "Task " << task_id << " returned object " << object_id
+                       << " in plasma on a dead node, attempting to recover.";
         reconstruct_object_callback_(object_id);
       }
     } else {
@@ -218,13 +224,17 @@ void TaskManager::CompletePendingTask(const TaskID &task_id,
                 reinterpret_cast<const uint8_t *>(return_object.metadata().data())),
             return_object.metadata().size());
       }
+
       bool stored_in_direct_memory = in_memory_store_->Put(
-          RayObject(data_buffer, metadata_buffer,
-                    IdVectorFromProtobuf<ObjectID>(return_object.nested_inlined_ids())),
-          object_id);
+          RayObject(data_buffer, metadata_buffer, nested_ids), object_id);
       if (stored_in_direct_memory) {
         direct_return_ids.push_back(object_id);
       }
+    }
+
+    rpc::Address owner_address;
+    if (reference_counter_->GetOwner(object_id, &owner_address) && !nested_ids.empty()) {
+      reference_counter_->AddNestedObjectIds(object_id, nested_ids, owner_address);
     }
   }
 
@@ -464,8 +474,8 @@ void TaskManager::MarkPendingTaskFailed(
       packer.pack_bin(pb_serialized_exception.size());
       packer.pack_bin_body(pb_serialized_exception.data(),
                            pb_serialized_exception.size());
-      ray::LocalMemoryBuffer final_buffer(msgpack_serialized_exception.size() +
-                                          kMessagePackOffset);
+      LocalMemoryBuffer final_buffer(msgpack_serialized_exception.size() +
+                                     kMessagePackOffset);
       // copy msgpack-serialized bytes
       std::memcpy(final_buffer.Data() + kMessagePackOffset,
                   msgpack_serialized_exception.data(),
@@ -503,4 +513,5 @@ std::vector<TaskID> TaskManager::GetPendingChildrenTasks(
   return ret_vec;
 }
 
+}  // namespace core
 }  // namespace ray

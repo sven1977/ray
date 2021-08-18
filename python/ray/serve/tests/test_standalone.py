@@ -2,6 +2,7 @@
 The test file for all standalone tests that doesn't
 requires a shared Serve instance.
 """
+import os
 import sys
 import socket
 
@@ -11,7 +12,7 @@ import requests
 import ray
 from ray import serve
 from ray.cluster_utils import Cluster
-from ray.serve.constants import SERVE_PROXY_NAME
+from ray.serve.constants import SERVE_ROOT_URL_ENV_KEY, SERVE_PROXY_NAME
 from ray.serve.exceptions import RayServeException
 from ray.serve.utils import (block_until_http_ready, get_all_node_ids,
                              format_actor_name)
@@ -38,7 +39,7 @@ def ray_cluster():
 
 def test_shutdown(ray_shutdown):
     ray.init(num_cpus=16)
-    serve.start(http_port=8003)
+    serve.start(http_options=dict(port=8003))
 
     @serve.deployment
     def f():
@@ -87,7 +88,7 @@ def test_detached_deployment(ray_cluster):
     head_node = cluster.add_node(node_ip_address="127.0.0.1", num_cpus=6)
 
     # Create first job, check we can run a simple serve endpoint
-    ray.init(head_node.address, namespace="")
+    ray.init(head_node.address, namespace="serve")
     first_job_id = ray.get_runtime_context().job_id
     serve.start(detached=True)
 
@@ -102,7 +103,7 @@ def test_detached_deployment(ray_cluster):
     ray.shutdown()
 
     # Create the second job, make sure we can still create new backends.
-    ray.init(head_node.address, namespace="")
+    ray.init(head_node.address, namespace="serve")
     assert ray.get_runtime_context().job_id != first_job_id
 
     @serve.deployment
@@ -118,7 +119,7 @@ def test_detached_deployment(ray_cluster):
 def test_connect(detached, ray_shutdown):
     # Check that you can make API calls from within a deployment for both
     # detached and non-detached instances.
-    ray.init(num_cpus=16)
+    ray.init(num_cpus=16, namespace="serve")
     serve.start(detached=detached)
 
     @serve.deployment
@@ -262,6 +263,30 @@ def test_middleware(ray_shutdown):
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows")
+def test_http_root_url(ray_shutdown):
+    @serve.deployment
+    def f(_):
+        pass
+
+    root_url = "https://my.domain.dev/prefix"
+
+    port = new_port()
+    os.environ[SERVE_ROOT_URL_ENV_KEY] = root_url
+    serve.start(http_options=dict(port=port))
+    f.deploy()
+    assert f.url == root_url + "/f"
+    serve.shutdown()
+    del os.environ[SERVE_ROOT_URL_ENV_KEY]
+
+    port = new_port()
+    serve.start(http_options=dict(port=port))
+    f.deploy()
+    assert f.url != root_url + "/f"
+    assert f.url == f"http://127.0.0.1:{port}/f"
+    serve.shutdown()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Failing on Windows")
 def test_http_proxy_fail_loudly(ray_shutdown):
     # Test that if the http server fail to start, serve.start should fail.
     with pytest.raises(ValueError):
@@ -272,9 +297,6 @@ def test_http_proxy_fail_loudly(ray_shutdown):
 def test_no_http(ray_shutdown):
     # The following should have the same effect.
     options = [
-        {
-            "http_host": None
-        },
         {
             "http_options": {
                 "host": None
@@ -341,6 +363,7 @@ def test_http_head_only(ray_cluster):
 
 
 def test_serve_shutdown(ray_shutdown):
+    ray.init(namespace="serve")
     serve.start(detached=True)
 
     @serve.deployment
@@ -360,6 +383,29 @@ def test_serve_shutdown(ray_shutdown):
     A.deploy()
 
     assert len(serve.list_deployments()) == 1
+
+
+def test_detached_namespace_warning(ray_shutdown):
+    ray.init()
+
+    # Can't start detached instance in anonymous namespace.
+    with pytest.raises(RuntimeError, match="anonymous Ray namespace"):
+        serve.start(detached=True)
+
+    # Can start non-detached instance in anonymous namespace.
+    serve.start()
+    ray.shutdown()
+
+
+def test_detached_namespace_default_ray_init(ray_shutdown):
+    # Can start detached instance when ray is not initialized.
+    serve.start(detached=True)
+
+
+def test_detached_instance_in_non_anonymous_namespace(ray_shutdown):
+    # Can start detached instance in non-anonymous namespace.
+    ray.init(namespace="foo")
+    serve.start(detached=True)
 
 
 if __name__ == "__main__":
