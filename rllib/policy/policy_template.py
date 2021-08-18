@@ -12,7 +12,6 @@ from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.torch_policy import TorchPolicy
 from ray.rllib.utils import add_mixins, force_list, NullContextManager
 from ray.rllib.utils.annotations import override, DeveloperAPI
-from ray.rllib.utils.deprecation import deprecation_warning
 from ray.rllib.utils.framework import try_import_torch, try_import_jax
 from ray.rllib.utils.torch_ops import convert_to_non_torch_type
 from ray.rllib.utils.typing import ModelGradients, TensorType, \
@@ -70,10 +69,10 @@ def build_policy_class(
         action_distribution_fn: Optional[Callable[[
             Policy, ModelV2, TensorType, TensorType, TensorType
         ], Tuple[TensorType, type, List[TensorType]]]] = None,
-        make_models: Optional[Callable[[
+        make_model: Optional[Callable[[
             Policy, gym.spaces.Space, gym.spaces.Space, TrainerConfigDict
         ], ModelV2]] = None,
-        make_models_and_distributions: Optional[Callable[[
+        make_model_and_action_dist: Optional[Callable[[
             Policy, gym.spaces.Space, gym.spaces.Space, TrainerConfigDict
         ], Tuple[ModelV2, Type[TorchDistributionWrapper]]]] = None,
         compute_gradients_fn: Optional[Callable[[Policy, SampleBatch], Tuple[
@@ -81,10 +80,7 @@ def build_policy_class(
         apply_gradients_fn: Optional[Callable[
             [Policy, "torch.optim.Optimizer"], None]] = None,
         mixins: Optional[List[type]] = None,
-        get_batch_divisibility_req: Optional[Callable[[Policy], int]] = None,
-        # Deprecated args.
-        make_model=None,
-        make_model_and_action_dist=None,
+        get_batch_divisibility_req: Optional[Callable[[Policy], int]] = None
 ) -> Type[TorchPolicy]:
     """Helper function for creating a new Policy class at runtime.
 
@@ -165,20 +161,20 @@ def build_policy_class(
             outputs (empty list if not applicable). If None, will either use
             `action_sampler_fn` or compute actions by calling self.model,
             then sampling from the parameterized action distribution.
-        make_models (Optional[Callable[[Policy, gym.spaces.Space,
+        make_model (Optional[Callable[[Policy, gym.spaces.Space,
             gym.spaces.Space, TrainerConfigDict], ModelV2]]): Optional callable
             that takes the same arguments as Policy.__init__ and returns a
             model instance. The distribution class will be determined
-            automatically. Note: Only one of `make_models` or
-            `make_models_and_action_dists` should be provided. If both are None,
+            automatically. Note: Only one of `make_model` or
+            `make_model_and_action_dist` should be provided. If both are None,
             a default Model will be created.
-        make_models_and_distributions (Optional[Callable[[Policy,
+        make_model_and_action_dist (Optional[Callable[[Policy,
             gym.spaces.Space, gym.spaces.Space, TrainerConfigDict],
             Tuple[ModelV2, Type[TorchDistributionWrapper]]]]): Optional
             callable that takes the same arguments as Policy.__init__ and
             returns a tuple of model instance and torch action distribution
             class.
-            Note: Only one of `make_models` or `make_models_and_distributions`
+            Note: Only one of `make_model` or `make_model_and_action_dist`
             should be provided. If both are None, a default Model will be
             created.
         compute_gradients_fn (Optional[Callable[
@@ -208,17 +204,6 @@ def build_policy_class(
     parent_cls = TorchPolicy
     base = add_mixins(parent_cls, mixins)
 
-    # Handle deprecated args.
-    if make_model is not None:
-        deprecation_warning("make_model", "make_models", error=False)
-        make_models = make_model
-    if make_model_and_action_dist is not None:
-        deprecation_warning(
-            "make_model_and_action_dist",
-            "make_models_and_distributions",
-            error=False)
-        make_models_and_distributions = make_model_and_action_dist
-
     class policy_cls(base):
         def __init__(self, obs_space, action_space, config):
             # Set up the config from possible default-config fn and given
@@ -239,16 +224,16 @@ def build_policy_class(
                 before_init(self, obs_space, action_space, self.config)
 
             # Model is customized (use default action dist class).
-            if make_models:
-                assert make_models_and_distributions is None, \
-                    "Either `make_models` or `make_models_and_distributions`" \
+            if make_model:
+                assert make_model_and_action_dist is None, \
+                    "Either `make_model` or `make_model_and_action_dist`" \
                     " must be None!"
-                self.model = make_models(self, obs_space, action_space, config)
+                self.model = make_model(self, obs_space, action_space, config)
                 dist_class, _ = ModelCatalog.get_action_dist(
                     action_space, self.config["model"], framework=framework)
             # Model and action dist class are customized.
             elif make_model_and_action_dist:
-                self.model, dist_class = make_models_and_distributions(
+                self.model, dist_class = make_model_and_action_dist(
                     self, obs_space, action_space, config)
             # Use default model and default action dist.
             else:

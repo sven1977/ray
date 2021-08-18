@@ -8,8 +8,8 @@ tf1, tf, tfv = try_import_tf()
 torch, nn = try_import_torch()
 
 
-class RNNModel(tf.keras.models.Model if tf else object):
-    """Example of using the Keras functional API to define an RNN model."""
+class ModelWithValueFunction(tf.keras.models.Model if tf else object):
+    """Model with value function."""
 
     def __init__(self,
                  input_space,
@@ -37,13 +37,16 @@ class RNNModel(tf.keras.models.Model if tf else object):
 
         #self.view_requirements = {}
         #self.view_requirements["state_in_0"] = ViewRequirement(
-        #    data_col="state_out_0", 
+        #    data_col="state_out_0",
         #)
 
     @override("tf.keras.Model")
     def call(self, sample_batch):
-        dense_out = self.dense(sample_batch["obs"])
-        B = tf.shape(sample_batch["seq_lens"])[0]
+        return self.forward_policy_head(sample_batch)
+
+    def forward_policy_head(self, sample_batch):
+        dense_out = self.dense(sample_batch[SampleBatch.OBS])
+        B = tf.shape(sample_batch[SampleBatch.SEQ_LENS])[0]
         lstm_in = tf.reshape(dense_out, [B, -1, dense_out.shape.as_list()[1]])
         lstm_out, h, c = self.lstm(
             inputs=lstm_in,
@@ -56,6 +59,9 @@ class RNNModel(tf.keras.models.Model if tf else object):
         logits = self.logits(lstm_out)
         values = tf.reshape(self.values(lstm_out), [-1])
         return logits, [h, c], {SampleBatch.VF_PREDS: values}
+
+    def forward_policy_head(self, sample_batch):
+
 
     def get_initial_state(self):
         return [

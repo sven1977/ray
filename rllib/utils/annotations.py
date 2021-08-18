@@ -1,10 +1,11 @@
 import inspect
+from typing import Type, Union
 
 from ray.util import log_once
 from ray.rllib.utils.deprecation import deprecation_warning
 
 
-def override(cls):
+def override(cls: Union[Type, str]):
     """Annotation for documenting method overrides.
 
     Args:
@@ -13,7 +14,7 @@ def override(cls):
     """
 
     def check_override(method):
-        if method.__name__ not in dir(cls):
+        if isinstance(cls, type) and method.__name__ not in dir(cls):
             raise NameError("{} does not override any method of {}".format(
                 method, cls))
         return method
