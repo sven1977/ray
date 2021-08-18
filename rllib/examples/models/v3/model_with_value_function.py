@@ -14,11 +14,12 @@ class RNNModel(tf.keras.models.Model if tf else object):
     def __init__(self,
                  input_space,
                  *,
-                 action_space,
-                 num_outputs,
+                 output_size,
                  name="",
                  hiddens_size=256,
-                 cell_size=64):
+                 cell_size=64,
+                 **kwargs,
+                 ):
         super().__init__(name=name)
 
         self.cell_size = cell_size
@@ -31,8 +32,8 @@ class RNNModel(tf.keras.models.Model if tf else object):
 
         # Postprocess LSTM output with another hidden layer and compute
         # values.
-        self.logits = tf.keras.layers.Dense(
-            num_outputs, activation=tf.keras.activations.linear, name="logits")
+        self.outputs = tf.keras.layers.Dense(
+            output_size, activation=tf.keras.activations.linear, name="outputs")
 
         #self.view_requirements = {}
         #self.view_requirements["state_in_0"] = ViewRequirement(
@@ -52,7 +53,8 @@ class RNNModel(tf.keras.models.Model if tf else object):
             ],
         )
         lstm_out = tf.reshape(lstm_out, [-1, lstm_out.shape.as_list()[2]])
-        return lstm_out, [h, c]
+        outputs = self.outputs(lstm_out)
+        return outputs, [h, c]
 
     def get_initial_state(self):
         return [
@@ -67,11 +69,12 @@ class RNNModelWithValueFunction(tf.keras.models.Model if tf else object):
     def __init__(self,
                  input_space,
                  *,
-                 action_space,
-                 num_outputs,
+                 logits_size,
                  name="",
                  hiddens_size=256,
-                 cell_size=64):
+                 cell_size=64,
+                 **kwargs,
+                 ):
         super().__init__(name=name)
 
         self.cell_size = cell_size
@@ -85,7 +88,7 @@ class RNNModelWithValueFunction(tf.keras.models.Model if tf else object):
         # Postprocess LSTM output with another hidden layer and compute
         # values.
         self.logits = tf.keras.layers.Dense(
-            num_outputs, activation=tf.keras.activations.linear, name="logits")
+            logits_size, activation=tf.keras.activations.linear, name="logits")
         self.values = tf.keras.layers.Dense(1, activation=None, name="values")
 
         #self.view_requirements = {}

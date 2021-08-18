@@ -141,15 +141,22 @@ if __name__ == "__main__":
     custom_model_incl_vf = {
         "policy_model": {
             "custom_model": RNNModelWithValueFunction,
+            # **kwargs passed to custom model constructor.
             "custom_model_config": {
                 "hiddens_size": 16,
                 "cell_size": 10,
+                # Note: This custom model requires us to provide the exact
+                # number of output nodes (would be cleverer for this model
+                # class to interpret the `action_space` kwarg, which is
+                # always sent into custom model c'tors anyways!).
+                "logits_size": 2,
             },
         },
     }
 
     # Using a custom shared branch (w/ RNN) underneath default
-    # policy- and value heads.
+    # policy- and value heads. The value head has an additional layer
+    # before the single value output node.
     custom_shared_branch = {
         "policy_model": {
             "shared": {
@@ -157,13 +164,36 @@ if __name__ == "__main__":
                 "custom_model_config": {
                     "hiddens_size": 10,
                     "cell_size": 11,
+                    "output_size": 256,
                 },
             },
             "policy_head": {
-
+                "input_source": "shared",
+                "fcnet_hiddens": [],
+                "output_layer_size": "action_space",
             },
             "value_head": {
+                "input_source": "shared",
+                "fcnet_hiddens": [256],
+                "output_layer_size": 1,
+            },
+        },
+    }
 
+    # Separate policy and value function.
+    # Policy is a default model, value function is a RNN-based
+    # custom model.
+    separate_vf_w_custom_rnn_value_model = {
+        "policy_model": {
+            "fcnet_hiddens": [128, 128],
+            "output_layer_size": "action_space",
+        },
+        "value_model": {
+            "custom_model": RNNModel,
+            "custom_model_config": {
+                "hiddens_size": [256],
+                "cell_size": 9,
+                "output_size": 1,
             },
         },
     }
