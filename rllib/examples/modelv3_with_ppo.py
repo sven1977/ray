@@ -11,6 +11,7 @@ from ray.rllib.examples.env.look_and_push import LookAndPush, OneHot
 from ray.rllib.examples.env.repeat_after_me_env import RepeatAfterMeEnv
 from ray.rllib.examples.env.repeat_initial_obs_env import RepeatInitialObsEnv
 from ray.rllib.examples.env.stateless_cartpole import StatelessCartPole
+from ray.rllib.models.v3.model_with_value_function import ModelWithValueFunction
 from ray.rllib.utils.framework import try_import_tf
 from ray.rllib.utils.test_utils import check_learning_achieved
 from ray.tune import registry
@@ -80,16 +81,16 @@ if __name__ == "__main__":
     # ModelV3 config w/ shared value function.
     shared_vf = {
         "policy_model": {
-            "core": {
+            "shared": {
                 "fcnet_hiddens": [64, 64],
             },
-            "policy_head": {
-                "input_source": "core",
+            "policy": {
+                "input_source": "shared",
                 "fcnet_hiddens": [],
                 "output_layer_size": "action_space",
             },
-            "value_head": {
-                "input_source": "core",
+            "value": {
+                "input_source": "shared",
                 "fcnet_hiddens": [],
                 "output_layer_size": 1,
             },
@@ -137,14 +138,35 @@ if __name__ == "__main__":
 
     # Using a full custom model (including the value calculations).
     # The given Model must abide by the PPO model API, which is:
-    # 1) __call__() == forward_all()
-    # 2) forward_policy_head
-    # 3) forward_value_head
-    full_custom_model_incl_vf = {
+    # 1) __call__() == forward_policy_and_value()
+    # 2) forward_policy
+    # 3) forward_value
+    custom_model_incl_vf = {
         "policy_model": {
-            "custom_model": V3ModelWithValueFunction,
+            "custom_model": ModelWithValueFunction,
             "custom_model_config": {
-                "hidden": []
+                "hiddens_size": 16,
+                "cell_size": 10,
+            },
+        },
+    }
+
+    # Using a custom shared branch (w/ RNN) underneath default
+    # policy- and value heads.
+    custom_shared_branch = {
+        "policy_model": {
+            "shared": {
+                "custom_model": ModelWithValueFunction,
+                "custom_model_config": {
+                    "hiddens_size": 10,
+                    "cell_size": 11,
+                },
+            },
+            "policy_head": {
+
+            },
+            "value_head": {
+
             },
         },
     }
