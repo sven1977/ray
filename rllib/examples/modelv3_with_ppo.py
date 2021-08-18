@@ -7,14 +7,11 @@ import numpy as np
 import ray
 from ray import tune
 from ray.rllib.agents import ppo
-from ray.rllib.examples.env.look_and_push import LookAndPush, OneHot
 from ray.rllib.examples.env.repeat_after_me_env import RepeatAfterMeEnv
-from ray.rllib.examples.env.repeat_initial_obs_env import RepeatInitialObsEnv
-from ray.rllib.examples.env.stateless_cartpole import StatelessCartPole
-from ray.rllib.models.v3.model_with_value_function import ModelWithValueFunction
+from ray.rllib.models.v3.model_with_value_function import \
+    RNNModel, RNNModelWithValueFunction
 from ray.rllib.utils.framework import try_import_tf
 from ray.rllib.utils.test_utils import check_learning_achieved
-from ray.tune import registry
 from ray.tune.logger import pretty_print
 
 tf1, tf, tfv = try_import_tf()
@@ -143,7 +140,7 @@ if __name__ == "__main__":
     # 3) forward_value
     custom_model_incl_vf = {
         "policy_model": {
-            "custom_model": ModelWithValueFunction,
+            "custom_model": RNNModelWithValueFunction,
             "custom_model_config": {
                 "hiddens_size": 16,
                 "cell_size": 10,
@@ -156,7 +153,7 @@ if __name__ == "__main__":
     custom_shared_branch = {
         "policy_model": {
             "shared": {
-                "custom_model": ModelWithValueFunction,
+                "custom_model": RNNModel,
                 "custom_model_config": {
                     "hiddens_size": 10,
                     "cell_size": 11,
