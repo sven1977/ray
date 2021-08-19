@@ -171,6 +171,9 @@ class DynamicTFPolicy(TFPolicy):
                     setattr(self, existing_model[i][0], existing_model[i][1])
         elif make_model:
             self.model = make_model(self, obs_space, action_space, config)
+        elif self.config.get("models"):
+            self.model = None
+            self._make_models(self.config.get("models"))
         else:
             self.model = ModelCatalog.get_model_v2(
                 obs_space=obs_space,

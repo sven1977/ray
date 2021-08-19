@@ -5,6 +5,25 @@ from ray.util import log_once
 from ray.rllib.utils.deprecation import deprecation_warning
 
 
+def ExperimentalAPI(obj_or_name):
+    """Annotation for documenting experimental/WIP APIs.
+
+    You should use these classes and methods with caution as they may still
+    change considerably throughout their development process.
+    Once more stable, we'll re-tag these to @DeveloperAPI.
+
+    Subclasses that inherit from a ``@ExperimentalAPI`` base class can be
+    assumed part of the RLlib experimental API as well.
+    """
+
+    if isinstance(obj_or_name, str):
+        def _inner(obj):
+            return obj
+        return _inner
+    else:
+        return obj
+
+
 def override(cls: Union[Type, str]):
     """Annotation for documenting method overrides.
 
@@ -14,6 +33,7 @@ def override(cls: Union[Type, str]):
     """
 
     def check_override(method):
+        # Ignore parent-class hints that are strings.
         if isinstance(cls, type) and method.__name__ not in dir(cls):
             raise NameError("{} does not override any method of {}".format(
                 method, cls))
@@ -35,7 +55,6 @@ def PublicAPI(obj):
     In addition, you can assume all trainer configurations are part of their
     public API as well.
     """
-
     return obj
 
 

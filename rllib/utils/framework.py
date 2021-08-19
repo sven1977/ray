@@ -45,7 +45,7 @@ def try_import_jax(error=False):
     return jax, flax
 
 
-def try_import_tf(error=False):
+def try_import_tf(error: bool = False):
     """Tries importing tf and returns the module (or None).
 
     Args:

@@ -173,43 +173,6 @@ MODEL_DEFAULTS: ModelConfigDict = {
 # yapf: enable
 
 
-MODELV3_DEFAULTS = dict(MODEL_DEFAULTS, **{
-    # Change this to ReLU to stop confusion about our CNN/FC default
-    # mismatch.
-    "fcnet_activation": "relu",
-
-    # New ModelV3 settings (some of which replace old ones; see del below).
-    # Where does this model taks its inputs from?
-    # - Use None for environment (observations).
-    # - Use [str] for another model identifier, whose output this model will use
-    #   as input.
-    "input_source": None,
-    # Do we need to do anything with input (e.g. frame-stacking)?
-    # Individual models are allowed to override these `input_requirements`
-    # in their c'tors via `self.input_requirements = {...}`.
-    # e.g. For frame-stacking the last 4 observation frames, do:
-    # input_requirements:
-    #     obs:
-    #         shift: [-3, -2, -1, 0]
-    "input_requirements": None,
-
-    # By default, do NOT add an extra (dense) output layer.
-    "output_layer_size": None,
-    # But if we do, by default, make it linear.
-    "output_layer_activation": None,
-})
-# Post-fc-net no longer required (keep single models as simple as possible).
-# If you need more default model "pieces", define them in this "models" dict and
-# link them via the "input_source" key.
-del MODELV3_DEFAULTS["post_fcnet_hiddens"]
-del MODELV3_DEFAULTS["post_fcnet_activation"]
-# Replaced by `output_layer_size`.
-del MODELV3_DEFAULTS["no_final_linear"]
-# Specify two models, instead (if vf is shared, simply define a common "core").
-# No more layer sharing/branching within the same model allowed.
-del MODELV3_DEFAULTS["vf_share_layers"]
-
-
 @PublicAPI
 class ModelCatalog:
     """Registry of models, preprocessors, and action distributions for envs.

@@ -46,12 +46,26 @@ def ppo_surrogate_loss(
         Union[TensorType, List[TensorType]]: A single loss tensor or a list
             of loss tensors.
     """
-    if isinstance(model, tf.keras.Model):
-        logits, state, extra_outs = model(train_batch)
-        value_fn_out = extra_outs[SampleBatch.VF_PREDS]
-    else:
+    # ModelV3 case.
+    if policy.models is not None:
+        policy_model = policy.models["policy_model"]
+        vf_model = policy.models.get("value_model")
+        # Separate value function net.
+        if vf_model:
+            logits, state = policy_model(train_batch)
+            value_fn_out, vf_state = vf_model(train_batch)
+        # Shared policy- and value net. Must implement the `policy_and_value()`
+        # method.
+        else:
+            (logits, value_fn_out), state = policy_model.policy_and_value(train_batch)
+    # ModelV2 case.
+    elif not isinstance(model, tf.keras.Model):
         logits, state = model.from_batch(train_batch)
         value_fn_out = model.value_function()
+    # Native keras case.
+    else:
+        logits, state, extra_outs = model(train_batch)
+        value_fn_out = extra_outs[SampleBatch.VF_PREDS]
 
     curr_action_dist = dist_class(logits, model)
 

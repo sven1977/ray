@@ -7,9 +7,11 @@ import numpy as np
 from typing import Dict, List, Optional, TYPE_CHECKING
 
 from ray.rllib.models.catalog import ModelCatalog
+from ray.rllib.models.modelv3_builder import get_rllib_default_model, \
+    MODELV3_DEFAULTS
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.policy.view_requirement import ViewRequirement
-from ray.rllib.utils.annotations import Deprecated, DeveloperAPI
+from ray.rllib.utils.annotations import Deprecated, DeveloperAPI, ExperimentalAPI
 from ray.rllib.utils.exploration.exploration import Exploration
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.from_config import from_config
@@ -113,6 +115,9 @@ class Policy(metaclass=ABCMeta):
         # The action distribution class to use for action sampling, if any.
         # Child classes may set this.
         self.dist_class = None
+        # New ModelV3 models registry. Policies can now have more than one
+        # (keras|torch) model. If None, use old-school ModelV2 API.
+        self.models = None
         # Maximal view requirements dict for `learn_on_batch()` and
         # `compute_actions` calls.
         # View requirements will be automatically filtered out later based
@@ -949,6 +954,32 @@ class Policy(metaclass=ABCMeta):
                 if "state_out_{}".format(i) not in vr:
                     vr["state_out_{}".format(i)] = ViewRequirement(
                         space=space, used_for_training=True)
+
+    @ExperimentalAPI("ModelV3")
+    def _make_models(self, models_config):
+        """
+        TODO
+        """
+        if not models_config:
+            return
+
+        for model_id, model_config in models_config.items():
+            # Custom model.
+            if model_config.get("custom_model"):
+                pass
+            # Default model.
+            elif any(k in MODELV3_DEFAULTS for k in models_config.keys()):
+                model = get_rllib_default_model(
+                    input_space=self.observation_space,
+                    action_space=self.action_space,
+                    name=model_id,
+                    default_model_config=model_config,
+                )
+            # Sub-branches: Create a new Model class using the
+            # individual branches linked together.
+            else:
+                pass
+            self.models[model_id] = model
 
     @Deprecated(new="save", error=False)
     def export_checkpoint(self, export_dir: str) -> None:
