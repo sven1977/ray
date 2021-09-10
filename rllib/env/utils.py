@@ -30,18 +30,33 @@ def gym_env_creator(env_context: EnvContext, env_descriptor: str):
         gym.error.Error: If the env cannot be constructed.
     """
     import gym
-    # Allow for PyBullet or VizdoomGym envs to be used as well
-    # (via string). This allows for doing things like
-    # `env=CartPoleContinuousBulletEnv-v0` or
-    # `env=VizdoomBasic-v0`.
+
+    # Allow for PyBullet, VizdoomGym, and many other 3rd party gym.Envs
+    # to be used as well (via string). This allows for doing things like
+    # `env=CartPoleContinuousBulletEnv-v0` or `env=VizdoomBasic-v0`.
+
+    # pip install pybullet
     try:
         import pybullet_envs
         pybullet_envs.getList()
     except (ModuleNotFoundError, ImportError):
         pass
+
+    # sudo apt-get install cmake libboost-all-dev libgtk2.0-dev libsdl2-dev \
+    #   python-numpy
+    # git clone https://github.com/shakenes/vizdoomgym.git
+    # cd vizdoomgym
+    # pip install -e .
     try:
         import vizdoomgym
         vizdoomgym.__name__  # trick LINTer.
+    except (ModuleNotFoundError, ImportError):
+        pass
+
+    # pip install highway-env
+    try:
+        import highway_env
+        highway_env.__name__  # trick LINTer.
     except (ModuleNotFoundError, ImportError):
         pass
 
