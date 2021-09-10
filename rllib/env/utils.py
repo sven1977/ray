@@ -35,6 +35,20 @@ def gym_env_creator(env_context: EnvContext, env_descriptor: str):
     # to be used as well (via string). This allows for doing things like
     # `env=CartPoleContinuousBulletEnv-v0` or `env=VizdoomBasic-v0`.
 
+    # pip install gym-minigrid
+    try:
+        import gym_minigrid
+        gym_minigrid.__name__  # trick LINTer.
+    except (ModuleNotFoundError, ImportError):
+        pass
+
+    # pip install highway-env
+    try:
+        import highway_env
+        highway_env.__name__  # trick LINTer.
+    except (ModuleNotFoundError, ImportError):
+        pass
+
     # pip install pybullet
     try:
         import pybullet_envs
@@ -50,13 +64,6 @@ def gym_env_creator(env_context: EnvContext, env_descriptor: str):
     try:
         import vizdoomgym
         vizdoomgym.__name__  # trick LINTer.
-    except (ModuleNotFoundError, ImportError):
-        pass
-
-    # pip install highway-env
-    try:
-        import highway_env
-        highway_env.__name__  # trick LINTer.
     except (ModuleNotFoundError, ImportError):
         pass
 

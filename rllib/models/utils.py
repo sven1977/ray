@@ -98,6 +98,13 @@ def get_filter_config(shape):
         [32, [4, 4], 2],
         [256, [11, 11], 1],
     ]
+    # Minigrid.
+    filters_7x7 = [
+        [16, [3, 3], 2],
+        [32, [3, 3], 2],
+        [64, [2, 2], 1],
+    ]
+
     if len(shape) in [2, 3] and (shape[:2] == [480, 640]
                                  or shape[1:] == [480, 640]):
         return filters_480x640
@@ -110,13 +117,16 @@ def get_filter_config(shape):
     elif len(shape) in [2, 3] and (shape[:2] == [42, 42]
                                    or shape[1:] == [42, 42]):
         return filters_42x42
+    elif len(shape) in [2, 3] and (shape[:2] == [7, 7]
+                                   or shape[1:] == [7, 7]):
+        return filters_7x7
     else:
         raise ValueError(
             "No default configuration for obs shape {}".format(shape) +
             ", you must specify `conv_filters` manually as a model option. "
             "Default configurations are only available for inputs of shape "
             "[42, 42, K] and [84, 84, K]. You may alternatively want "
-            "to use a custom model or preprocessor.")
+            "to use a custom model.")
 
 
 def get_initializer(name, framework="tf"):
