@@ -42,6 +42,13 @@ def gym_env_creator(env_context: EnvContext, env_descriptor: str):
     except (ModuleNotFoundError, ImportError):
         pass
 
+    # pip install gym-miniworld
+    try:
+        import gym_miniworld
+        gym_miniworld.__name__  # trick LINTer.
+    except (ModuleNotFoundError, ImportError):
+        pass
+
     # pip install highway-env
     try:
         import highway_env
