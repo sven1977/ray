@@ -1566,6 +1566,15 @@ py_test(
 # Tag: utils
 # --------------------------------------------------------------------
 
+# Events
+py_test(
+    name = "test_observable",
+    tags = ["team:ml", "utils"],
+    size = "small",
+    srcs = ["utils/events/tests/test_observable.py"]
+)
+
+# Exploration
 py_test(
     name = "test_curiosity",
     tags = ["team:ml", "utils", "flaky"],

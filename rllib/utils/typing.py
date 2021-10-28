@@ -118,3 +118,6 @@ TensorStructType = Union[TensorType, dict, tuple]
 
 # A shape of a tensor.
 TensorShape = Union[Tuple[int], List[int]]
+
+# A string specifying an event name, e.g. `on_learn_on_batch`.
+EventName = str
