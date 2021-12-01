@@ -28,7 +28,7 @@ class RemoteBaseEnv(BaseEnv):
                  multiagent: bool,
                  remote_env_batch_wait_ms: int,
                  existing_envs: Optional[List[ray.actor.ActorHandle]] = None):
-        """Initializes a RemoteVectorEnv instance.
+        """Initializes a RemoteBaseEnv instance.
 
         Args:
             make_env: Callable that produces a single (non-vectorized) env,

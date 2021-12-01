@@ -442,7 +442,7 @@ class SampleBatch(dict):
 
         Returns:
             SampleBatch: A new SampleBatch, which has a slice of this batch's
-                data.
+                data (w/o copying the actual data).
         """
         if self.get(SampleBatch.SEQ_LENS) is not None and \
                 len(self[SampleBatch.SEQ_LENS]) > 0:
@@ -515,11 +515,10 @@ class SampleBatch(dict):
                 _time_major=self.time_major,
             )
         else:
-            return SampleBatch(
-                tree.map_structure(lambda value: value[start:end], self),
-                _is_training=self.is_training,
-                _time_major=self.time_major,
-            )
+            deprecation_warning(
+                old="SampleBatch.slice(start, stop)",
+                new="SampleBatch[start:stop]",
+                error=True)
 
     @PublicAPI
     def timeslices(self,
@@ -624,7 +623,7 @@ class SampleBatch(dict):
                     or path[0] == SampleBatch.SEQ_LENS:
                 return
             # Generate zero-filled primer of len=max_seq_len.
-            if value.dtype == np.object or value.dtype.type is np.str_:
+            if value.dtype == object or value.dtype.type is np.str_:
                 f_pad = [None] * length
             else:
                 # Make sure type doesn't change.
@@ -661,7 +660,7 @@ class SampleBatch(dict):
         if framework == "torch":
             assert torch is not None
             for k, v in self.items():
-                if isinstance(v, np.ndarray) and v.dtype != np.object:
+                if isinstance(v, np.ndarray) and v.dtype != object:
                     self[k] = torch.from_numpy(v).to(device)
         else:
             raise NotImplementedError
