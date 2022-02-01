@@ -14,6 +14,8 @@ Available Algorithms - Overview
 Algorithm           Frameworks Discrete Actions        Continuous Actions Multi-Agent Model Support                                                 Multi-GPU
 =================== ========== ======================= ================== =========== ============================================================= ===============
 `A2C, A3C`_         tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   A2C: tf + torch
+`AlphaStar`_        tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   A2C: tf + torch
+`APPO`_             tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   tf + torch
 `ARS`_              tf + torch **Yes**                 **Yes**            No                                                                        No
 `BC`_               tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_                                                       torch
 `CQL`_              tf + torch No                      **Yes**            No                                                                        tf + torch
@@ -23,12 +25,12 @@ Algorithm           Frameworks Discrete Actions        Continuous Actions Multi-
 `Dreamer`_          torch      No                      **Yes**            No          `+RNN`_                                                       torch
 `DQN`_, `Rainbow`_  tf + torch **Yes** `+parametric`_  No                 **Yes**                                                                   tf + torch
 `APEX-DQN`_         tf + torch **Yes** `+parametric`_  No                 **Yes**                                                                   torch
-`IMPALA`_           tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   tf + torch
+`IMPALA`_           tf + torch **Yes** `+parametric`_  No                 **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   tf + torch
 `MAML`_             tf + torch No                      **Yes**            No                                                                        torch
 `MARWIL`_           tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_                                                       torch
 `MBMPO`_            torch      No                      **Yes**            No                                                                        torch
 `PG`_               tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   tf + torch
-`PPO`_, `APPO`_     tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   tf + torch
+`PPO`_              tf + torch **Yes** `+parametric`_  **Yes**            **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+Attention`_, `+autoreg`_   tf + torch
 `R2D2`_             tf + torch **Yes** `+parametric`_  No                 **Yes**     `+RNN`_, `+LSTM auto-wrapping`_, `+autoreg`_                  torch
 `SAC`_              tf + torch **Yes**                 **Yes**            **Yes**                                                                   torch
 `SlateQ`_           torch      **Yes**                 No                 No                                                                        torch
@@ -71,6 +73,24 @@ Algorithm                     Frameworks Discrete Actions        Continuous Acti
 
 High-throughput architectures
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. _alphastar:
+
+Distributed Prioritized Experience Replay (Ape-X)
+-------------------------------------------------
+|pytorch| |tensorflow|
+`[paper] <https://arxiv.org/abs/1803.00933>`__
+`[implementation] <https://github.com/ray-project/ray/blob/master/rllib/agents/alpha_star/alpha_star.py>`__
+Ape-X variations of DQN and DDPG (`APEX_DQN <https://github.com/ray-project/ray/blob/master/rllib/agents/dqn/apex.py>`__, `APEX_DDPG <https://github.com/ray-project/ray/blob/master/rllib/agents/ddpg/apex.py>`__)
+use a single GPU learner and many CPU workers for experience collection.
+Experience collection can scale to hundreds of CPU workers due to the distributed prioritization of experience prior to storage in replay buffers.
+
+.. figure:: images/apex-arch.svg
+
+    Ape-X architecture
+
+Tuned examples: `4x MultiAgentCartPole <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/alpha_star/multi-agent-cartpole-alpha-star.yaml>`__.
+
 
 .. _apex:
 
