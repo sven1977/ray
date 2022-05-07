@@ -270,6 +270,35 @@ class TrainerConfig:
 
         return config
 
+    @classmethod
+    def from_dict(cls, config_dict) -> "TrainerConfig":
+        """Creates a TrainerConfig from a legacy python config dict.
+
+        Examples:
+            >>> from ray.rllib.agents.ppo.ppo import DEFAULT_CONFIG
+            >>> from ray.rllib.agents.trainer_config import TrainerConfig
+            >>> ppo_config = TrainerConfig.from_dict(DEFAULT_CONFIG)
+            >>> ppo_trainer = ppo_config.build(env="Pendulum-v1")
+
+        Args:
+            config_dict: The legacy formatted python config dict for some algorithm.
+
+        Returns:
+             A new TrainerConfig object that matches the given dict.
+        """
+        # Create a default config object of this class.
+        config_obj = cls()
+        # Then modify its properties.
+        for key, value in config_dict.items():
+            if hasattr(config_obj, key):
+                setattr(config_obj, key, value)
+            else:
+                raise ValueError(
+                    f"Cannot create {cls.__name__} from given `config_dict`! "
+                    f"Property {key} not supported."
+                )
+        return config_obj
+
     def build(
         self,
         env: Optional[Union[str, EnvType]] = None,

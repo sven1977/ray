@@ -267,31 +267,31 @@ def warn_about_bad_reward_scales(config, result):
 
 
 class PPOTrainer(Trainer):
-    # TODO: Change the return value of this method to return a TrainerConfig object
-    #  instead.
     @classmethod
     @override(Trainer)
     def get_default_config(cls) -> TrainerConfigDict:
         return PPOConfig().to_dict()
 
     @override(Trainer)
-    def validate_config(self, config: TrainerConfigDict) -> None:
+    def validate_config(self, config: PPOConfig) -> None:
         """Validates the Trainer's config dict.
 
         Args:
-            config (TrainerConfigDict): The Trainer's config to check.
+            config: The PPOConfig to check.
 
         Raises:
             ValueError: In case something is wrong with the config.
         """
         # Call super's validation method.
-        super().validate_config(config)
+        super().validate_config(config.to_dict())
 
-        if isinstance(config["entropy_coeff"], int):
-            config["entropy_coeff"] = float(config["entropy_coeff"])
+        if isinstance(config.entropy_coeff, int):
+            config.entropy_coeff = float(config.entropy_coeff)
 
-        if config["entropy_coeff"] < 0.0:
-            raise DeprecationWarning("entropy_coeff must be >= 0.0")
+        if config.entropy_coeff < 0.0:
+            raise ValueError(
+                f"`entropy_coeff` must be >= 0.0, but is {config.entropy_coeff}"
+            )
 
         # SGD minibatch size must be smaller than train_batch_size (b/c
         # we subsample a batch of `sgd_minibatch_size` from the train-batch for
@@ -299,13 +299,13 @@ class PPOTrainer(Trainer):
         # Note: Only check this if `train_batch_size` > 0 (DDPPO sets this
         # to -1 to auto-calculate the actual batch size later).
         if (
-            config["train_batch_size"] > 0
-            and config["sgd_minibatch_size"] > config["train_batch_size"]
+            config.train_batch_size > 0
+            and config.sgd_minibatch_size > config.train_batch_size
         ):
             raise ValueError(
                 "`sgd_minibatch_size` ({}) must be <= "
                 "`train_batch_size` ({}).".format(
-                    config["sgd_minibatch_size"], config["train_batch_size"]
+                    config.sgd_minibatch_size, config.train_batch_size
                 )
             )
 
@@ -314,38 +314,38 @@ class PPOTrainer(Trainer):
         # if necessary.
         # Note: Only check this if `train_batch_size` > 0 (DDPPO sets this
         # to -1 to auto-calculate the actual batch size later).
-        num_workers = config["num_workers"] or 1
+        num_workers = config.num_workers or 1
         calculated_min_rollout_size = (
             num_workers
-            * config["num_envs_per_worker"]
-            * config["rollout_fragment_length"]
+            * config.num_envs_per_worker
+            * config.rollout_fragment_length
         )
         if (
-            config["train_batch_size"] > 0
-            and config["train_batch_size"] % calculated_min_rollout_size != 0
+            config.train_batch_size > 0
+            and config.train_batch_size % calculated_min_rollout_size != 0
         ):
-            new_rollout_fragment_length = config["train_batch_size"] // (
-                num_workers * config["num_envs_per_worker"]
+            new_rollout_fragment_length = config.train_batch_size // (
+                num_workers * config.num_envs_per_worker
             )
             logger.warning(
                 "`train_batch_size` ({}) cannot be achieved with your other "
                 "settings (num_workers={} num_envs_per_worker={} "
                 "rollout_fragment_length={})! Auto-adjusting "
                 "`rollout_fragment_length` to {}.".format(
-                    config["train_batch_size"],
-                    config["num_workers"],
-                    config["num_envs_per_worker"],
-                    config["rollout_fragment_length"],
+                    config.train_batch_size,
+                    config.num_workers,
+                    config.num_envs_per_worker,
+                    config.rollout_fragment_length,
                     new_rollout_fragment_length,
                 )
             )
-            config["rollout_fragment_length"] = new_rollout_fragment_length
+            config.rollout_fragment_length = new_rollout_fragment_length
 
         # Episodes may only be truncated (and passed into PPO's
         # `postprocessing_fn`), iff generalized advantage estimation is used
         # (value function estimate at end of truncated episode to estimate
         # remaining value).
-        if config["batch_mode"] == "truncate_episodes" and not config["use_gae"]:
+        if config.batch_mode == "truncate_episodes" and not config.use_gae:
             raise ValueError(
                 "Episode truncation is not supported without a value "
                 "function (to estimate the return at the end of the truncated"
@@ -354,7 +354,7 @@ class PPOTrainer(Trainer):
             )
 
         # Multi-agent mode and multi-GPU optimizer.
-        if config["multiagent"]["policies"] and not config["simple_optimizer"]:
+        if config.policies and not config.simple_optimizer:
             logger.info(
                 "In multi-agent mode, policies will be optimized sequentially"
                 " by the multi-GPU optimizer. Consider setting "
@@ -362,8 +362,8 @@ class PPOTrainer(Trainer):
             )
 
     @override(Trainer)
-    def get_default_policy_class(self, config: TrainerConfigDict) -> Type[Policy]:
-        if config["framework"] == "torch":
+    def get_default_policy_class(self, config: PPOConfig) -> Type[Policy]:
+        if config.framework_str == "torch":
             from ray.rllib.agents.ppo.ppo_torch_policy import PPOTorchPolicy
 
             return PPOTorchPolicy
@@ -375,11 +375,11 @@ class PPOTrainer(Trainer):
         # Collect SampleBatches from sample workers until we have a full batch.
         if self._by_agent_steps:
             train_batch = synchronous_parallel_sample(
-                worker_set=self.workers, max_agent_steps=self.config["train_batch_size"]
+                worker_set=self.workers, max_agent_steps=self.config.train_batch_size
             )
         else:
             train_batch = synchronous_parallel_sample(
-                worker_set=self.workers, max_env_steps=self.config["train_batch_size"]
+                worker_set=self.workers, max_env_steps=self.config.train_batch_size
             )
         train_batch = train_batch.as_multi_agent()
         self._counters[NUM_AGENT_STEPS_SAMPLED] += train_batch.agent_steps()
@@ -388,7 +388,7 @@ class PPOTrainer(Trainer):
         # Standardize advantages
         train_batch = standardize_fields(train_batch, ["advantages"])
         # Train
-        if self.config["simple_optimizer"]:
+        if self.config.simple_optimizer:
             train_results = train_one_step(self, train_batch)
         else:
             train_results = multi_gpu_train_one_step(self, train_batch)
@@ -412,12 +412,12 @@ class PPOTrainer(Trainer):
 
             # Warn about excessively high value function loss
             scaled_vf_loss = (
-                self.config["vf_loss_coeff"] * policy_info[LEARNER_STATS_KEY]["vf_loss"]
+                self.config.vf_loss_coeff * policy_info[LEARNER_STATS_KEY]["vf_loss"]
             )
             policy_loss = policy_info[LEARNER_STATS_KEY]["policy_loss"]
             if (
                 log_once("ppo_warned_lr_ratio")
-                and self.config.get("model", {}).get("vf_share_layers")
+                and self.config.model.get("vf_share_layers")
                 and scaled_vf_loss > 100
             ):
                 logger.warning(
@@ -432,12 +432,12 @@ class PPOTrainer(Trainer):
             mean_reward = train_batch.policy_batches[policy_id]["rewards"].mean()
             if (
                 log_once("ppo_warned_vf_clip")
-                and mean_reward > self.config["vf_clip_param"]
+                and mean_reward > self.config.vf_clip_param
             ):
                 self.warned_vf_clip = True
                 logger.warning(
                     f"The mean reward returned from the environment is {mean_reward}"
-                    f" but the vf_clip_param is set to {self.config['vf_clip_param']}."
+                    f" but the vf_clip_param is set to {self.config.vf_clip_param}."
                     f" Consider increasing it for policy: {policy_id} to improve"
                     " value function convergence."
                 )

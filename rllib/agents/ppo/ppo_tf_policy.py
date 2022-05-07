@@ -94,7 +94,7 @@ def ppo_surrogate_loss(
     )
 
     # Only calculate kl loss if necessary (kl-coeff > 0.0).
-    if policy.config["kl_coeff"] > 0.0:
+    if policy.config.kl_coeff > 0.0:
         action_kl = prev_action_dist.kl(curr_action_dist)
         mean_kl_loss = reduce_mean_valid(action_kl)
     else:
@@ -107,20 +107,20 @@ def ppo_surrogate_loss(
         train_batch[Postprocessing.ADVANTAGES] * logp_ratio,
         train_batch[Postprocessing.ADVANTAGES]
         * tf.clip_by_value(
-            logp_ratio, 1 - policy.config["clip_param"], 1 + policy.config["clip_param"]
+            logp_ratio, 1 - policy.config.clip_param, 1 + policy.config.clip_param
         ),
     )
     mean_policy_loss = reduce_mean_valid(-surrogate_loss)
 
     # Compute a value function loss.
-    if policy.config["use_critic"]:
+    if policy.config.use_critic:
         vf_loss = tf.math.square(
             value_fn_out - train_batch[Postprocessing.VALUE_TARGETS]
         )
         vf_loss_clipped = tf.clip_by_value(
             vf_loss,
             0,
-            policy.config["vf_clip_param"],
+            policy.config.vf_clip_param,
         )
         mean_vf_loss = reduce_mean_valid(vf_loss_clipped)
     # Ignore the value function.
@@ -129,12 +129,12 @@ def ppo_surrogate_loss(
 
     total_loss = reduce_mean_valid(
         -surrogate_loss
-        + policy.config["vf_loss_coeff"] * vf_loss_clipped
+        + policy.config.vf_loss_coeff * vf_loss_clipped
         - policy.entropy_coeff * curr_entropy
     )
     # Add mean_kl_loss (already processed through `reduce_mean_valid`),
     # if necessary.
-    if policy.config["kl_coeff"] > 0.0:
+    if policy.config.kl_coeff > 0.0:
         total_loss += policy.kl_coeff * mean_kl_loss
 
     # Store stats in policy for stats_fn.
@@ -223,10 +223,10 @@ def compute_and_clip_gradients(
     grads_and_vars = optimizer.compute_gradients(loss, variables)
 
     # Clip by global norm, if necessary.
-    if policy.config["grad_clip"] is not None:
+    if policy.config.grad_clip is not None:
         # Defuse inf gradients (due to super large losses).
         grads = [g for (g, v) in grads_and_vars]
-        grads, _ = tf.clip_by_global_norm(grads, policy.config["grad_clip"])
+        grads, _ = tf.clip_by_global_norm(grads, policy.config.grad_clip)
         # If the global_norm is inf -> All grads will be NaN. Stabilize this
         # here by setting them to 0.0. This will simply ignore destructive loss
         # calculations.
@@ -247,16 +247,16 @@ class KLCoeffMixin:
 
     def __init__(self, config):
         # The current KL value (as python float).
-        self.kl_coeff_val = config["kl_coeff"]
+        self.kl_coeff_val = config.kl_coeff
         # The current KL value (as tf Variable for in-graph operations).
         self.kl_coeff = get_variable(
             float(self.kl_coeff_val),
             tf_name="kl_coeff",
             trainable=False,
-            framework=config["framework"],
+            framework=config.framework_str,
         )
         # Constant target value.
-        self.kl_target = config["kl_target"]
+        self.kl_target = config.kl_target
         if self.framework == "tf":
             self._kl_coeff_placeholder = tf1.placeholder(
                 dtype=tf.float32, name="kl_coeff"
@@ -306,7 +306,7 @@ class KLCoeffMixin:
     @override(Policy)
     def set_state(self, state: dict) -> None:
         # Set current kl-coeff value first.
-        self._set_kl_coeff(state.pop("current_kl_coeff", self.config["kl_coeff"]))
+        self._set_kl_coeff(state.pop("current_kl_coeff", self.config.kl_coeff))
         # Call super's set_state with rest of the state dict.
         super().set_state(state)
 
@@ -325,7 +325,7 @@ class ValueNetworkMixin:
     def __init__(self, obs_space, action_space, config):
         # When doing GAE, we need the value function estimate on the
         # observation.
-        if config["use_gae"]:
+        if config.use_gae:
 
             # Input dict is provided to us automatically via the Model's
             # requirements. It's a single-timestep (last one in trajectory)
@@ -369,16 +369,16 @@ def setup_config(
     # It's confusing as some users might (correctly!) set it in their
     # model config and then won't notice that it's silently overwritten
     # here.
-    if config.get("vf_share_layers", DEPRECATED_VALUE) != DEPRECATED_VALUE:
+    if config.vf_share_layers != DEPRECATED_VALUE:
         deprecation_warning(
             old="config[vf_share_layers]",
             new="config[model][vf_share_layers]",
             error=True,
         )
-        config["model"]["vf_share_layers"] = config["vf_share_layers"]
+        config.model["vf_share_layers"] = config.vf_share_layers
 
     # If vf_share_layers is True, inform about the need to tune vf_loss_coeff.
-    if config.get("model", {}).get("vf_share_layers") is True:
+    if config.model.get("vf_share_layers") is True:
         logger.info(
             "`vf_share_layers=True` in your model. "
             "Therefore, remember to tune the value of `vf_loss_coeff`!"
@@ -402,9 +402,9 @@ def setup_mixins(
     ValueNetworkMixin.__init__(policy, obs_space, action_space, config)
     KLCoeffMixin.__init__(policy, config)
     EntropyCoeffSchedule.__init__(
-        policy, config["entropy_coeff"], config["entropy_coeff_schedule"]
+        policy, config.entropy_coeff, config.entropy_coeff_schedule
     )
-    LearningRateSchedule.__init__(policy, config["lr"], config["lr_schedule"])
+    LearningRateSchedule.__init__(policy, config.lr, config.lr_schedule)
 
 
 @Deprecated(

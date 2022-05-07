@@ -301,17 +301,24 @@ class Trainer(Trainable):
         return TrainerConfig().to_dict()
 
     @override(Trainable)
-    def setup(self, config: PartialTrainerConfigDict):
+    def setup(self, config: Union[PartialTrainerConfigDict, TrainerConfig]):
 
         # Setup our config: Merge the user-supplied config (which could
-        # be a partial config dict with the class' default).
-        self.config = self.merge_trainer_configs(
-            self.get_default_config(), config, self._allow_unknown_configs
-        )
-        self.config["env"] = self._env_id
+        # be a partial config dict with the class' default) or a TrainerConfig
+        # object.
+        if isinstance(config, TrainerConfig):
+            self.config = config
+            self.config.environment(env=self._env_id)
+            config_dict = self.config.to_dict()
+        else:
+            self.config = self.merge_trainer_configs(
+                self.get_default_config(), config, self._allow_unknown_configs
+            )
+            self.config["env"] = self._env_id
+            config_dict = self.config
 
         # Validate the framework settings in config.
-        self.validate_framework(self.config)
+        self.validate_framework(config_dict)
 
         # Setup the self.env_creator callable (to be passed
         # e.g. to RolloutWorkers' c'tors).
@@ -319,23 +326,23 @@ class Trainer(Trainable):
 
         # Set Trainer's seed after we have - if necessary - enabled
         # tf eager-execution.
-        update_global_seed_if_necessary(self.config["framework"], self.config["seed"])
+        update_global_seed_if_necessary(config_dict["framework"], config_dict["seed"])
 
         self.validate_config(self.config)
-        self.callbacks = self.config["callbacks"]()
-        log_level = self.config.get("log_level")
+        self.callbacks = config_dict["callbacks"]()
+        log_level = config_dict.get("log_level")
         if log_level in ["WARN", "ERROR"]:
             logger.info(
                 "Current log_level is {}. For more information, "
                 "set 'log_level': 'INFO' / 'DEBUG' or use the -v and "
                 "-vv flags.".format(log_level)
             )
-        if self.config.get("log_level"):
-            logging.getLogger("ray.rllib").setLevel(self.config["log_level"])
+        if config_dict.get("log_level"):
+            logging.getLogger("ray.rllib").setLevel(config_dict["log_level"])
 
         # Create local replay buffer if necessary.
         self.local_replay_buffer = self._create_local_replay_buffer_if_necessary(
-            self.config
+            config_dict
         )
 
         # Create a dict, mapping ActorHandles to sets of open remote
@@ -357,7 +364,7 @@ class Trainer(Trainable):
         # Old design: Override `Trainer._init` (or use `build_trainer()`, which
         # will do this for you).
         try:
-            self._init(self.config, self.env_creator)
+            self._init(config_dict, self.env_creator)
         # New design: Override `Trainable.setup()` (as indented by Trainable)
         # and do or don't call super().setup() from within your override.
         # By default, `super().setup()` will create both worker sets:
@@ -377,7 +384,7 @@ class Trainer(Trainable):
                 validate_env=self.validate_env,
                 policy_class=self.get_default_policy_class(self.config),
                 trainer_config=self.config,
-                num_workers=self.config["num_workers"],
+                num_workers=config_dict["num_workers"],
                 local_worker=True,
                 logdir=self.logdir,
             )
@@ -385,7 +392,7 @@ class Trainer(Trainable):
             self._remote_workers_for_metrics = self.workers.remote_workers()
 
             # Function defining one single training iteration's behavior.
-            if self.config["_disable_execution_plan_api"]:
+            if config_dict["_disable_execution_plan_api"]:
                 # Ensure remote workers are initially in sync with the local worker.
                 self.workers.sync_weights()
             # LocalIterator-creating "execution plan".

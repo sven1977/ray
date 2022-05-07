@@ -42,18 +42,18 @@ class PPOTorchPolicy(TorchPolicy, LearningRateSchedule, EntropyCoeffSchedule):
             observation_space,
             action_space,
             config,
-            max_seq_len=config["model"]["max_seq_len"],
+            max_seq_len=config.model["max_seq_len"],
         )
 
         EntropyCoeffSchedule.__init__(
-            self, config["entropy_coeff"], config["entropy_coeff_schedule"]
+            self, config.entropy_coeff, config.entropy_coeff_schedule
         )
-        LearningRateSchedule.__init__(self, config["lr"], config["lr_schedule"])
+        LearningRateSchedule.__init__(self, config.lr, config.lr_schedule)
 
         # The current KL value (as python float).
-        self.kl_coeff = self.config["kl_coeff"]
+        self.kl_coeff = self.config.kl_coeff
         # Constant target value.
-        self.kl_target = self.config["kl_target"]
+        self.kl_target = self.config.kl_target
 
         # TODO: Don't require users to call this manually.
         self._initialize_loss_from_dummy_batch()
@@ -124,7 +124,7 @@ class PPOTorchPolicy(TorchPolicy, LearningRateSchedule, EntropyCoeffSchedule):
         )
 
         # Only calculate kl loss if necessary (kl-coeff > 0.0).
-        if self.config["kl_coeff"] > 0.0:
+        if self.config.kl_coeff > 0.0:
             action_kl = prev_action_dist.kl(curr_action_dist)
             mean_kl_loss = reduce_mean_valid(action_kl)
         else:
@@ -137,18 +137,18 @@ class PPOTorchPolicy(TorchPolicy, LearningRateSchedule, EntropyCoeffSchedule):
             train_batch[Postprocessing.ADVANTAGES] * logp_ratio,
             train_batch[Postprocessing.ADVANTAGES]
             * torch.clamp(
-                logp_ratio, 1 - self.config["clip_param"], 1 + self.config["clip_param"]
+                logp_ratio, 1 - self.config.clip_param, 1 + self.config.clip_param
             ),
         )
         mean_policy_loss = reduce_mean_valid(-surrogate_loss)
 
         # Compute a value function loss.
-        if self.config["use_critic"]:
+        if self.config.use_critic:
             value_fn_out = model.value_function()
             vf_loss = torch.pow(
                 value_fn_out - train_batch[Postprocessing.VALUE_TARGETS], 2.0
             )
-            vf_loss_clipped = torch.clamp(vf_loss, 0, self.config["vf_clip_param"])
+            vf_loss_clipped = torch.clamp(vf_loss, 0, self.config.vf_clip_param)
             mean_vf_loss = reduce_mean_valid(vf_loss_clipped)
         # Ignore the value function.
         else:
@@ -157,13 +157,13 @@ class PPOTorchPolicy(TorchPolicy, LearningRateSchedule, EntropyCoeffSchedule):
 
         total_loss = reduce_mean_valid(
             -surrogate_loss
-            + self.config["vf_loss_coeff"] * vf_loss_clipped
+            + self.config.vf_loss_coeff * vf_loss_clipped
             - self.entropy_coeff * curr_entropy
         )
 
         # Add mean_kl_loss (already processed through `reduce_mean_valid`),
         # if necessary.
-        if self.config["kl_coeff"] > 0.0:
+        if self.config.kl_coeff > 0.0:
             total_loss += self.kl_coeff * mean_kl_loss
 
         # Store values for stats function in model (tower), such that for
@@ -182,7 +182,7 @@ class PPOTorchPolicy(TorchPolicy, LearningRateSchedule, EntropyCoeffSchedule):
     def _value(self, **input_dict):
         # When doing GAE, we need the value function estimate on the
         # observation.
-        if self.config["use_gae"]:
+        if self.config.use_gae:
             # Input dict is provided to us automatically via the Model's
             # requirements. It's a single-timestep (last one in trajectory)
             # input_dict.
@@ -273,6 +273,6 @@ class PPOTorchPolicy(TorchPolicy, LearningRateSchedule, EntropyCoeffSchedule):
     @override(TorchPolicy)
     def set_state(self, state: dict) -> None:
         # Set current kl-coeff value first.
-        self.kl_coeff = state.pop("current_kl_coeff", self.config["kl_coeff"])
+        self.kl_coeff = state.pop("current_kl_coeff", self.config.kl_coeff)
         # Call super's set_state with rest of the state dict.
         super().set_state(state)
