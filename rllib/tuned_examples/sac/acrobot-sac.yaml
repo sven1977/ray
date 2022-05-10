@@ -1,4 +1,4 @@
-pendulum-sac:
+acrobot-sac:
     env: Acrobot-v1
     run: SAC
     stop:
@@ -6,8 +6,8 @@ pendulum-sac:
     config:
         # Works for both torch and tf.
         framework: tf
-        horizon: 200
-        soft_horizon: false
+        horizon: 250
+        soft_horizon: true
         Q_model:
           fcnet_activation: relu
           fcnet_hiddens: [256, 256]
@@ -17,7 +17,7 @@ pendulum-sac:
         tau: 0.005
         target_entropy: auto
         no_done_at_end: true
-        n_step: 1
+        n_step: 3
         rollout_fragment_length: 1
         prioritized_replay: true
         train_batch_size: 256
