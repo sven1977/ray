@@ -211,6 +211,9 @@ class TrainerConfig:
         self._disable_preprocessor_api = False
         self._disable_action_flattening = False
         self._disable_execution_plan_api = True
+        # Whether the associated Trainer class supports receiving pure TrainerConfig
+        # objects as `config` c'tor arg.
+        self._supports_trainer_config_objects = False
 
         # TODO: Remove, once all deprecation_warning calls upon using these keys
         #  have been removed.
@@ -270,7 +273,7 @@ class TrainerConfig:
 
         # Switch out deprecated vs new config keys.
         config["callbacks"] = config.pop("callbacks_class", DefaultCallbacks)
-        config["create_env_on_driver"] = config.pop("create_env_on_local_worker", 1)
+        config["create_env_on_driver"] = config.pop("create_env_on_local_worker", False)
         config["custom_eval_function"] = config.pop("custom_evaluation_function", None)
         config["framework"] = config.pop("framework_str", None)
         config["num_cpus_for_driver"] = config.pop("num_cpus_for_local_worker", 1)
@@ -278,7 +281,7 @@ class TrainerConfig:
         return config
 
     @classmethod
-    def from_dict(cls, config_dict) -> "TrainerConfig":
+    def from_dict(cls, config_dict: dict) -> "TrainerConfig":
         """Creates a TrainerConfig from a legacy python config dict.
 
         Examples:
@@ -291,20 +294,54 @@ class TrainerConfig:
             config_dict: The legacy formatted python config dict for some algorithm.
 
         Returns:
-             A new TrainerConfig object that matches the given dict.
+             A new TrainerConfig object that matches the given python config dict.
         """
         # Create a default config object of this class.
         config_obj = cls()
-        # Then modify its properties.
+        return config_obj.update_from_dict(config_dict)
+
+    def update_from_dict(self, config_dict: dict) -> "TrainerConfig":
+        # Modify our properties one by one.
         for key, value in config_dict.items():
-            if hasattr(config_obj, key):
-                setattr(config_obj, key, value)
+            # Handle special edge-cases.
+            if key == "callbacks":
+                key = "callbacks_class"
+            elif key == "create_env_on_driver":
+                key = "create_env_on_local_worker"
+            elif key == "custom_eval_function":
+                key = "custom_evaluation_function"
+            elif key == "framework":
+                key = "framework_str"
+            elif key == "input":
+                key = "input_"
+            elif key == "lambda":
+                key = "lambda_"
+            elif key == "num_cpus_for_driver":
+                key = "num_cpus_for_local_worker"
+
+            # Set our multi-agent settings.
+            if key == "multiagent":
+                for k in [
+                    "policies",
+                    "policy_map_capacity",
+                    "policy_map_cache",
+                    "policy_mapping_fn",
+                    "policies_to_train",
+                    "observation_fn",
+                    "replay_mode",
+                    "count_steps_by",
+                ]:
+                    setattr(self, k, value[k])
+            # If config key matches a property, just set it.
+            elif hasattr(self, key):
+                setattr(self, key, value)
+            # Unsupported key -> Error.
             else:
                 raise ValueError(
-                    f"Cannot create {cls.__name__} from given `config_dict`! "
+                    f"Cannot create {type(self).__name__} from given `config_dict`! "
                     f"Property {key} not supported."
                 )
-        return config_obj
+        return self
 
     def build(
         self,
@@ -333,7 +370,7 @@ class TrainerConfig:
             self.logger_creator = logger_creator
 
         return self.trainer_class(
-            config=self.to_dict(),
+            config=self if self._supports_trainer_config_objects else self.to_dict(),
             env=self.env,
             logger_creator=self.logger_creator,
         )
@@ -766,7 +803,8 @@ class TrainerConfig:
         if train_batch_size is not None:
             self.train_batch_size = train_batch_size
         if model is not None:
-            self.model = model
+            # Update entire `model` config.
+            self.model.update(model)
         if optimizer is not None:
             self.optimizer = merge_dicts(self.optimizer, optimizer)
 

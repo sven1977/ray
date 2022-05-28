@@ -151,7 +151,7 @@ def get_ppo_tf_policy(base: TFPolicyV2Type) -> TFPolicyV2Type:
             )
 
             # Only calculate kl loss if necessary (kl-coeff > 0.0).
-            if self.config.kl_coeff > 0.0:
+            if self.config_obj.kl_coeff > 0.0:
                 action_kl = prev_action_dist.kl(curr_action_dist)
                 mean_kl_loss = reduce_mean_valid(action_kl)
             else:
@@ -165,21 +165,21 @@ def get_ppo_tf_policy(base: TFPolicyV2Type) -> TFPolicyV2Type:
                 train_batch[Postprocessing.ADVANTAGES]
                 * tf.clip_by_value(
                     logp_ratio,
-                    1 - self.config.clip_param,
-                    1 + self.config.clip_param,
+                    1 - self.config_obj.clip_param,
+                    1 + self.config_obj.clip_param,
                 ),
             )
             mean_policy_loss = reduce_mean_valid(-surrogate_loss)
 
             # Compute a value function loss.
-            if self.config.use_critic:
+            if self.config_obj.use_critic:
                 vf_loss = tf.math.square(
                     value_fn_out - train_batch[Postprocessing.VALUE_TARGETS]
                 )
                 vf_loss_clipped = tf.clip_by_value(
                     vf_loss,
                     0,
-                    self.config.vf_clip_param,
+                    self.config_obj.vf_clip_param,
                 )
                 mean_vf_loss = reduce_mean_valid(vf_loss_clipped)
             # Ignore the value function.
@@ -188,12 +188,12 @@ def get_ppo_tf_policy(base: TFPolicyV2Type) -> TFPolicyV2Type:
 
             total_loss = reduce_mean_valid(
                 -surrogate_loss
-                + self.config.vf_loss_coeff * vf_loss_clipped
+                + self.config_obj.vf_loss_coeff * vf_loss_clipped
                 - self.entropy_coeff * curr_entropy
             )
             # Add mean_kl_loss (already processed through `reduce_mean_valid`),
             # if necessary.
-            if self.config.kl_coeff > 0.0:
+            if self.config_obj.kl_coeff > 0.0:
                 total_loss += self.kl_coeff * mean_kl_loss
 
             # Store stats in policy for stats_fn.

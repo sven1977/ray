@@ -215,9 +215,11 @@ class Trainer(Trainable):
         # Trainer's Config object). Will get merged with TrainerConfig()
         # in self.setup().
         config = config or {}
+        self.config_obj = None
         # Resolve TrainerConfig into a plain dict.
         # TODO: In the future, only support TrainerConfig objects here.
         if isinstance(config, TrainerConfig):
+            self.config_obj = config
             config = config.to_dict()
 
         # Convert `env` provided in config into a concrete env creator callable, which
@@ -245,7 +247,10 @@ class Trainer(Trainable):
 
             # Allow users to more precisely configure the created logger
             # via "logger_config.type".
-            if config.get("logger_config") and "type" in config["logger_config"]:
+            if (
+                config.get("logger_config")
+                and "type" in config["logger_config"]
+            ):
 
                 def default_logger_creator(config):
                     """Creates a custom logger with the default prefix."""
@@ -292,7 +297,8 @@ class Trainer(Trainable):
 
     @OverrideToImplementCustomLogic
     @classmethod
-    def get_default_config(cls) -> TrainerConfigDict:
+    def get_default_config(cls) -> Union[TrainerConfigDict, TrainerConfig]:
+        """Returns either a config dict (soon deprecated) or a TrainerConfig object."""
         return TrainerConfig().to_dict()
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended
@@ -302,39 +308,40 @@ class Trainer(Trainable):
         # Setup our config: Merge the user-supplied config (which could
         # be a partial config dict with the class' default) or a TrainerConfig
         # object.
-        if isinstance(config, TrainerConfig):
-            self.config = config
-            self.config.environment(env=self._env_id)
-            config_dict = self.config.to_dict()
+        if self.config_obj:
+            self.config_obj.environment(env=self._env_id)
+            self.config = self.config_obj.to_dict()
         else:
             self.config = self.merge_trainer_configs(
                 self.get_default_config(), config, self._allow_unknown_configs
             )
             self.config["env"] = self._env_id
-            config_dict = self.config
 
         # Validate the framework settings in config.
-        self.validate_framework(config_dict)
+        self.validate_framework(self.config)
 
         # Set Trainer's seed after we have - if necessary - enabled
         # tf eager-execution.
-        update_global_seed_if_necessary(config_dict["framework"], config_dict["seed"])
+        update_global_seed_if_necessary(self.config["framework"], self.config["seed"])
 
-        self.validate_config(self.config)
-        self.callbacks = config_dict["callbacks"]()
-        log_level = config_dict.get("log_level")
+        # Call the validation method with either a TrainerConfig object (if applicable)
+        # or the old-style config dict.
+        self.validate_config(self.config_obj or self.config)
+
+        self.callbacks = self.config["callbacks"]()
+        log_level = self.config.get("log_level")
         if log_level in ["WARN", "ERROR"]:
             logger.info(
                 "Current log_level is {}. For more information, "
                 "set 'log_level': 'INFO' / 'DEBUG' or use the -v and "
                 "-vv flags.".format(log_level)
             )
-        if config_dict.get("log_level"):
-            logging.getLogger("ray.rllib").setLevel(config_dict["log_level"])
+        if self.config.get("log_level"):
+            logging.getLogger("ray.rllib").setLevel(self.config["log_level"])
 
         # Create local replay buffer if necessary.
         self.local_replay_buffer = self._create_local_replay_buffer_if_necessary(
-            config_dict
+            self.config
         )
 
         # Create a dict, mapping ActorHandles to sets of open remote
@@ -356,7 +363,7 @@ class Trainer(Trainable):
         # Old design: Override `Trainer._init`.
         _init = False
         try:
-            self._init(config_dict, self.env_creator)
+            self._init(self.config, self.env_creator)
             _init = True
         # New design: Override `Trainable.setup()` (as indented by tune.Trainable)
         # and do or don't call `super().setup()` from within your override.
@@ -379,9 +386,9 @@ class Trainer(Trainable):
                 self.workers = WorkerSet(
                     env_creator=self.env_creator,
                     validate_env=self.validate_env,
-                    policy_class=self.get_default_policy_class(self.config),
+                    policy_class=self.get_default_policy_class(self.config_obj or self.config),
                     trainer_config=self.config,
-                    num_workers=config_dict["num_workers"],
+                    num_workers=self.config["num_workers"],
                     local_worker=True,
                     logdir=self.logdir,
                 )
@@ -409,7 +416,7 @@ class Trainer(Trainable):
             self._remote_workers_for_metrics = self.workers.remote_workers()
 
             # Function defining one single training iteration's behavior.
-            if config_dict["_disable_execution_plan_api"]:
+            if self.config["_disable_execution_plan_api"]:
                 # Ensure remote workers are initially in sync with the local worker.
                 self.workers.sync_weights()
             # LocalIterator-creating "execution plan".

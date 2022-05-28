@@ -86,6 +86,7 @@ class DDPPOConfig(PPOConfig):
     def __init__(self, trainer_class=None):
         """Initializes a DDPPOConfig instance."""
         super().__init__(trainer_class=trainer_class or DDPPOTrainer)
+        self._supports_trainer_config_objects = False
 
         # fmt: off
         # __sphinx_doc_begin__

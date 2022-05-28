@@ -102,6 +102,8 @@ class PPOConfig(TrainerConfig):
         # __sphinx_doc_end__
         # fmt: on
 
+        self._supports_trainer_config_objects = True
+
     @override(TrainerConfig)
     def training(
         self,
@@ -270,21 +272,29 @@ def warn_about_bad_reward_scales(config, result):
 class PPOTrainer(Trainer):
     @classmethod
     @override(Trainer)
-    def get_default_config(cls) -> TrainerConfigDict:
-        return PPOConfig().to_dict()
+    def get_default_config(cls) -> PPOConfig:
+        return PPOConfig()
 
     @override(Trainer)
     def validate_config(self, config: PPOConfig) -> None:
         """Validates the Trainer's config dict.
 
         Args:
-            config: The PPOConfig to check.
+            config: The PPOConfig object to check.
 
         Raises:
             ValueError: In case something is wrong with the config.
         """
-        # Call super's validation method.
-        super().validate_config(config.to_dict())
+        # Call super's validation method using the old python config
+        # (Trainer itself does NOT support config objects yet, only PPOTrainer does).
+        config_dict = config.to_dict()
+        super().validate_config(config_dict)
+        # Then, update this config object here just in case the super's validation
+        # methods changed some things in the config dict.
+        # TODO(sven): Changing values in a given config (TrainerConfig or dict) should
+        #  no longer happen. All settings given by the user should remain as-is
+        #  (read-only).
+        config.update_from_dict(config_dict)
 
         if isinstance(config.entropy_coeff, int):
             config.entropy_coeff = float(config.entropy_coeff)
@@ -368,7 +378,7 @@ class PPOTrainer(Trainer):
             from ray.rllib.agents.ppo.ppo_torch_policy import PPOTorchPolicy
 
             return PPOTorchPolicy
-        elif config["framework"] == "tf":
+        elif config.framework_str == "tf":
             from ray.rllib.agents.ppo.ppo_tf_policy import PPOStaticGraphTFPolicy
 
             return PPOStaticGraphTFPolicy
