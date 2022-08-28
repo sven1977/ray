@@ -7,7 +7,7 @@ pendulum_crr:
       timesteps_total: 2000000
     config:
         input: 'dataset'
-        input_config:         
+        input_config:
             paths: 'tests/data/pendulum/pendulum_replay_v1.1.0.zip'
             format: 'json'
         framework: torch

@@ -90,7 +90,7 @@ PolicyState = Dict[str, TensorStructType]
 TFPolicyV2Type = Type[Union["DynamicTFPolicyV2", "EagerTFPolicyV2"]]
 
 # Represents an episode id.
-EpisodeID = int
+EpisodeID = Union[int, str]
 
 # Represents an "unroll" (maybe across different sub-envs in a vector env).
 UnrollID = int
