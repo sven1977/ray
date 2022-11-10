@@ -29,7 +29,7 @@ lightning-bolts==0.4.0
 pytorch-lightning==1.5.10
 shortuuid==1.0.1
 scikit-optimize==0.9.0
-sigopt==7.5.0
+sigopt==8.6.1
 timm==0.4.5
 transformers==4.18.0; python_version <= '3.6'
 transformers==4.19.1; python_version > '3.6'
