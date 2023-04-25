@@ -47,15 +47,18 @@ class PPOTfRLModule(PPORLModuleBase, TfRLModule):
         # output[STATE_OUT] = encoder_outs[STATE_OUT]
 
         # Actions
-        action_logits = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
+        action_logits = output[SampleBatch.ACTION_DIST_INPUTS] = (
+            self.pi(encoder_outs[ENCODER_OUT][ACTOR])
+        )
         action_dist = self.action_dist_cls.from_logits(action_logits)
-        output[SampleBatch.ACTION_DIST] = action_dist.to_deterministic()
+        output[SampleBatch.ACTIONS] = action_dist.to_deterministic().sample()
 
         return output
 
     @override(RLModule)
     def _forward_exploration(self, batch: NestedDict) -> Mapping[str, Any]:
         """PPO forward pass during exploration.
+
         Besides the action distribution, this method also returns the parameters of the
         policy distribution to be used for computing KL divergence between the old
         policy and the new policy during training.
@@ -85,9 +88,16 @@ class PPOTfRLModule(PPORLModuleBase, TfRLModule):
         action_logits = self.pi(encoder_outs[ENCODER_OUT][ACTOR])
 
         output[SampleBatch.ACTION_DIST_INPUTS] = action_logits
-        output[SampleBatch.ACTION_DIST] = self.action_dist_cls.from_logits(
+        #output[SampleBatch.ACTION_DIST] = self.action_dist_cls.from_logits(
+        #    logits=action_logits
+        #)
+        # action_dist = fwd_out[SampleBatch.ACTION_DIST]
+        action_dist = self.action_dist_cls.from_logits(
             logits=action_logits
         )
+        actions = action_dist.sample()
+        output[SampleBatch.ACTIONS] = actions
+        output[SampleBatch.ACTION_LOGP] = action_dist.logp(actions)
 
         return output
 

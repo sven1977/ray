@@ -3,32 +3,35 @@ from typing import Mapping
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.algorithms.appo.appo_learner import (
     AppoLearner,
-    LEARNER_RESULTS_CURR_KL_COEFF_KEY,
     LEARNER_RESULTS_KL_KEY,
     OLD_ACTION_DIST_KEY,
 )
-from ray.rllib.algorithms.impala.tf.vtrace_tf_v2 import make_time_major, vtrace_tf2
+from ray.rllib.algorithms.impala.torch.vtrace_torch_v2 import (
+    make_time_major,
+    vtrace_torch,
+)
 from ray.rllib.core.learner.learner import POLICY_LOSS_KEY, VF_LOSS_KEY, ENTROPY_KEY
-from ray.rllib.core.learner.tf.tf_learner import TfLearner
+from ray.rllib.core.learner.torch.torch_learner import TorchLearner
 from ray.rllib.core.rl_module.marl_module import ModuleID
 from ray.rllib.utils.annotations import override
-from ray.rllib.utils.framework import try_import_tf
+from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.typing import TensorType
 
-_, tf, _ = try_import_tf()
+torch, nn = try_import_torch()
 
 
-class APPOTfLearner(TfLearner, AppoLearner):
-    """Implements APPO loss / update logic on top of ImpalaTfLearner."""
+class APPOTorchLearner(TorchLearner, AppoLearner):
+    """Implements APPO loss / update logic on top of ImpalaTorchLearner."""
 
     def __init__(self, *args, **kwargs):
-        TfLearner.__init__(self, *args, **kwargs)
+        TorchLearner.__init__(self, *args, **kwargs)
         AppoLearner.__init__(self, *args, **kwargs)
 
-    @override(TfLearner)
+    @override(TorchLearner)
     def compute_loss_per_module(
         self, module_id: str, batch: SampleBatch, fwd_out: Mapping[str, TensorType]
     ) -> TensorType:
+
         values = fwd_out[SampleBatch.VF_PREDS]
         target_policy_dist = fwd_out[SampleBatch.ACTION_DIST]
         old_target_policy_dist = fwd_out[OLD_ACTION_DIST_KEY]
@@ -74,19 +77,16 @@ class APPOTfLearner(TfLearner, AppoLearner):
         # the episode is terminated. In that case, the discount factor should be 0.
         discounts_time_major = (
             1.0
-            - tf.cast(
-                make_time_major(
-                    batch[SampleBatch.TERMINATEDS],
-                    trajectory_len=self._hps.rollout_frag_or_episode_len,
-                    recurrent_seq_len=self._hps.recurrent_seq_len,
-                    drop_last=self._hps.vtrace_drop_last_ts,
-                ),
-                dtype=tf.float32,
-            )
+            -
+            make_time_major(
+                batch[SampleBatch.TERMINATEDS],
+                trajectory_len=self._hps.rollout_frag_or_episode_len,
+                recurrent_seq_len=self._hps.recurrent_seq_len,
+                drop_last=self._hps.vtrace_drop_last_ts,
+            ).float()
         ) * self._hps.discount_factor
 
-        # Compute vtrace on the CPU for better performance.
-        vtrace_adjusted_target_values, pg_advantages = vtrace_tf2(
+        vtrace_adjusted_target_values, pg_advantages = vtrace_torch(
             target_action_log_probs=old_actions_logp_time_major,
             behaviour_action_log_probs=behaviour_actions_logp_time_major,
             discounts=discounts_time_major,
@@ -98,40 +98,37 @@ class APPOTfLearner(TfLearner, AppoLearner):
         )
 
         # The policy gradients loss.
-        is_ratio = tf.clip_by_value(
-            tf.math.exp(
+        is_ratio = torch.clip(
+            torch.exp(
                 behaviour_actions_logp_time_major - old_actions_logp_time_major
             ),
             0.0,
             2.0,
         )
-        logp_ratio = is_ratio * tf.math.exp(
+        logp_ratio = is_ratio * torch.exp(
             target_actions_logp_time_major - behaviour_actions_logp_time_major
         )
 
-        surrogate_loss = tf.math.minimum(
+        surrogate_loss = torch.minimum(
             pg_advantages * logp_ratio,
-            (
-                pg_advantages
-                * tf.clip_by_value(
-                    logp_ratio, 1 - self._hps.clip_param, 1 + self._hps.clip_param
-                )
+            pg_advantages * torch.clip(
+                logp_ratio, 1 - self._hps.clip_param, 1 + self._hps.clip_param
             ),
         )
 
         if self._hps.use_kl_loss:
             action_kl = old_target_policy_dist.kl(target_policy_dist)
-            mean_kl_loss = tf.math.reduce_mean(action_kl)
+            mean_kl_loss = torch.mean(action_kl)
         else:
             mean_kl_loss = 0.0
-        mean_pi_loss = -tf.math.reduce_mean(surrogate_loss)
+        mean_pi_loss = -torch.mean(surrogate_loss)
 
         # The baseline loss.
         delta = values_time_major - vtrace_adjusted_target_values
-        mean_vf_loss = 0.5 * tf.math.reduce_mean(delta**2)
+        mean_vf_loss = 0.5 * torch.mean(delta**2)
 
         # The entropy loss.
-        mean_entropy_loss = -tf.math.reduce_mean(target_policy_dist.entropy())
+        mean_entropy_loss = -torch.mean(target_actions_logp_time_major)
 
         # The summed weighted loss.
         total_loss = (
@@ -145,12 +142,10 @@ class APPOTfLearner(TfLearner, AppoLearner):
             self.TOTAL_LOSS_KEY: total_loss,
             POLICY_LOSS_KEY: mean_pi_loss,
             VF_LOSS_KEY: mean_vf_loss,
-            ENTROPY_KEY: -mean_entropy_loss,
+            ENTROPY_KEY: mean_entropy_loss,
             LEARNER_RESULTS_KL_KEY: mean_kl_loss,
-            LEARNER_RESULTS_CURR_KL_COEFF_KEY: self.kl_coeffs[module_id],
         }
 
-    @override(AppoLearner)
     def _update_module_target_networks(self, module_id: ModuleID):
         """Update the target policy of each module with the current policy.
 
@@ -164,8 +159,9 @@ class APPOTfLearner(TfLearner, AppoLearner):
 
         target_current_network_pairs = module.get_target_network_pairs()
         for target_network, current_network in target_current_network_pairs:
-            for old_var, current_var in zip(
-                target_network.variables, current_network.variables
-            ):
-                updated_var = self._hps.tau * current_var + (1.0 - self._hps.tau) * old_var
-                old_var.assign(updated_var)
+            current_state_dict = current_network.state_dict()
+            new_state_dict = {
+                k: self._hps.tau * current_state_dict[k] + (1 - self._hps.tau) * v
+                for k, v in target_network.state_dict().items()
+            }
+            target_network.load_state_dict(new_state_dict)

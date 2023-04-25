@@ -5,16 +5,17 @@ import pathlib
 import tree  # pip install dm-tree
 from typing import (
     Any,
-    Mapping,
-    Union,
-    Optional,
     Callable,
-    Sequence,
+    Dict,
     Hashable,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
 )
 
 from ray.rllib.core.learner.learner import (
-    FrameworkHPs,
+    FrameworkHyperparameters,
     Learner,
     ParamOptimizerPair,
     NamedParamOptimizerPairs,
@@ -51,7 +52,7 @@ class TfLearner(Learner):
     def __init__(
         self,
         *,
-        framework_hyperparameters: Optional[FrameworkHPs] = FrameworkHPs(),
+        framework_hyperparameters: Optional[FrameworkHyperparameters] = None,
         **kwargs,
     ):
 
@@ -65,12 +66,17 @@ class TfLearner(Learner):
             # enable_v2_behavior after variables have already been created.
             pass
 
-        super().__init__(framework_hyperparameters=framework_hyperparameters, **kwargs)
+        super().__init__(
+            framework_hyperparameters=(
+                framework_hyperparameters or FrameworkHyperparameters()
+            ),
+            **kwargs,
+        )
 
-        self._enable_tf_function = framework_hyperparameters.eager_tracing
+        self._enable_tf_function = self._framework_hyperparameters.eager_tracing
 
-        # this is a placeholder which will be filled by
-        # `_make_distributed_strategy_if_necessary`
+        # This is a placeholder which will be filled by
+        # `_make_distributed_strategy_if_necessary`.
         self._strategy: tf.distribute.Strategy = None
 
     @override(Learner)
@@ -98,11 +104,48 @@ class TfLearner(Learner):
         return grads
 
     @override(Learner)
+    def postprocess_gradients(
+        self,
+        gradients_dict: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Applies grad clipping depending on the optimizer config."""
+
+        # Clip by value (each gradient individually).
+        grad_clip_by_value = self._optimizer_config.get("grad_clip_by_value", None)
+        if grad_clip_by_value is not None:
+            gradients_dict = {
+                k: tf.clip_by_value(
+                    v, -grad_clip_by_value, grad_clip_by_value
+                ) for k, v in gradients_dict.items()
+            }
+
+        # Clip by L2-norm (per gradient tensor).
+        grad_clip_by_norm = self._optimizer_config.get("grad_clip_by_norm", None)
+        if grad_clip_by_norm is not None:
+            gradients_dict = {
+                k: tf.clip_by_norm(
+                    v, grad_clip_by_norm
+                ) for k, v in gradients_dict.items()
+            }
+
+        # Clip by global L2-norm (across all gradient tensors).
+        grad_clip_by_global_norm = self._optimizer_config.get(
+            "grad_clip_by_global_norm", None
+        )
+        if grad_clip_by_global_norm is not None:
+            clipped_grads, _ = tf.clip_by_global_norm(
+                list(gradients_dict.values()), grad_clip_by_global_norm
+            )
+            gradients_dict = {k: v for k, v in zip(gradients_dict.keys(), clipped_grads)}
+
+        return gradients_dict
+
+    @override(Learner)
     def apply_gradients(self, gradients: ParamDictType) -> None:
         # TODO (Avnishn, kourosh): apply gradients doesn't work in cases where
-        # only some agents have a sample batch that is passed but not others.
-        # This is probably because of the way that we are iterating over the
-        # parameters in the optim_to_param_dictionary
+        #  only some agents have a sample batch that is passed but not others.
+        #  This is probably because of the way that we are iterating over the
+        #  parameters in the optim_to_param_dictionary.
         for optim, param_ref_seq in self._optimizer_parameters.items():
             variable_list = [
                 self._params[param_ref]
@@ -115,20 +158,6 @@ class TfLearner(Learner):
                 if gradients[param_ref] is not None
             ]
             optim.apply_gradients(zip(gradient_list, variable_list))
-
-    @override(Learner)
-    def postprocess_gradients(
-        self, gradients_dict: Mapping[str, Any]
-    ) -> Mapping[str, Any]:
-        grad_clip = self._optimizer_config.get("grad_clip", None)
-        assert isinstance(
-            grad_clip, (int, float, type(None))
-        ), "grad_clip must be a number"
-        if grad_clip is not None:
-            gradients_dict = tf.nest.map_structure(
-                lambda v: tf.clip_by_value(v, -grad_clip, grad_clip), gradients_dict
-            )
-        return gradients_dict
 
     @override(Learner)
     def load_state(
@@ -413,7 +442,7 @@ class TfLearner(Learner):
         reduce_fn: Callable[[ResultDict], ResultDict] = ...,
     ) -> Mapping[str, Any]:
         # TODO (Kourosh): The update of learner is vastly differnet than the base
-        # class. So we need to unify them.
+        #  class. So we need to unify them.
         missing_module_ids = set(batch.policy_batches.keys()) - set(self._module.keys())
         if len(missing_module_ids) > 0:
             raise ValueError(
@@ -430,7 +459,7 @@ class TfLearner(Learner):
         results = []
         for minibatch in batch_iter(batch, minibatch_size, num_iters):
             # TODO (Avnish): converting to tf tensor and then from nested dict back to
-            # dict will most likely hit us in perf. But let's go with this for now.
+            #  dict will most likely hit us in perf. But let's go with this for now.
             tensorbatch = self._convert_batch_type(minibatch)
             update_outs = self._update_fn(tensorbatch)
             loss = update_outs["loss"]
@@ -448,21 +477,31 @@ class TfLearner(Learner):
                 return results
             return reduce_fn(results)
 
-    def _do_update_fn(self, batch: MultiAgentBatch) -> Mapping[str, Any]:
+    def _do_update_fn(
+        self,
+        batch: MultiAgentBatch,
+        _ray_trace_ctx=None,
+    ):
         # TODO (Avnish): Match this base class's implementation.
         def helper(_batch):
             # TODO (Kourosh): We need to go back to NestedDict because that's the
-            # constraint on forward_train and compute_loss APIs. This seems to be
-            # in-efficient. Make it efficient.
+            #  constraint on forward_train and compute_loss APIs. This seems to be
+            #  in-efficient. Make it efficient.
             _batch = NestedDict(_batch)
             with tf.GradientTape() as tape:
+                t0 = tf.timestamp()
                 fwd_out = self._module.forward_train(_batch)
+                t1 = tf.timestamp()
                 loss = self.compute_loss(fwd_out=fwd_out, batch=_batch)
                 if isinstance(loss, tf.Tensor):
                     loss = {"total_loss": loss}
+            t2 = tf.timestamp()
             gradients = self.compute_gradients(loss, tape)
+            t3 = tf.timestamp()
             gradients = self.postprocess_gradients(gradients)
+            t4 = tf.timestamp()
             self.apply_gradients(gradients)
+            t5 = tf.timestamp()
 
             # NOTE (Kourosh) The reason for returning fwd_out is that it is optionally
             # needed for compiling the results in a later step (e.g. in
@@ -479,6 +518,11 @@ class TfLearner(Learner):
                 return None
 
             return {
+                "time_forward_train_ms": (t1 - t0) * 1000.0,
+                "time_compute_loss_ms": (t2 - t1) * 1000.0,
+                "time_compute_gradients_ms": (t3 - t2) * 1000.0,
+                "time_postprocess_gradients_ms": (t4 - t3) * 1000.0,
+                "time_apply_gradients_ms": (t5 - t4) * 1000.0,
                 "loss": loss,
                 "fwd_out": tree.map_structure(filter_fwd_out, fwd_out),
                 "postprocessed_gradients": gradients,

@@ -48,6 +48,7 @@ class TfCNNEncoder(TfModel, Encoder):
         Encoder.__init__(self, config)
 
         layers = []
+        layers.append(tf.keras.layers.Input(shape=config.input_dims, dtype=tf.float32))
         # The bare-bones CNN (no flatten, no succeeding dense).
         cnn = TfCNN(
             input_dims=config.input_dims,
@@ -61,12 +62,16 @@ class TfCNNEncoder(TfModel, Encoder):
         # Add a flatten operation to move from 2/3D into 1D space.
         layers.append(tf.keras.layers.Flatten())
 
-        # Add a final linear layer to make sure that the outputs have the correct
-        # dimensionality (output_dims).
-        output_activation = get_activation_fn(config.output_activation, framework="tf2")
-        layers.append(
-            tf.keras.layers.Dense(config.output_dims[0], activation=output_activation),
-        )
+        # Add an additional dense layer that matches output_dims.
+        if config.cnn_add_final_dense:
+            # Add a final linear layer to make sure that the outputs have the correct
+            # dimensionality (output_dims).
+            output_activation = get_activation_fn(
+                config.output_activation, framework="tf2"
+            )
+            layers.append(tf.keras.layers.Dense(
+                config.output_dims[0], activation=output_activation
+            ))
 
         # Create the network from gathered layers.
         self.net = tf.keras.Sequential(layers)
@@ -82,8 +87,8 @@ class TfCNNEncoder(TfModel, Encoder):
                     c=self.config.input_dims[2],
                     framework="tf2",
                 ),
-                STATE_IN: None,
-                SampleBatch.SEQ_LENS: None,
+                #STATE_IN: None,
+                #SampleBatch.SEQ_LENS: None,
             }
         )
 
@@ -94,7 +99,7 @@ class TfCNNEncoder(TfModel, Encoder):
                 ENCODER_OUT: TensorSpec(
                     "b, d", d=self.config.output_dims[0], framework="tf2"
                 ),
-                STATE_OUT: None,
+                #STATE_OUT: None,
             }
         )
 
@@ -103,7 +108,7 @@ class TfCNNEncoder(TfModel, Encoder):
         return NestedDict(
             {
                 ENCODER_OUT: self.net(inputs[SampleBatch.OBS]),
-                STATE_OUT: inputs[STATE_IN],
+                #STATE_OUT: inputs[STATE_IN],
             }
         )
 
@@ -143,7 +148,7 @@ class TfMLPEncoder(Encoder, TfModel):
                 ENCODER_OUT: TensorSpec(
                     "b, d", d=self.config.output_dims[0], framework="tf2"
                 ),
-                STATE_OUT: None,
+                #STATE_OUT: None,
             }
         )
 
@@ -152,7 +157,7 @@ class TfMLPEncoder(Encoder, TfModel):
         return NestedDict(
             {
                 ENCODER_OUT: self.net(inputs[SampleBatch.OBS]),
-                STATE_OUT: None,  # inputs[STATE_IN],
+                # STATE_OUT: None,  # inputs[STATE_IN],
             }
         )
 

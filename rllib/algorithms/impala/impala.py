@@ -10,8 +10,8 @@ from ray import ObjectRef
 from ray.rllib import SampleBatch
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided
-from ray.rllib.algorithms.impala.impala_base_learner import (
-    ImpalaHPs,
+from ray.rllib.algorithms.impala.impala_learner import (
+    ImpalaHyperparameters,
     _reduce_impala_results,
 )
 from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
@@ -108,7 +108,6 @@ class ImpalaConfig(AlgorithmConfig):
         # __sphinx_doc_begin__
 
         # IMPALA specific settings:
-        self._learner_hps = ImpalaHPs()
         self.vtrace = True
         self.vtrace_clip_rho_threshold = 1.0
         self.vtrace_clip_pg_rho_threshold = 1.0
@@ -125,7 +124,11 @@ class ImpalaConfig(AlgorithmConfig):
         self.timeout_s_aggregator_manager = 0.0
         self.broadcast_interval = 1
         self.num_aggregation_workers = 0
+
+        # TODO (sven): Deprecate grad_clip setting once all-in on new Learner API.
         self.grad_clip = 40.0
+        self.grad_clip_by_global_norm = 40.0
+
         self.opt_type = "adam"
         self.lr_schedule = None
         self.decay = 0.99
@@ -138,10 +141,10 @@ class ImpalaConfig(AlgorithmConfig):
         self._lr_vf = 0.0005
         self.after_train_step = None
 
-        # Override some of AlgorithmConfig's default values with ARS-specific values.
+        # Override some of AlgorithmConfig's default values with IMPALA-specific values.
         self.rollout_fragment_length = 50
         self.train_batch_size = 500
-        self.minibatch_size = self.train_batch_size
+        self._minibatch_size = "auto"
         self.num_rollout_workers = 2
         self.num_gpus = 1
         self.lr = 0.0005
@@ -173,7 +176,7 @@ class ImpalaConfig(AlgorithmConfig):
         gamma: Optional[float] = NotProvided,
         num_multi_gpu_tower_stacks: Optional[int] = NotProvided,
         minibatch_buffer_size: Optional[int] = NotProvided,
-        minibatch_size: Optional[int] = NotProvided,
+        minibatch_size: Optional[Union[int, str]] = NotProvided,
         num_sgd_iter: Optional[int] = NotProvided,
         replay_proportion: Optional[float] = NotProvided,
         replay_buffer_num_slots: Optional[int] = NotProvided,
@@ -227,10 +230,11 @@ class ImpalaConfig(AlgorithmConfig):
             minibatch_buffer_size: How many train batches should be retained for
                 minibatching. This conf only has an effect if `num_sgd_iter > 1`.
             minibatch_size: The size of minibatches that are trained over during
-                each SGD iteration. Note this only has an effect if
-                `_enable_learner_api` == True.
-                Note: minibatch_size must be a multiple of rollout_fragment_length or
-                sequence_length and smaller than or equal to train_batch_size.
+                each SGD iteration. If "auto", will use the same value as
+                `train_batch_size`.
+                Note that this setting only has an effect if `_enable_learner_api=True`
+                and it must be a multiple of `rollout_fragment_length` or
+                `sequence_length` and smaller than or equal to `train_batch_size`.
             num_sgd_iter: Number of passes to make over each train batch.
             replay_proportion: Set >0 to enable experience replay. Saved samples will
                 be replayed with a p:1 proportion to new data samples.
@@ -346,7 +350,7 @@ class ImpalaConfig(AlgorithmConfig):
         if gamma is not NotProvided:
             self.gamma = gamma
         if minibatch_size is not NotProvided:
-            self.minibatch_size = minibatch_size
+            self._minibatch_size = minibatch_size
 
         return self
 
@@ -401,37 +405,35 @@ class ImpalaConfig(AlgorithmConfig):
                 and self.minibatch_size <= self.train_batch_size
             ):
                 raise ValueError(
-                    "minibatch_size must be a multiple of rollout_fragment_length and "
-                    "must be smaller than or equal to train_batch_size. Got"
-                    f" minibatch_size={self.minibatch_size}, train_batch_size="
-                    f"{self.train_batch_size}, and rollout_fragment_length="
-                    f"{self.get_rollout_fragment_length()}"
+                    f"`minibatch_size` ({self._minibatch_size}) must either be 'auto' "
+                    "or a multiple of `rollout_fragment_length` "
+                    f"({self.rollout_fragment_length}) while at the same time smaller "
+                    f"than or equal to `train_batch_size` ({self.train_batch_size})!"
                 )
-        # learner hps need to be updated inside of config.validate in order to have
-        # the correct values for when a user starts an experiment from a dict. This is
-        # as oppposed to assigning the values inthe builder functions such as `training`
-        self._learner_hps.rollout_frag_or_episode_len = (
-            self.get_rollout_fragment_length()
-        )
-        self._learner_hps.discount_factor = self.gamma
-        self._learner_hps.entropy_coeff = self.entropy_coeff
-        self._learner_hps.vf_loss_coeff = self.vf_loss_coeff
-        self._learner_hps.vtrace_drop_last_ts = self.vtrace_drop_last_ts
-        self._learner_hps.vtrace_clip_rho_threshold = self.vtrace_clip_rho_threshold
-        self._learner_hps.vtrace_clip_pg_rho_threshold = (
-            self.vtrace_clip_pg_rho_threshold
-        )
 
     @override(AlgorithmConfig)
-    def get_learner_group_config(self, module_spec: ModuleSpec) -> LearnerGroupConfig:
-        lg_config = super().get_learner_group_config(module_spec)
-        optim_config = lg_config.optimizer_config
-        # TODO(avnishn): Make grad_clip a default parameter in algorithm_config's base
-        #  class
-        optim_config.update({"grad_clip": self.grad_clip})
-        lg_config = lg_config.learner(optimizer_config=optim_config)
-        return lg_config
+    def get_learner_hyperparameters(self) -> ImpalaHyperparameters:
+        learner_hps = ImpalaHyperparameters(
+            rollout_frag_or_episode_len=self.get_rollout_fragment_length(),
+            discount_factor=self.gamma,
+            entropy_coeff=self.entropy_coeff,
+            vf_loss_coeff=self.vf_loss_coeff,
+            vtrace_drop_last_ts=self.vtrace_drop_last_ts,
+            vtrace_clip_rho_threshold=self.vtrace_clip_rho_threshold,
+            vtrace_clip_pg_rho_threshold=(
+                self.vtrace_clip_pg_rho_threshold
+            ),
+        )
+        assert (
+            (learner_hps.rollout_frag_or_episode_len is None)
+            != (learner_hps.recurrent_seq_len is None)
+        ), (
+            "One of `rollout_frag_or_episode_len` or `recurrent_seq_len` must be not "
+            "None in ImpalaHyperparameters!"
+        )
+        return learner_hps
 
+    # TODO (sven): Make these get_... methods all read-only @properties instead.
     def get_replay_ratio(self) -> float:
         """Returns replay ratio (between 0.0 and 1.0) based off self.replay_proportion.
 
@@ -439,18 +441,27 @@ class ImpalaConfig(AlgorithmConfig):
         """
         return (1 / self.replay_proportion) if self.replay_proportion > 0 else 0.0
 
+    @property
+    def minibatch_size(self):
+        # If 'auto', use the train_batch_size (meaning each SGD iter is a single pass
+        # through the entire train batch). Otherwise, use user provided setting.
+        return (
+            self.train_batch_size if self._minibatch_size == "auto"
+            else self._minibatch_size
+        )
+
     @override(AlgorithmConfig)
     def get_default_learner_class(self):
-        if self.framework_str == "tf2":
-            from ray.rllib.algorithms.impala.tf.impala_tf_learner import ImpalaTfLearner
-
-            return ImpalaTfLearner
-        elif self.framework_str == "torch":
+        if self.framework_str == "torch":
             from ray.rllib.algorithms.impala.torch.impala_torch_learner import (
                 ImpalaTorchLearner,
             )
 
             return ImpalaTorchLearner
+        elif self.framework_str == "tf2":
+            from ray.rllib.algorithms.impala.tf.impala_tf_learner import ImpalaTfLearner
+
+            return ImpalaTfLearner
         else:
             raise ValueError(f"The framework {self.framework_str} is not supported.")
 
@@ -599,9 +610,11 @@ class Impala(Algorithm):
     def setup(self, config: AlgorithmConfig):
         super().setup(config)
 
+        # Queue of batches to be sent to the Learner.
+        self.batches_to_place_on_learner = []
+
         # Create extra aggregation workers and assign each rollout worker to
         # one of them.
-        self.batches_to_place_on_learner = []
         self.batch_being_built = []
         if self.config.num_aggregation_workers > 0:
             # This spawns `num_aggregation_workers` actors that aggregate
@@ -675,10 +688,14 @@ class Impala(Algorithm):
             and self._aggregator_actor_manager.num_healthy_actors() > 0
         )
 
-        # Get references to sampled SampleBatches from our workers.
+        # Get sampled SampleBatches from our workers (by ray references if we use
+        # tree-aggregation).
         unprocessed_sample_batches = self.get_samples_from_workers(
             return_object_refs=use_tree_aggregation,
         )
+        for _, b in unprocessed_sample_batches:
+            print(f"got {len(b)} from samplers")
+
         # Tag workers that actually produced ready sample batches this iteration.
         # Those workers will have to get updated at the end of the iteration.
         workers_that_need_updates = {
@@ -693,14 +710,22 @@ class Impala(Algorithm):
         # Resolve collected batches here on local process (using the mixin buffer).
         else:
             batches = self.process_experiences_directly(unprocessed_sample_batches)
+            if batches:
+                print(f"pulled {sum(len(b) for b in batches)} samples from buffer")
 
         # Increase sampling counters now that we have the actual SampleBatches on
         # the local process (and can measure their sizes).
         for batch in batches:
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.count
             self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
+        if batches:
+            print(f"Increased SAMPLED counter to {self._counters[NUM_ENV_STEPS_SAMPLED]}")
         # Concatenate single batches into batches of size `train_batch_size`.
         self.concatenate_batches_and_pre_queue(batches)
+        if self.batches_to_place_on_learner:
+            print(f"Batches to place on learner {sum(len(b) for b in self.batches_to_place_on_learner)}")
+        # Using the Learner API. Call `update()` on our LearnerGroup object with
+        # all collected batches.
         if self.config._enable_learner_api:
             train_results = self.learn_on_processed_samples()
         else:
@@ -714,12 +739,10 @@ class Impala(Algorithm):
             if self.config._enable_learner_api:
                 if train_results:
                     pids = list(set(train_results.keys()) - {ALL_MODULES})
-                else:
-                    pids = []
-                self.update_workers_from_learner_group(
-                    workers_that_need_updates=workers_that_need_updates,
-                    policy_ids=pids,
-                )
+                    self.update_workers_from_learner_group(
+                        workers_that_need_updates=workers_that_need_updates,
+                        policy_ids=pids,
+                    )
             else:
                 pids = list(train_results.keys())
                 self.update_workers_if_necessary(
@@ -844,6 +867,8 @@ class Impala(Algorithm):
                 sum(b.count for b in self.batch_being_built)
                 >= self.config.train_batch_size
             ):
+                #TODO: Test sequence shuffle before concating to one train batch
+                #np.random.shuffle(self.batch_being_built)
                 batch_to_add = concat_samples(self.batch_being_built)
                 self.batches_to_place_on_learner.append(batch_to_add)
                 self.batch_being_built = []
@@ -912,30 +937,42 @@ class Impala(Algorithm):
 
         """
         result = {}
+        # There are batches on the queue -> Send them to the learner group.
         if self.batches_to_place_on_learner:
-            batch = self.batches_to_place_on_learner.pop(0)
+            batches = self.batches_to_place_on_learner[:]
+            ## Keep track of the queue size (before we purge it for learning).
+            #self._counters["learner_group_queue_size"] = len(batches)
+            self.batches_to_place_on_learner.clear()
             # If there are no learner workers and learning is directly on the driver
             # Then we can't do async updates, so we need to block.
             blocking = self.config.num_learner_workers == 0
             lg_results = self.learner_group.update(
-                batch,
+                batches,
                 reduce_fn=_reduce_impala_results,
                 block=blocking,
                 num_iters=self.config.num_sgd_iter,
                 minibatch_size=self.config.minibatch_size,
             )
+        # Nothing on the queue -> Don't send requests to learner group.
         else:
             lg_results = None
 
         if lg_results:
-            self._counters[NUM_ENV_STEPS_TRAINED] += lg_results[ALL_MODULES][
+            print(f"Learned {lg_results[ALL_MODULES][NUM_ENV_STEPS_TRAINED]} env steps")
+            self._counters[NUM_ENV_STEPS_TRAINED] += lg_results[ALL_MODULES].pop(
                 NUM_ENV_STEPS_TRAINED
-            ]
-            self._counters[NUM_AGENT_STEPS_TRAINED] += lg_results[ALL_MODULES][
+            )
+            self._counters[NUM_AGENT_STEPS_TRAINED] += lg_results[ALL_MODULES].pop(
                 NUM_AGENT_STEPS_TRAINED
-            ]
-            del lg_results[ALL_MODULES][NUM_ENV_STEPS_TRAINED]
-            del lg_results[ALL_MODULES][NUM_AGENT_STEPS_TRAINED]
+            )
+            lg_queue_stats = self.learner_group.get_in_queue_stats()
+            self._counters["learner_group_queue_size"] = (
+                lg_queue_stats["learner_group_queue_size"]
+            )
+            self._counters["learner_group_queue_ts_dropped"] = (
+                lg_queue_stats["learner_group_queue_ts_dropped"]
+            )
+            print(f"Increased TRAINED counter to {self._counters[NUM_ENV_STEPS_TRAINED]}")
             result = lg_results
 
         return result
@@ -1017,10 +1054,9 @@ class Impala(Algorithm):
             Batches that have been processed by the mixin buffer.
 
         """
-        processed_batches = []
         batches = [b for _, b in worker_to_sample_batches]
-        if not batches:
-            return processed_batches
+        processed_batches = []
+
         for batch in batches:
             assert not isinstance(
                 batch, ObjectRef
@@ -1182,11 +1218,7 @@ class Impala(Algorithm):
     @override(Algorithm)
     def _compile_iteration_results(self, *args, **kwargs):
         result = super()._compile_iteration_results(*args, **kwargs)
-        if self.config._enable_learner_api:
-            result["custom_metrics"] = {
-                "learner_group_queue_size": self.learner_group.in_queue_size
-            }
-        else:
+        if not self.config._enable_learner_api:
             result = self._learner_thread.add_learner_metrics(
                 result, overwrite_learner_info=False
             )

@@ -2,29 +2,37 @@ import logging
 import pathlib
 from typing import (
     Any,
-    Mapping,
-    Union,
-    Sequence,
     Hashable,
+    Mapping,
     Optional,
+    Sequence,
+    Union,
 )
+
+import tree  # pip install dm_tree
 
 from ray.rllib.core.rl_module.rl_module import (
     RLModule,
     ModuleID,
     SingleAgentRLModuleSpec,
 )
+from ray.rllib.core.rl_module.rl_module_with_target_networks_interface import (
+    RLModuleWithTargetNetworksInterface
+)
 from ray.rllib.core.rl_module.marl_module import MultiAgentRLModule
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.core.learner.learner import (
-    FrameworkHPs,
+    FrameworkHyperparameters,
     Learner,
     ParamOptimizerPair,
     NamedParamOptimizerPairs,
     ParamType,
     ParamDictType,
 )
-from ray.rllib.core.rl_module.torch.torch_rl_module import TorchDDPRLModule
+from ray.rllib.core.rl_module.torch.torch_rl_module import (
+    TorchDDPRLModule,
+    TorchDDPRLModuleWithTargetNetworksInterface,
+)
 from ray.rllib.policy.sample_batch import MultiAgentBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.torch_utils import convert_to_torch_tensor
@@ -47,10 +55,15 @@ class TorchLearner(Learner):
     def __init__(
         self,
         *,
-        framework_hyperparameters: Optional[FrameworkHPs] = FrameworkHPs(),
+        framework_hyperparameters: Optional[FrameworkHyperparameters] = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(
+            framework_hyperparameters=(
+                framework_hyperparameters or FrameworkHyperparameters()
+            ),
+            **kwargs,
+        )
 
         # will be set during build
         self._device = None
@@ -78,6 +91,54 @@ class TorchLearner(Learner):
         grads = {pid: p.grad for pid, p in self._params.items()}
 
         return grads
+
+    @override(Learner)
+    def postprocess_gradients(
+        self,
+        gradients_dict: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Applies grad clipping depending on the optimizer config."""
+
+        # Clip by value (each gradient individually).
+        grad_clip_by_value = self._optimizer_config.get("grad_clip_by_value", None)
+        if grad_clip_by_value is not None:
+            gradients_dict = {
+                k: torch.clip(
+                    v, -grad_clip_by_value, grad_clip_by_value
+                ) for k, v in gradients_dict.items()
+            }
+
+        # Clip by L2-norm (per gradient tensor).
+        grad_clip_by_norm = self._optimizer_config.get("grad_clip_by_norm", None)
+        if grad_clip_by_norm is not None:
+            gradients_dict = {
+                k: nn.utils.clip_grad_norm_(
+                    v, grad_clip_by_norm
+                ) for k, v in gradients_dict.items()
+            }
+
+        # Clip by global L2-norm (across all gradient tensors).
+        grad_clip_by_global_norm = self._optimizer_config.get(
+            "grad_clip_by_global_norm", None
+        )
+        if grad_clip_by_global_norm is not None:
+            # Compute the global L2-norm of all the gradient tensors.
+            grad_tensors = gradients_dict.values()
+            total_l2_norm = 0.0
+            for tensor in grad_tensors:
+                # `.norm()` is the square root of the sum of all squares.
+                # We need to "undo" the square root b/c we want to compute the global
+                # norm afterwards -> `** 2`.
+                total_l2_norm += tensor.norm(2) ** 2
+            # Now we do the square root.
+            total_l2_norm = torch.sqrt(total_l2_norm)
+
+            # Clip all the gradients.
+            if total_l2_norm > grad_clip_by_global_norm:
+                for tensor in grad_tensors:
+                    tensor.mul_(grad_clip_by_global_norm / total_l2_norm)
+
+        return gradients_dict
 
     @override(Learner)
     def apply_gradients(self, gradients: ParamDictType) -> None:
@@ -190,14 +251,25 @@ class TorchLearner(Learner):
         # register them in the MultiAgentRLModule. We should find a better way to
         # handle this.
         if self._distributed:
+            # TODO (sven): Shouldn't self._module always be MARL?
             if isinstance(self._module, TorchRLModule):
                 self._module = TorchDDPRLModule(self._module)
             else:
+                assert isinstance(self._module, MultiAgentRLModule)
                 for key in self._module.keys():
-                    if isinstance(self._module[key], TorchRLModule):
-                        self._module.add_module(
-                            key, TorchDDPRLModule(self._module[key]), override=True
+                    sub_module = self._module[key]
+                    if isinstance(sub_module, TorchRLModule):
+                        distr_class = (
+                            TorchDDPRLModuleWithTargetNetworksInterface
+                            if isinstance(
+                                sub_module, RLModuleWithTargetNetworksInterface
+                            )
+                            else TorchDDPRLModule
                         )
+                        self._module.add_module(
+                            key, distr_class(sub_module), override=True
+                        )
+
 
     def _is_module_compatible_with_learner(self, module: RLModule) -> bool:
         return isinstance(module, nn.Module)

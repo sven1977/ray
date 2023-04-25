@@ -1,10 +1,20 @@
 from collections import deque
+from functools import partial
 import pathlib
 import socket
-from typing import Any, List, Mapping, Type, Optional, Callable, Set, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    List,
+    Mapping,
+    Optional,
+    Set,
+    Type,
+    TYPE_CHECKING,
+    Union,
+)
 
 import ray
-
 from ray.rllib.core.learner.reduce_result_dict_fn import _reduce_mean_results
 from ray.rllib.core.rl_module.rl_module import (
     ModuleID,
@@ -13,10 +23,11 @@ from ray.rllib.core.rl_module.rl_module import (
 from ray.rllib.core.learner.learner import (
     LearnerSpec,
 )
-from ray.rllib.policy.sample_batch import MultiAgentBatch
+from ray.rllib.policy.sample_batch import MultiAgentBatch, SampleBatch
 from ray.rllib.utils.actor_manager import FaultTolerantActorManager
 from ray.rllib.utils.minibatch_utils import ShardBatchIterator
 from ray.rllib.utils.typing import ResultDict
+from ray.rllib.utils.metrics import ALL_MODULES
 from ray.rllib.utils.numpy import convert_to_numpy
 from ray.train._internal.backend_executor import BackendExecutor
 from ray.tune.utils.file_transfer import sync_dir_between_nodes
@@ -76,21 +87,24 @@ class LearnerGroup:
         learner_spec: LearnerSpec,
         max_queue_len: int = 20,
     ):
-        scaling_config = learner_spec.learner_scaling_config
+        scaling_config = learner_spec.learner_group_scaling_config
         learner_class = learner_spec.learner_class
 
         # TODO (Kourosh): Go with a _remote flag instead of _is_local to be more
-        # explicit
+        #  explicit.
         self._is_local = scaling_config.num_workers == 0
         self._learner = None
         self._workers = None
-        # if a user calls self.shutdown() on their own then this flag is set to true.
+        # If a user calls self.shutdown() on their own then this flag is set to true.
         # When del is called the backend executor isn't shutdown twice if this flag is
         # true. the backend executor would otherwise log a warning to the console from
-        # ray train
+        # ray train.
         self._is_shut_down = False
 
         self._is_module_trainable = _is_module_trainable
+
+        # How many timesteps had to be dropped due to a full input queue?
+        self._in_queue_ts_dropped = 0
 
         if self._is_local:
             self._learner = learner_class(**learner_spec.get_params_dict())
@@ -114,24 +128,24 @@ class LearnerGroup:
 
             self._workers = [w.actor for w in backend_executor.worker_group.workers]
 
-            # run the neural network building code on remote workers
+            # Run the neural network building code on remote workers.
             ray.get([w.build.remote() for w in self._workers])
-            # use only 1 max in flight request per worker since training workers have to
+            # Use only 1 max in flight request per worker since training workers have to
             # be synchronously executed.
             self._worker_manager = FaultTolerantActorManager(
                 self._workers,
-                max_remote_requests_in_flight_per_actor=1,
+                #TEST: Test allowing 2 in-flight update requests per actor
+                max_remote_requests_in_flight_per_actor=3,
             )
             self._in_queue = deque(maxlen=max_queue_len)
 
-    @property
-    def in_queue_size(self) -> int:
-        """Returns the number of batches currently in the in queue to be processed.
-
-        If the queue is reaching its max size, then this learner group likely needs
-        more workers to process incoming batches.
+    def get_in_queue_stats(self) -> Mapping[str, Any]:
+        """Returns the current stats for the input queue for this learner group.
         """
-        return len(self._in_queue)
+        return {
+            "learner_group_queue_size": len(self._in_queue),
+            "learner_group_queue_ts_dropped": self._in_queue_ts_dropped,
+        }
 
     @property
     def is_local(self) -> bool:
@@ -139,17 +153,19 @@ class LearnerGroup:
 
     def update(
         self,
-        batch: MultiAgentBatch,
+        batches: List[MultiAgentBatch],
         *,
         minibatch_size: Optional[int] = None,
         num_iters: int = 1,
-        reduce_fn: Callable[[ResultDict], ResultDict] = _reduce_mean_results,
+        reduce_fn: Callable[[List[Mapping[str, Any]]], ResultDict] = (
+            _reduce_mean_results
+        ),
         block: bool = True,
-    ) -> List[Mapping[str, Any]]:
-        """Do one gradient based update to the Learner(s).
+    ) -> Union[Mapping[str, Any], List[Mapping[str, Any]]]:
+        """Do one or more gradient based updates to the Learner(s) based on given data.
 
         Args:
-            batch: The data to use for the update.
+            batches: The List of data to use for the update(s).
             minibatch_size: The minibatch size to use for the update.
             num_iters: The number of complete passes over all the sub-batches in the
                 input multi-agent batch.
@@ -160,18 +176,20 @@ class LearnerGroup:
                 example for metrics) or be more selective about you want to report back
                 to the algorithm's training_step. If None is passed, the results will
                 not get reduced.
-            block: Whether to block until the update is complete.
+            block: Whether to block until each update is complete.
 
         Returns:
             A list of dictionaries of results from the updates from the Learner(s)
         """
 
         # Construct a multi-agent batch with only the trainable modules.
-        train_batch = {}
-        for module_id in batch.policy_batches.keys():
-            if self._is_module_trainable(module_id, batch):
-                train_batch[module_id] = batch.policy_batches[module_id]
-        train_batch = MultiAgentBatch(train_batch, batch.count)
+        train_batches = []
+        for batch in batches:
+            train_batch = {}
+            for module_id in batch.policy_batches.keys():
+                if self._is_module_trainable(module_id, batch):
+                    train_batch[module_id] = batch.policy_batches[module_id]
+            train_batches.append(MultiAgentBatch(train_batch, batch.count))
 
         if self.is_local:
             if not block:
@@ -185,11 +203,11 @@ class LearnerGroup:
                     minibatch_size=minibatch_size,
                     num_iters=num_iters,
                     reduce_fn=reduce_fn,
-                )
+                ) for train_batch in train_batches
             ]
         else:
             results = self._distributed_update(
-                train_batch,
+                train_batches,
                 minibatch_size=minibatch_size,
                 num_iters=num_iters,
                 reduce_fn=reduce_fn,
@@ -203,11 +221,13 @@ class LearnerGroup:
 
     def _distributed_update(
         self,
-        batch: MultiAgentBatch,
+        batches: List[MultiAgentBatch],
         *,
         minibatch_size: Optional[int] = None,
         num_iters: int = 1,
-        reduce_fn: Callable[[ResultDict], ResultDict] = _reduce_mean_results,
+        reduce_fn: Callable[[List[Mapping[str, Any]]], ResultDict] = (
+            _reduce_mean_results
+        ),
         block: bool = True,
     ) -> List[Mapping[str, Any]]:
         """Do a gradient based update to the Learners using DDP training.
@@ -223,41 +243,65 @@ class LearnerGroup:
         Returns:
             A list of dictionaries of results from the updates from the Learner(s)
         """
+        # Make sure minibatch size is reduced to the correct number of shards as well
+        # (just like we split each batch into the number of learner workers).
+        if minibatch_size is not None:
+            minibatch_size //= len(self._workers)
+
+        def _learner_update(learner, minibatch):
+            return learner.update(
+                minibatch,
+                minibatch_size=minibatch_size,
+                num_iters=num_iters,
+                reduce_fn=reduce_fn,
+            )
 
         if block:
-            results = self._worker_manager.foreach_actor(
-                [
-                    lambda w: w.update(
-                        b,
-                        minibatch_size=minibatch_size,
-                        num_iters=num_iters,
-                        reduce_fn=reduce_fn,
-                    )
-                    for b in ShardBatchIterator(batch, len(self._workers))
-                ]
-            )
+            results = []
+            for batch in batches:
+                results.extend(self._get_results(self._worker_manager.foreach_actor([
+                    partial(_learner_update, minibatch=minibatch)
+                    for minibatch in ShardBatchIterator(batch, len(self._workers))
+                ])))
+            return results
         else:
-            if batch is not None:
-                self._in_queue.append(batch)
-            results = self._worker_manager.fetch_ready_async_reqs()
-            if self._worker_manager_ready() and self._in_queue:
-                batch = self._in_queue.popleft()
-                self._worker_manager.foreach_actor_async(
-                    [
-                        lambda w: w.update(
-                            b,
-                            minibatch_size=minibatch_size,
-                            num_iters=num_iters,
-                            reduce_fn=reduce_fn,
-                        )
-                        for b in ShardBatchIterator(batch, len(self._workers))
-                    ]
-                )
+            # Queue the new batches.
+            if batches:
+                for batch in batches:
+                    # If queue is full, kick out the oldest item (and thus add its
+                    # length to the "dropped ts" counter).
+                    if len(self._in_queue) == self._in_queue.maxlen:
+                        self._in_queue_ts_dropped += len(self._in_queue[0])
 
-        return self._get_results(results)
+                    # NOT RECOMMENDED (completely destroys learning performance):
+                    # Shuffle batch when not using sequence information.
+                    #if batch.get(SampleBatch.SEQ_LENS) is None:
+                    #    batch.shuffle()
+                    self._in_queue.append(batch)
+
+            # Retrieve all ready results (kicked off by prior calls to this method).
+            results = self._worker_manager.fetch_ready_async_reqs()
+            # Only if there are no more requests in-flight on any of the learners,
+            # we can send in one new batch for sharding and parallel learning.
+            if self._worker_manager_ready():
+                count = 0
+                while len(self._in_queue) > 0 and count < 3:
+                    #TODO: TOTEST Pull a single batch from the queue (from the right side, meaning:
+                    # use the newest ones first!).
+                    batch = self._in_queue.popleft()
+                    self._worker_manager.foreach_actor_async([
+                        partial(_learner_update, minibatch=minibatch)
+                        for minibatch in ShardBatchIterator(batch, len(self._workers))
+                    ])
+                    count += 1
+
+            results = self._get_results(results)
+
+            return results
 
     def _worker_manager_ready(self):
-        return self._worker_manager.num_outstanding_async_reqs() == 0
+        # TODO: TOTEST: Allow for some number of in-flight requests.
+        return self._worker_manager.num_outstanding_async_reqs() <= self._worker_manager.num_actors() * 2
 
     def _get_results(self, results):
         processed_results = []
@@ -272,9 +316,9 @@ class LearnerGroup:
     def additional_update(
         self,
         *,
-        reduce_fn: Optional[Callable[[ResultDict], ResultDict]] = _reduce_mean_results,
+        reduce_fn: Callable[[ResultDict], ResultDict] = _reduce_mean_results,
         **kwargs,
-    ) -> List[Mapping[str, Any]]:
+    ) -> Union[Mapping[str, Any], List[Mapping[str, Any]]]:
         """Apply additional non-gradient based updates to the Learners.
 
         For example, this could be used to do a polyak averaging update
@@ -291,7 +335,7 @@ class LearnerGroup:
         """
 
         if self.is_local:
-            results = [self._learner.additional_update(**kwargs)]
+            return self._learner.additional_update(**kwargs)
         else:
             results = self._worker_manager.foreach_actor(
                 [lambda w: w.additional_update(**kwargs) for worker in self._workers]

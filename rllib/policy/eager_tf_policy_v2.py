@@ -98,7 +98,7 @@ class EagerTFPolicyV2(Policy):
         self._loss_initialized = False
         # Backward compatibility workaround so Policy will call self.loss() directly.
         # TODO(jungong): clean up after all policies are migrated to new sub-class
-        # implementation.
+        #  implementation.
         self._loss = None
 
         self.batch_divisibility_req = self.get_batch_divisibility_req()
@@ -455,6 +455,7 @@ class EagerTFPolicyV2(Policy):
         episodes: Optional[List[Episode]] = None,
         **kwargs,
     ) -> Tuple[TensorType, List[TensorType], Dict[str, TensorType]]:
+
         self._is_training = False
 
         explore = explore if explore is not None else self.explore
@@ -827,10 +828,7 @@ class EagerTFPolicyV2(Policy):
         # often. If eager_tracing=True, this counter should only get
         # incremented during the @tf.function trace operations, never when
         # calling the already traced function after that.
-        # NOTE: On the new RLModule API, we won't trace the sampling side, so we should
-        # not increment this counter to trigger excess re-tracing error.
-        if not self.config.get("_enable_rl_module_api", False):
-            self._re_trace_counter += 1
+        self._re_trace_counter += 1
 
         # Calculate RNN sequence lengths.
         batch_size = tree.flatten(input_dict[SampleBatch.OBS])[0].shape[0]
@@ -843,18 +841,21 @@ class EagerTFPolicyV2(Policy):
         with tf.variable_creator_scope(_disallow_var_creation):
             if self.config.get("_enable_rl_module_api", False):
 
-                if explore:
-                    fwd_out = self.model.forward_exploration(input_dict)
-                else:
-                    fwd_out = self.model.forward_inference(input_dict)
+                #if explore:
+                fwd_out = self.model.forward_exploration(input_dict)
+                #else:
+                #    fwd_out = self.model.forward_inference(input_dict)
 
-                action_dist = fwd_out[SampleBatch.ACTION_DIST]
-                if explore:
-                    actions = action_dist.sample()
-                    logp = action_dist.logp(actions)
-                else:
-                    actions = action_dist.sample()
-                    logp = None
+                actions = fwd_out[SampleBatch.ACTIONS]
+                logp = fwd_out[SampleBatch.ACTION_LOGP]
+
+                #action_dist = fwd_out[SampleBatch.ACTION_DIST]
+                #if explore:
+                #    actions = action_dist.sample()
+                #    logp = action_dist.logp(actions)
+                #else:
+                #    actions = action_dist.sample()
+                #    logp = None
                 state_out = fwd_out.get("state_out", {})
 
                 # anything but action_dist and state_out is an extra fetch
@@ -864,8 +865,6 @@ class EagerTFPolicyV2(Policy):
                 dist_inputs = None
 
             elif is_overridden(self.action_sampler_fn):
-                dist_inputs = None
-                state_out = []
                 actions, logp, dist_inputs, state_out = self.action_sampler_fn(
                     self.model,
                     input_dict[SampleBatch.OBS],
@@ -875,7 +874,6 @@ class EagerTFPolicyV2(Policy):
                 )
             else:
                 if is_overridden(self.action_distribution_fn):
-
                     # Try new action_distribution_fn signature, supporting
                     # state_batches and seq_lens.
                     (

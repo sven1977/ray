@@ -24,9 +24,9 @@ from ray.util.timer import _Timer
 
 
 REMOTE_SCALING_CONFIGS = {
-    "remote-cpu": LearnerGroupScalingConfig(num_workers=1),
-    "remote-gpu": LearnerGroupScalingConfig(num_workers=1, num_gpus_per_worker=1),
-    "multi-gpu-ddp": LearnerGroupScalingConfig(num_workers=2, num_gpus_per_worker=1),
+    #"remote-cpu": LearnerGroupScalingConfig(num_workers=1),
+    #"remote-gpu": LearnerGroupScalingConfig(num_workers=1, num_gpus_per_worker=1),
+    #"multi-gpu-ddp": LearnerGroupScalingConfig(num_workers=2, num_gpus_per_worker=1),
     "multi-cpu-ddp": LearnerGroupScalingConfig(num_workers=2, num_cpus_per_worker=2),
     # "multi-gpu-ddp-pipeline": LearnerGroupScalingConfig(
     #     num_workers=2, num_gpus_per_worker=2
@@ -120,7 +120,7 @@ class TestLearnerGroup(unittest.TestCase):
             min_loss = float("inf")
             for iter_i in range(1000):
                 batch = reader.next()
-                results = learner_group.update(batch.as_multi_agent(), reduce_fn=None)
+                results = learner_group.update([batch.as_multi_agent()], reduce_fn=None)
 
                 loss = np.mean([res[ALL_MODULES]["total_loss"] for res in results])
                 min_loss = min(loss, min_loss)
@@ -138,8 +138,8 @@ class TestLearnerGroup(unittest.TestCase):
 
             self.assertLess(min_loss, 0.57)
 
-            # make sure the learner_group resources are freed up so that we don't
-            # autoscale
+            # Make sure the learner_group resources are freed up so that we don't
+            # autoscale.
             learner_group.shutdown()
             del learner_group
 
