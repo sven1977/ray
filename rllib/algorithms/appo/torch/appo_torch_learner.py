@@ -128,7 +128,7 @@ class APPOTorchLearner(TorchLearner, AppoLearner):
         mean_vf_loss = 0.5 * torch.mean(delta**2)
 
         # The entropy loss.
-        mean_entropy_loss = -torch.mean(target_actions_logp_time_major)
+        mean_entropy_loss = -torch.mean(target_policy_dist.entropy())
 
         # The summed weighted loss.
         total_loss = (
@@ -142,7 +142,7 @@ class APPOTorchLearner(TorchLearner, AppoLearner):
             self.TOTAL_LOSS_KEY: total_loss,
             POLICY_LOSS_KEY: mean_pi_loss,
             VF_LOSS_KEY: mean_vf_loss,
-            ENTROPY_KEY: mean_entropy_loss,
+            ENTROPY_KEY: -mean_entropy_loss,
             LEARNER_RESULTS_KL_KEY: mean_kl_loss,
         }
 
