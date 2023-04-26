@@ -88,7 +88,7 @@ class LearnerHyperparameters:
 
     Instances of this class should only be created via calling
     `get_learner_hyperparameters()` on a frozen AlgorithmConfig object and should always
-    considered read-only.  
+    considered read-only.
 
     When creating a new Learner, you should also define a new sub-class of this class
     and make sure the respective AlgorithmConfig sub-class has a proper implementation
@@ -973,7 +973,7 @@ class Learner:
         need to happen for instantiation of the module.
 
         Returns:
-            The constructed MultiAgentRLModule.
+            A constructed MultiAgentRLModule.
         """
         if self._module_obj is not None:
             module = self._module_obj
