@@ -20,7 +20,6 @@ from ray.rllib.algorithms.appo.appo_learner import (
 )
 from ray.rllib.algorithms.impala.impala import Impala, ImpalaConfig
 from ray.rllib.algorithms.ppo.ppo import UpdateKL
-from ray.rllib.execution.common import _get_shared_metrics, STEPS_SAMPLED_COUNTER
 from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
 from ray.rllib.policy.policy import Policy
 from ray.rllib.utils.annotations import override
@@ -108,9 +107,11 @@ class APPOConfig(ImpalaConfig):
         self.max_sample_requests_in_flight_per_worker = 2
         self.broadcast_interval = 1
 
-        # TODO (sven): Deprecate grad_clip setting once all-in on new Learner API.
         self.grad_clip = 40.0
-        self.grad_clip_by_global_norm = 40.0
+        # Note: Only when using _enable_learner_api=True can the clipping mode be
+        # configured by the user. On the old API stack, RLlib will always clip by
+        # global_norm, no matter the value of `grad_clip_by`.
+        self.grad_clip_by = "global_norm"
 
         self.opt_type = "adam"
         self.lr = 0.0005
@@ -246,15 +247,21 @@ class APPOConfig(ImpalaConfig):
 
     @override(ImpalaConfig)
     def get_learner_hyperparameters(self) -> AppoHyperparameters:
-        base_hps = super().get_learner_hyperparameters()
         return AppoHyperparameters(
             use_kl_loss=self.use_kl_loss,
             kl_target=self.kl_target,
             kl_coeff=self.kl_coeff,
             clip_param=self.clip_param,
             tau=self.tau,
-            **dataclasses.asdict(base_hps),
+            **dataclasses.asdict(super().get_learner_hyperparameters()),
         )
+
+
+# Still used by one of the old checkpoints in tests.
+# Keep a shim version of this around.
+class UpdateTargetAndKL:
+    def __init__(self, workers, config):
+        pass
 
 
 class APPO(Impala):
