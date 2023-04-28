@@ -946,7 +946,7 @@ class Impala(Algorithm):
             # Then we can't do async updates, so we need to block.
             blocking = self.config.num_learner_workers == 0
             lg_results = self.learner_group.update(
-                batches,
+                batches=batches,
                 reduce_fn=_reduce_impala_results,
                 block=blocking,
                 num_iters=self.config.num_sgd_iter,
