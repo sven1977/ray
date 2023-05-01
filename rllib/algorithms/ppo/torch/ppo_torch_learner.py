@@ -1,5 +1,5 @@
 import logging
-from typing import Mapping, Any
+from typing import Any, Mapping
 
 from ray.rllib.algorithms.ppo.ppo_learner import PPOLearner
 from ray.rllib.core.learner.torch.torch_learner import TorchLearner
@@ -30,10 +30,6 @@ class PPOTorchLearner(PPOLearner, TorchLearner):
         # agent based learning rate scheduler, we may want to use module_id to get the
         # learning rate for that agent.
         # TODO (Kourosh): come back to RNNs later
-
-        # make sure all the coefficients are on the same device as the model
-        if self.kl_coeff.device != self._device:
-            self.kl_coeff = self.kl_coeff.to(self._device)
 
         curr_action_dist = fwd_out[SampleBatch.ACTION_DIST]
         action_dist_class = type(fwd_out[SampleBatch.ACTION_DIST])
@@ -87,14 +83,14 @@ class PPOTorchLearner(PPOLearner, TorchLearner):
 
         total_loss = torch.mean(
             -surrogate_loss
-            + self._hps.vf_loss_coeff * vf_loss_clipped
-            - self._hps.entropy_coeff * curr_entropy
+            + self.hps.vf_loss_coeff * vf_loss_clipped
+            - self.hps.entropy_coeff * curr_entropy
         )
 
         # Add mean_kl_loss (already processed through `reduce_mean_valid`),
         # if necessary.
-        if self._hps.kl_coeff > 0.0:
-            total_loss += self._hps.kl_coeff * mean_kl_loss
+        if self.hps.kl_coeff > 0.0:
+            total_loss += self.curr_kl_coeff * mean_kl_loss
 
         return {
             self.TOTAL_LOSS_KEY: total_loss,
@@ -106,14 +102,23 @@ class PPOTorchLearner(PPOLearner, TorchLearner):
             ),
             "entropy": mean_entropy,
             "kl": mean_kl_loss,
-            "entropy_coeff": self._hps.entropy_coeff,
-            "cur_kl_coeff": self.kl_coeff,
+            "entropy_coeff": self.hps.entropy_coeff,
+            "cur_kl_coeff": self.curr_kl_coeff,
         }
 
     @override(PPOLearner)
-    def _create_kl_variable(self, value: float) -> Any:
-        return torch.tensor(value)
+    def _get_kl_variable(self, value: float) -> Any:
+        return torch.tensor(
+            value,
+            requires_grad=False,
+            device=self._device,
+            dtype=torch.float32,
+        )
 
     @override(PPOLearner)
     def _set_kl_coeff(self, value: float):
-        self.kl_coeff.data = torch.tensor(value, device=self.kl_coeff.device)
+        self.curr_kl_coeff.data = torch.tensor(
+            value,
+            dtype=torch.float32,
+            device=self.curr_kl_coeff.device,
+        )

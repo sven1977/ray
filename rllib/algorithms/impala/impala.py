@@ -1,4 +1,5 @@
 import copy
+import dataclasses
 from functools import partial
 import logging
 import platform
@@ -398,6 +399,7 @@ class ImpalaConfig(AlgorithmConfig):
                     "term/optimizer! Try setting config.training("
                     "_tf_policy_handles_more_than_one_loss=True)."
                 )
+        # Learner API specific checks.
         if self._enable_learner_api:
             if not (
                 (self.minibatch_size % self.rollout_fragment_length == 0)
@@ -412,6 +414,7 @@ class ImpalaConfig(AlgorithmConfig):
 
     @override(AlgorithmConfig)
     def get_learner_hyperparameters(self) -> ImpalaHyperparameters:
+        base_hps = super().get_learner_hyperparameters()
         learner_hps = ImpalaHyperparameters(
             rollout_frag_or_episode_len=self.get_rollout_fragment_length(),
             discount_factor=self.gamma,
@@ -419,13 +422,15 @@ class ImpalaConfig(AlgorithmConfig):
             vf_loss_coeff=self.vf_loss_coeff,
             vtrace_drop_last_ts=self.vtrace_drop_last_ts,
             vtrace_clip_rho_threshold=self.vtrace_clip_rho_threshold,
-            vtrace_clip_pg_rho_threshold=(
-                self.vtrace_clip_pg_rho_threshold
-            ),
+            vtrace_clip_pg_rho_threshold=self.vtrace_clip_pg_rho_threshold,
+            **dataclasses.asdict(base_hps),
         )
-        assert (
-            (learner_hps.rollout_frag_or_episode_len is None)
-            != (learner_hps.recurrent_seq_len is None)
+        # TODO: We currently do not use the `recurrent_seq_len` property anyways.
+        #  We should re-think the handling of RNN/SEQ_LENs/etc.. once we start
+        #  supporting them in RLModules and then revisit this check here.
+        #  Also, such a check should be moved into `IMPALAConfig.validate()`.
+        assert (learner_hps.rollout_frag_or_episode_len is None) != (
+            learner_hps.recurrent_seq_len is None
         ), (
             "One of `rollout_frag_or_episode_len` or `recurrent_seq_len` must be not "
             "None in ImpalaHyperparameters!"

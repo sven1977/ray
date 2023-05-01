@@ -31,28 +31,28 @@ class ImpalaTfLearner(TfLearner, ImpalaLearner):
 
         behaviour_actions_logp_time_major = make_time_major(
             behaviour_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         target_actions_logp_time_major = make_time_major(
             target_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         values_time_major = make_time_major(
             values,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         bootstrap_value = values_time_major[-1]
         rewards_time_major = make_time_major(
             batch[SampleBatch.REWARDS],
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
 
         # the discount factor that is used should be gamma except for timesteps where
@@ -62,26 +62,25 @@ class ImpalaTfLearner(TfLearner, ImpalaLearner):
             - tf.cast(
                 make_time_major(
                     batch[SampleBatch.TERMINATEDS],
-                    trajectory_len=self._hps.rollout_frag_or_episode_len,
-                    recurrent_seq_len=self._hps.recurrent_seq_len,
-                    drop_last=self._hps.vtrace_drop_last_ts,
+                    trajectory_len=self.hps.rollout_frag_or_episode_len,
+                    recurrent_seq_len=self.hps.recurrent_seq_len,
+                    drop_last=self.hps.vtrace_drop_last_ts,
                 ),
                 dtype=tf.float32,
             )
-        ) * self._hps.discount_factor
+        ) * self.hps.discount_factor
 
         # Compute vtrace on the CPU for better performance.
-        with tf.device("/cpu:0"):
-            vtrace_adjusted_target_values, pg_advantages = vtrace_tf2(
-                target_action_log_probs=target_actions_logp_time_major,
-                behaviour_action_log_probs=behaviour_actions_logp_time_major,
-                rewards=rewards_time_major,
-                values=values_time_major,
-                bootstrap_value=bootstrap_value,
-                clip_pg_rho_threshold=self._hps.vtrace_clip_pg_rho_threshold,
-                clip_rho_threshold=self._hps.vtrace_clip_rho_threshold,
-                discounts=discounts_time_major,
-            )
+        vtrace_adjusted_target_values, pg_advantages = vtrace_tf2(
+            target_action_log_probs=target_actions_logp_time_major,
+            behaviour_action_log_probs=behaviour_actions_logp_time_major,
+            rewards=rewards_time_major,
+            values=values_time_major,
+            bootstrap_value=bootstrap_value,
+            clip_pg_rho_threshold=self.hps.vtrace_clip_pg_rho_threshold,
+            clip_rho_threshold=self.hps.vtrace_clip_rho_threshold,
+            discounts=discounts_time_major,
+        )
 
         # Sample size is T x B, where T is the trajectory length and B is the batch size
         batch_size = tf.cast(target_actions_logp_time_major.shape[-1], tf.float32)
@@ -101,8 +100,8 @@ class ImpalaTfLearner(TfLearner, ImpalaLearner):
         # The summed weighted loss.
         total_loss = (
             pi_loss
-            + vf_loss * self._hps.vf_loss_coeff
-            + mean_entropy_loss * self._hps.entropy_coeff
+            + vf_loss * self.hps.vf_loss_coeff
+            + mean_entropy_loss * self.hps.entropy_coeff
         )
         return {
             self.TOTAL_LOSS_KEY: total_loss,

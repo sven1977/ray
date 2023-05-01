@@ -9,6 +9,7 @@ See `ppo_[tf|torch]_policy.py` for the definition of the policy loss.
 Detailed documentation: https://docs.ray.io/en/master/rllib-algorithms.html#ppo
 """
 
+import dataclasses
 import logging
 from typing import List, Optional, Type, Union, TYPE_CHECKING
 
@@ -167,6 +168,7 @@ class PPOConfig(PGConfig):
 
     @override(AlgorithmConfig)
     def get_learner_hyperparameters(self) -> PPOLearnerHyperparameters:
+        base_hps = super().get_learner_hyperparameters()
         return PPOLearnerHyperparameters(
             use_critic=self.use_critic,
             kl_coeff=self.kl_coeff,
@@ -176,6 +178,7 @@ class PPOConfig(PGConfig):
             clip_param=self.clip_param,
             vf_clip_param=self.vf_clip_param,
             kl_target=self.kl_target,
+            **dataclasses.asdict(base_hps),
         )
 
     @override(AlgorithmConfig)
@@ -224,7 +227,7 @@ class PPOConfig(PGConfig):
                 tune this if you set vf_share_layers=True inside your model's config.
             entropy_coeff: Coefficient of the entropy regularizer.
             entropy_coeff_schedule: Decay schedule for the entropy regularizer.
-            clip_param: PPO clip parameter.
+            clip_param: The PPO clip parameter.
             vf_clip_param: Clip param for the value function. Note that this is
                 sensitive to the scale of the rewards. If your expected V is large,
                 increase this.

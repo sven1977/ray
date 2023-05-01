@@ -1,4 +1,4 @@
-from typing import Mapping
+from typing import Dict, Mapping
 
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.algorithms.appo.appo_learner import (
@@ -40,34 +40,34 @@ class APPOTfLearner(TfLearner, AppoLearner):
 
         behaviour_actions_logp_time_major = make_time_major(
             behaviour_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         target_actions_logp_time_major = make_time_major(
             target_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         old_actions_logp_time_major = make_time_major(
             old_target_policy_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         values_time_major = make_time_major(
             values,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         bootstrap_value = values_time_major[-1]
         rewards_time_major = make_time_major(
             batch[SampleBatch.REWARDS],
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
 
         # the discount factor that is used should be gamma except for timesteps where
@@ -77,13 +77,13 @@ class APPOTfLearner(TfLearner, AppoLearner):
             - tf.cast(
                 make_time_major(
                     batch[SampleBatch.TERMINATEDS],
-                    trajectory_len=self._hps.rollout_frag_or_episode_len,
-                    recurrent_seq_len=self._hps.recurrent_seq_len,
-                    drop_last=self._hps.vtrace_drop_last_ts,
+                    trajectory_len=self.hps.rollout_frag_or_episode_len,
+                    recurrent_seq_len=self.hps.recurrent_seq_len,
+                    drop_last=self.hps.vtrace_drop_last_ts,
                 ),
                 dtype=tf.float32,
             )
-        ) * self._hps.discount_factor
+        ) * self.hps.discount_factor
 
         # Compute vtrace on the CPU for better performance.
         vtrace_adjusted_target_values, pg_advantages = vtrace_tf2(
@@ -93,8 +93,8 @@ class APPOTfLearner(TfLearner, AppoLearner):
             rewards=rewards_time_major,
             values=values_time_major,
             bootstrap_value=bootstrap_value,
-            clip_pg_rho_threshold=self._hps.vtrace_clip_pg_rho_threshold,
-            clip_rho_threshold=self._hps.vtrace_clip_rho_threshold,
+            clip_pg_rho_threshold=self.hps.vtrace_clip_pg_rho_threshold,
+            clip_rho_threshold=self.hps.vtrace_clip_rho_threshold,
         )
 
         # The policy gradients loss.
@@ -114,7 +114,7 @@ class APPOTfLearner(TfLearner, AppoLearner):
             (
                 pg_advantages
                 * tf.clip_by_value(
-                    logp_ratio, 1 - self._hps.clip_param, 1 + self._hps.clip_param
+                    logp_ratio, 1 - self.hps.clip_param, 1 + self.hps.clip_param
                 )
             ),
         )
@@ -136,8 +136,8 @@ class APPOTfLearner(TfLearner, AppoLearner):
         # The summed weighted loss.
         total_loss = (
             mean_pi_loss
-            + (mean_vf_loss * self._hps.vf_loss_coeff)
-            + (mean_entropy_loss * self._hps.entropy_coeff)
+            + (mean_vf_loss * self.hps.vf_loss_coeff)
+            + (mean_entropy_loss * self.hps.entropy_coeff)
             + (mean_kl_loss * self.kl_coeffs[module_id])
         )
 
@@ -167,5 +167,33 @@ class APPOTfLearner(TfLearner, AppoLearner):
             for old_var, current_var in zip(
                 target_network.variables, current_network.variables
             ):
-                updated_var = self._hps.tau * current_var + (1.0 - self._hps.tau) * old_var
+                updated_var = (
+                    self.hps.tau * current_var + (1.0 - self.hps.tau) * old_var
+                )
                 old_var.assign(updated_var)
+
+    @override(AppoLearner)
+    def _update_module_kl_coeff(
+        self, module_id: ModuleID, sampled_kls: Dict[ModuleID, float]
+    ):
+        """Dynamically update the KL loss coefficients of each module with.
+
+        The update is completed using the mean KL divergence between the action
+        distributions current policy and old policy of each module. That action
+        distribution is computed during the most recent update/call to `compute_loss`.
+
+        Args:
+            module_id: The module whose KL loss coefficient to update.
+            sampled_kls: The KL divergence between the action distributions of
+                the current policy and old policy of each module.
+
+        """
+        if module_id in sampled_kls:
+            sampled_kl = sampled_kls[module_id]
+            # Update the current KL value based on the recently measured value.
+            # Increase.
+            if sampled_kl > 2.0 * self.hps.kl_target:
+                self.kl_coeffs[module_id].assign(self.kl_coeffs[module_id] * 1.5)
+            # Decrease.
+            elif sampled_kl < 0.5 * self.hps.kl_target:
+                self.kl_coeffs[module_id].assign(self.kl_coeffs[module_id] * 0.5)

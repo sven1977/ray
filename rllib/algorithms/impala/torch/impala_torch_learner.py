@@ -39,28 +39,28 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
 
         target_actions_logp_time_major = make_time_major(
             target_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         behaviour_actions_logp_time_major = make_time_major(
             behaviour_actions_logp,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         values_time_major = make_time_major(
             values,
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
         bootstrap_value = values_time_major[-1]
         rewards_time_major = make_time_major(
             batch[SampleBatch.REWARDS],
-            trajectory_len=self._hps.rollout_frag_or_episode_len,
-            recurrent_seq_len=self._hps.recurrent_seq_len,
-            drop_last=self._hps.vtrace_drop_last_ts,
+            trajectory_len=self.hps.rollout_frag_or_episode_len,
+            recurrent_seq_len=self.hps.recurrent_seq_len,
+            drop_last=self.hps.vtrace_drop_last_ts,
         )
 
         # the discount factor that is used should be gamma except for timesteps where
@@ -69,11 +69,11 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
             1.0
             - make_time_major(
                 batch[SampleBatch.TERMINATEDS],
-                trajectory_len=self._hps.rollout_frag_or_episode_len,
-                recurrent_seq_len=self._hps.recurrent_seq_len,
-                drop_last=self._hps.vtrace_drop_last_ts,
+                trajectory_len=self.hps.rollout_frag_or_episode_len,
+                recurrent_seq_len=self.hps.recurrent_seq_len,
+                drop_last=self.hps.vtrace_drop_last_ts,
             ).type(dtype=torch.float32)
-        ) * self._hps.discount_factor
+        ) * self.hps.discount_factor
 
         # TODO(Artur) Why was there `TorchCategorical if is_multidiscrete else
         #  dist_class` in the old code torch impala policy?
@@ -87,8 +87,8 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
             rewards=rewards_time_major,
             values=values_time_major,
             bootstrap_value=bootstrap_value,
-            clip_rho_threshold=self._hps.vtrace_clip_rho_threshold,
-            clip_pg_rho_threshold=self._hps.vtrace_clip_pg_rho_threshold,
+            clip_rho_threshold=self.hps.vtrace_clip_rho_threshold,
+            clip_pg_rho_threshold=self.hps.vtrace_clip_pg_rho_threshold,
         )
         vtrace_adjusted_target_values = vtrace_adjusted_target_values.to(device)
         pg_advantages = pg_advantages.to(device)
@@ -118,8 +118,8 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
         # The summed weighted loss.
         total_loss = (
             pi_loss
-            + vf_loss * self._hps.vf_loss_coeff
-            + mean_entropy_loss * self._hps.entropy_coeff
+            + vf_loss * self.hps.vf_loss_coeff
+            + mean_entropy_loss * self.hps.entropy_coeff
         )
         return {
             self.TOTAL_LOSS_KEY: total_loss,
