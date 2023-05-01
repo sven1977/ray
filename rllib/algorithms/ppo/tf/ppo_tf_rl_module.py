@@ -132,7 +132,7 @@ class PPOTfRLModule(PPORLModuleBase, TfRLModule):
         entropy = action_dist.entropy()
 
         output[SampleBatch.ACTION_DIST_INPUTS] = action_logits
-        output[SampleBatch.ACTION_DIST] = action_dist
+        #output[SampleBatch.ACTION_DIST] = action_dist
         output[SampleBatch.ACTION_LOGP] = logp
         output["entropy"] = entropy
 
