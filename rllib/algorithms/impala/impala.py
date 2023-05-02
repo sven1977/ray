@@ -109,7 +109,11 @@ class ImpalaConfig(AlgorithmConfig):
         self.vtrace = True
         self.vtrace_clip_rho_threshold = 1.0
         self.vtrace_clip_pg_rho_threshold = 1.0
-        self.vtrace_drop_last_ts = True
+        # TODO (sven): Deprecate this setting. It makes no sense to drop the last ts.
+        #  It's actually dangerous if there are important rewards "hiding" in that ts.
+        #  This setting is already ignored (always False) on the new Learner API
+        #  (if _enable_learner_api=True).
+        self.vtrace_drop_last_ts = False
         self.num_multi_gpu_tower_stacks = 1
         self.minibatch_buffer_size = 1
         self.num_sgd_iter = 1
@@ -420,7 +424,6 @@ class ImpalaConfig(AlgorithmConfig):
             discount_factor=self.gamma,
             entropy_coeff=self.entropy_coeff,
             vf_loss_coeff=self.vf_loss_coeff,
-            vtrace_drop_last_ts=self.vtrace_drop_last_ts,
             vtrace_clip_rho_threshold=self.vtrace_clip_rho_threshold,
             vtrace_clip_pg_rho_threshold=self.vtrace_clip_pg_rho_threshold,
             **dataclasses.asdict(base_hps),
@@ -450,7 +453,8 @@ class ImpalaConfig(AlgorithmConfig):
         # If 'auto', use the train_batch_size (meaning each SGD iter is a single pass
         # through the entire train batch). Otherwise, use user provided setting.
         return (
-            self.train_batch_size if self._minibatch_size == "auto"
+            self.train_batch_size
+            if self._minibatch_size == "auto"
             else self._minibatch_size
         )
 
@@ -697,9 +701,6 @@ class Impala(Algorithm):
         unprocessed_sample_batches = self.get_samples_from_workers(
             return_object_refs=use_tree_aggregation,
         )
-        for _, b in unprocessed_sample_batches:
-            print(f"got {len(b)} from samplers")
-
         # Tag workers that actually produced ready sample batches this iteration.
         # Those workers will have to get updated at the end of the iteration.
         workers_that_need_updates = {
@@ -714,20 +715,14 @@ class Impala(Algorithm):
         # Resolve collected batches here on local process (using the mixin buffer).
         else:
             batches = self.process_experiences_directly(unprocessed_sample_batches)
-            if batches:
-                print(f"pulled {sum(len(b) for b in batches)} samples from buffer")
 
         # Increase sampling counters now that we have the actual SampleBatches on
         # the local process (and can measure their sizes).
         for batch in batches:
             self._counters[NUM_ENV_STEPS_SAMPLED] += batch.count
             self._counters[NUM_AGENT_STEPS_SAMPLED] += batch.agent_steps()
-        if batches:
-            print(f"Increased SAMPLED counter to {self._counters[NUM_ENV_STEPS_SAMPLED]}")
         # Concatenate single batches into batches of size `train_batch_size`.
         self.concatenate_batches_and_pre_queue(batches)
-        if self.batches_to_place_on_learner:
-            print(f"Batches to place on learner {sum(len(b) for b in self.batches_to_place_on_learner)}")
         # Using the Learner API. Call `update()` on our LearnerGroup object with
         # all collected batches.
         if self.config._enable_learner_api:
@@ -871,8 +866,6 @@ class Impala(Algorithm):
                 sum(b.count for b in self.batch_being_built)
                 >= self.config.train_batch_size
             ):
-                #TODO: Test sequence shuffle before concating to one train batch
-                #np.random.shuffle(self.batch_being_built)
                 batch_to_add = concat_samples(self.batch_being_built)
                 self.batches_to_place_on_learner.append(batch_to_add)
                 self.batch_being_built = []
@@ -962,21 +955,13 @@ class Impala(Algorithm):
             lg_results = None
 
         if lg_results:
-            print(f"Learned {lg_results[ALL_MODULES][NUM_ENV_STEPS_TRAINED]} env steps")
             self._counters[NUM_ENV_STEPS_TRAINED] += lg_results[ALL_MODULES].pop(
                 NUM_ENV_STEPS_TRAINED
             )
             self._counters[NUM_AGENT_STEPS_TRAINED] += lg_results[ALL_MODULES].pop(
                 NUM_AGENT_STEPS_TRAINED
             )
-            lg_queue_stats = self.learner_group.get_in_queue_stats()
-            self._counters["learner_group_queue_size"] = (
-                lg_queue_stats["learner_group_queue_size"]
-            )
-            self._counters["learner_group_queue_ts_dropped"] = (
-                lg_queue_stats["learner_group_queue_ts_dropped"]
-            )
-            print(f"Increased TRAINED counter to {self._counters[NUM_ENV_STEPS_TRAINED]}")
+            self._counters.update(self.learner_group.get_in_queue_stats())
             result = lg_results
 
         return result

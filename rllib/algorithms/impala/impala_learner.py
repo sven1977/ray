@@ -17,30 +17,18 @@ from ray.rllib.utils.typing import ResultDict
 
 @dataclass
 class ImpalaHyperparameters(LearnerHyperparameters):
-    """Learner-related hyper-parameters for IMPALA.
+    """Hyperparameters for the ImpalaLearner sub-classes (framework specific).
+
+    These should never be set directly by the user. Instead, use the IMPALAConfig
+    class to configure your algorithm.
+    See `ray.rllib.algorithms.impala.impala::IMPALAConfig::training()` for more details
+    on the individual properties.
 
     Attributes:
         rollout_frag_or_episode_len: The length of a rollout fragment or episode.
             Used when making SampleBatches time major for computing loss.
         recurrent_seq_len: The length of a recurrent sequence. Used when making
             SampleBatches time major for computing loss.
-        discount_factor: The discount factor to use for computing returns.
-        vtrace_clip_rho_threshold: The rho threshold to use for clipping the
-            importance weights.
-        vtrace_clip_pg_rho_threshold: The rho threshold to use for clipping the
-            importance weights when computing the policy_gradient loss.
-        vtrace_drop_last_ts: Whether to drop the last timestep when computing the loss.
-            This is useful for stabilizing the loss.
-            NOTE: This shouldn't be True when training on environments where the rewards
-            come at the end of the episode.
-        vf_loss_coeff: The amount to weight the value function loss by when computing
-            the total loss.
-        entropy_coeff: The amount to weight the average entropy of the actions in the
-            SampleBatch towards the total_loss for module updates. The higher this
-            coefficient, the more that the policy network will be encouraged to output
-            distributions with higher entropy/std deviation, which will encourage
-            greater exploration.
-
     """
 
     rollout_frag_or_episode_len: int = None
@@ -48,13 +36,11 @@ class ImpalaHyperparameters(LearnerHyperparameters):
     discount_factor: float = None
     vtrace_clip_rho_threshold: float = None
     vtrace_clip_pg_rho_threshold: float = None
-    vtrace_drop_last_ts: bool = None
     vf_loss_coeff: float = None
     entropy_coeff: float = None
 
 
 class ImpalaLearner(Learner):
-
     @override(Learner)
     def compile_results(
         self,
@@ -84,10 +70,8 @@ def _reduce_impala_results(results: List[ResultDict]) -> ResultDict:
         A reduced result dict.
     """
     result = tree.map_structure(lambda *x: np.mean(x), *results)
-    agent_steps_trained = sum(
-        [r[ALL_MODULES][NUM_AGENT_STEPS_TRAINED] for r in results]
-    )
-    env_steps_trained = sum([r[ALL_MODULES][NUM_ENV_STEPS_TRAINED] for r in results])
+    agent_steps_trained = sum(r[ALL_MODULES][NUM_AGENT_STEPS_TRAINED] for r in results)
+    env_steps_trained = sum(r[ALL_MODULES][NUM_ENV_STEPS_TRAINED] for r in results)
     result[ALL_MODULES][NUM_AGENT_STEPS_TRAINED] = agent_steps_trained
     result[ALL_MODULES][NUM_ENV_STEPS_TRAINED] = env_steps_trained
     return result

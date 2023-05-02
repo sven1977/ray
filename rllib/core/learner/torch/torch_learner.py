@@ -213,14 +213,14 @@ class TorchLearner(Learner):
         """Builds the TorchLearner.
 
         This method is specific to TorchLearner. Before running super() it will
-        initialzed the device properly based on use_gpu and distributed flags, so that
-        _make_module() can place the created module on the correct device. After
-        running super() it will wrap the module in a TorchDDPRLModule if distributed is
-        set.
+        initialize the device properly based on the `_use_gpu` and `_distributed`
+        flags, so that `_make_module()` can place the created module on the correct
+        device. After running super() it will wrap the module in a TorchDDPRLModule
+        if `_distributed` is True.
         """
-        # TODO (Kourosh): How do we handle model parallism?
+        # TODO (Kourosh): How do we handle model parallelism?
         # TODO (Kourosh): Instead of using _TorchAccelerator, we should use the public
-        # api in ray.train but allow for session to be None without any errors raised.
+        #  API in ray.train but allow for session to be None without any errors raised.
         if self._use_gpu:
             # get_device() returns the 0th device if
             # it is called from outside of a Ray Train session. Its necessary to give

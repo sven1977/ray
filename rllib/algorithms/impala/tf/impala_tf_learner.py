@@ -15,10 +15,6 @@ _, tf, _ = try_import_tf()
 class ImpalaTfLearner(TfLearner, ImpalaLearner):
     """Implements the IMPALA loss function in tensorflow."""
 
-    def __init__(self, *args, **kwargs):
-        TfLearner.__init__(self, *args, **kwargs)
-        ImpalaLearner.__init__(self, *args, **kwargs)
-
     @override(TfLearner)
     def compute_loss_per_module(
         self, module_id: str, batch: SampleBatch, fwd_out: Mapping[str, TensorType]
@@ -33,26 +29,22 @@ class ImpalaTfLearner(TfLearner, ImpalaLearner):
             behaviour_actions_logp,
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
         target_actions_logp_time_major = make_time_major(
             target_actions_logp,
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
         values_time_major = make_time_major(
             values,
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
         bootstrap_value = values_time_major[-1]
         rewards_time_major = make_time_major(
             batch[SampleBatch.REWARDS],
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
 
         # the discount factor that is used should be gamma except for timesteps where
@@ -64,22 +56,21 @@ class ImpalaTfLearner(TfLearner, ImpalaLearner):
                     batch[SampleBatch.TERMINATEDS],
                     trajectory_len=self.hps.rollout_frag_or_episode_len,
                     recurrent_seq_len=self.hps.recurrent_seq_len,
-                    drop_last=self.hps.vtrace_drop_last_ts,
                 ),
                 dtype=tf.float32,
             )
         ) * self.hps.discount_factor
 
-        # Compute vtrace on the CPU for better performance.
+        # Note that vtrace will compute the main loop on the CPU for better performance.
         vtrace_adjusted_target_values, pg_advantages = vtrace_tf2(
             target_action_log_probs=target_actions_logp_time_major,
             behaviour_action_log_probs=behaviour_actions_logp_time_major,
+            discounts=discounts_time_major,
             rewards=rewards_time_major,
             values=values_time_major,
             bootstrap_value=bootstrap_value,
             clip_pg_rho_threshold=self.hps.vtrace_clip_pg_rho_threshold,
             clip_rho_threshold=self.hps.vtrace_clip_rho_threshold,
-            discounts=discounts_time_major,
         )
 
         # Sample size is T x B, where T is the trajectory length and B is the batch size

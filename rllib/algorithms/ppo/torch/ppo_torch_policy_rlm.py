@@ -31,7 +31,6 @@ torch, nn = try_import_torch()
 logger = logging.getLogger(__name__)
 
 
-#TODO: reduce to shim, w/o loss/stats/mixins.
 class PPOTorchPolicyWithRLModule(
     LearningRateSchedule,
     EntropyCoeffSchedule,

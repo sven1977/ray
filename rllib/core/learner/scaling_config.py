@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Union
 
 
 @dataclass
@@ -25,5 +24,5 @@ class LearnerGroupScalingConfig:
 
     num_workers: int = 0
     num_cpus_per_worker: int = 1
-    num_gpus_per_worker: Union[float, int] = 0
+    num_gpus_per_worker: int = 0
     local_gpu_idx: int = 0

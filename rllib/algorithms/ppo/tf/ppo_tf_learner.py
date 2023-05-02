@@ -1,8 +1,17 @@
 import logging
-from typing import Any, Mapping
+from typing import Any, Dict, Mapping
 
-from ray.rllib.algorithms.ppo.ppo_learner import PPOLearner
+from ray.rllib.algorithms.ppo.ppo_learner import (
+    LEARNER_RESULTS_KL_KEY,
+    LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY,
+    LEARNER_RESULTS_CURR_KL_COEFF_KEY,
+    LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY,
+    LEARNER_RESULTS_VF_LOSS_UNCLIPPED_KEY,
+    PPOLearner,
+)
+from ray.rllib.core.learner.learner import POLICY_LOSS_KEY, VF_LOSS_KEY, ENTROPY_KEY
 from ray.rllib.core.learner.tf.tf_learner import TfLearner
+from ray.rllib.core.rl_module.rl_module import ModuleID
 from ray.rllib.evaluation.postprocessing import Postprocessing
 from ray.rllib.policy.sample_batch import SampleBatch
 from ray.rllib.utils.framework import try_import_tf
@@ -44,7 +53,7 @@ class PPOTfLearner(PPOLearner, TfLearner):
         )
 
         # Only calculate kl loss if necessary (kl-coeff > 0.0).
-        if self._hps.kl_coeff > 0.0:
+        if self.hps.kl_coeff > 0.0:
             action_kl = prev_action_dist.kl(curr_action_dist)
             mean_kl_loss = tf.reduce_mean(action_kl)
             if tf.math.is_inf(mean_kl_loss):
@@ -68,15 +77,15 @@ class PPOTfLearner(PPOLearner, TfLearner):
             batch[Postprocessing.ADVANTAGES] * logp_ratio,
             batch[Postprocessing.ADVANTAGES]
             * tf.clip_by_value(
-                logp_ratio, 1 - self._hps.clip_param, 1 + self._hps.clip_param
+                logp_ratio, 1 - self.hps.clip_param, 1 + self.hps.clip_param
             ),
         )
 
         # Compute a value function loss.
-        if self._hps.use_critic:
+        if self.hps.use_critic:
             value_fn_out = fwd_out[SampleBatch.VF_PREDS]
             vf_loss = tf.math.square(value_fn_out - batch[Postprocessing.VALUE_TARGETS])
-            vf_loss_clipped = tf.clip_by_value(vf_loss, 0, self._hps.vf_clip_param)
+            vf_loss_clipped = tf.clip_by_value(vf_loss, 0, self.hps.vf_clip_param)
             mean_vf_loss = tf.reduce_mean(vf_loss_clipped)
             mean_vf_unclipped_loss = tf.reduce_mean(vf_loss)
         # Ignore the value function.
@@ -96,26 +105,47 @@ class PPOTfLearner(PPOLearner, TfLearner):
         # Add mean_kl_loss (already processed through `reduce_mean_valid`),
         # if necessary.
         if self.hps.kl_coeff > 0.0:
-            total_loss += self.curr_kl_coeff * mean_kl_loss
+            total_loss += self.curr_kl_coeffs_per_module[module_id] * mean_kl_loss
 
         return {
             self.TOTAL_LOSS_KEY: total_loss,
-            "policy_loss": -tf.reduce_mean(surrogate_loss),
-            "vf_loss": mean_vf_loss,
-            "unclipped_vf_loss": mean_vf_unclipped_loss,
-            "vf_explained_var": explained_variance(
+            POLICY_LOSS_KEY: -tf.reduce_mean(surrogate_loss),
+            VF_LOSS_KEY: mean_vf_loss,
+            LEARNER_RESULTS_VF_LOSS_UNCLIPPED_KEY: mean_vf_unclipped_loss,
+            LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY: explained_variance(
                 batch[Postprocessing.VALUE_TARGETS], value_fn_out
             ),
-            "entropy": mean_entropy,
-            "kl": mean_kl_loss,
-            "entropy_coeff": self.hps.entropy_coeff,
-            "cur_kl_coeff": self.curr_kl_coeff,
+            ENTROPY_KEY: mean_entropy,
+            LEARNER_RESULTS_KL_KEY: mean_kl_loss,
+            LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY: self.hps.entropy_coeff,
+            LEARNER_RESULTS_CURR_KL_COEFF_KEY: (
+                self.curr_kl_coeffs_per_module[module_id]
+            ),
         }
+
+    @override(PPOLearner)
+    def additional_update_per_module(
+        self, module_id: ModuleID, sampled_kl_values: dict, timestep: int
+    ) -> Dict[str, Any]:
+        assert sampled_kl_values, "Sampled KL values are empty."
+
+        results = super().additional_update_per_module(
+            module_id,
+            sampled_kl_values,
+            timestep=timestep,
+        )
+
+        sampled_kl = sampled_kl_values[module_id]
+        curr_val = self.curr_kl_coeffs_per_module[module_id]
+        if sampled_kl > 2.0 * self.hps.kl_target:
+            # TODO (Kourosh) why not 2?
+            curr_val.assign(curr_val * 1.5)
+        elif sampled_kl < 0.5 * self.hps.kl_target:
+            curr_val.assign(curr_val * 0.5)
+
+        results.update({"kl_coeff": curr_val})
+        return results
 
     @override(PPOLearner)
     def _get_kl_variable(self, value: float) -> Any:
         return tf.Variable(value, trainable=False, dtype=tf.float32)
-
-    @override(PPOLearner)
-    def _set_kl_coeff(self, value: float) -> None:
-        self.curr_kl_coeff.assign(value)

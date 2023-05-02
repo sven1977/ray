@@ -1,10 +1,7 @@
-from typing import List, Union, TYPE_CHECKING
+from typing import List, Union
 from ray.rllib.utils.framework import try_import_tf
 
 _, tf, _ = try_import_tf()
-
-if TYPE_CHECKING:
-    _, tf, _ = try_import_tf()
 
 
 def make_time_major(
@@ -114,28 +111,6 @@ def vtrace_tf2(
             on rho_s in \rho_s \delta log \pi(a|x) (r + \gamma v_{s+1} - V(x_s)).
     """
     log_rhos = target_action_log_probs - behaviour_action_log_probs
-
-    #discounts = tf.convert_to_tensor(discounts, dtype=tf.float32)
-    #rewards = tf.convert_to_tensor(rewards, dtype=tf.float32)
-    #values = tf.convert_to_tensor(values, dtype=tf.float32)
-    #bootstrap_value = tf.convert_to_tensor(bootstrap_value, dtype=tf.float32)
-    #if clip_rho_threshold is not None:
-    #    clip_rho_threshold = tf.convert_to_tensor(clip_rho_threshold, dtype=tf.float32)
-    #if clip_pg_rho_threshold is not None:
-    #    clip_pg_rho_threshold = tf.convert_to_tensor(
-    #        clip_pg_rho_threshold, dtype=tf.float32
-    #    )
-
-    # Make sure tensor ranks are consistent.
-    #rho_rank = log_rhos.shape.ndims  # Usually 2.
-    #values.shape.assert_has_rank(rho_rank)
-    #bootstrap_value.shape.assert_has_rank(rho_rank - 1)
-    #discounts.shape.assert_has_rank(rho_rank)
-    #rewards.shape.assert_has_rank(rho_rank)
-    #if clip_rho_threshold is not None:
-    #    clip_rho_threshold.shape.assert_has_rank(0)
-    #if clip_pg_rho_threshold is not None:
-    #    clip_pg_rho_threshold.shape.assert_has_rank(0)
 
     rhos = tf.math.exp(log_rhos)
     if clip_rho_threshold is not None:

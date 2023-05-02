@@ -122,7 +122,7 @@ class TestPPO(unittest.TestCase):
 
     def test_rollouts(self):
         # TODO: Add FrozenLake-v1 to cover LSTM case.
-        frameworks = ["tf2", "torch"]
+        frameworks = ["torch", "tf2"]
         env_names = ["CartPole-v1", "Pendulum-v1", "ALE/Breakout-v5"]
         fwd_fns = ["forward_exploration", "forward_inference"]
         # TODO(Artur): Re-enable LSTM
@@ -168,8 +168,8 @@ class TestPPO(unittest.TestCase):
 
     def test_forward_train(self):
         # TODO: Add FrozenLake-v1 to cover LSTM case.
-        frameworks = ["tf2", "torch"]
-        env_names = ["ALE/Pong-v5", "CartPole-v1", "Pendulum-v1"]
+        frameworks = ["torch", "tf2"]
+        env_names = ["CartPole-v1", "Pendulum-v1", "ALE/Breakout-v5"]
         # TODO(Artur): Re-enable LSTM
         lstm = [False]
         config_combinations = [frameworks, env_names, lstm]

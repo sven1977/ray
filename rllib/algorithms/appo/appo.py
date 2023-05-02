@@ -230,20 +230,18 @@ class APPOConfig(ImpalaConfig):
     def get_default_rl_module_spec(self) -> SingleAgentRLModuleSpec:
         if self.framework_str == "torch":
             from ray.rllib.algorithms.appo.torch.appo_torch_rl_module import (
-                APPOTorchRLModule as RLModule
+                APPOTorchRLModule as RLModule,
             )
         elif self.framework_str == "tf2":
             from ray.rllib.algorithms.appo.tf.appo_tf_rl_module import (
-                APPOTfRLModule as RLModule
+                APPOTfRLModule as RLModule,
             )
         else:
             raise ValueError(f"The framework {self.framework_str} is not supported.")
 
         from ray.rllib.algorithms.appo.appo_catalog import APPOCatalog
 
-        return SingleAgentRLModuleSpec(
-            module_class=RLModule, catalog_class=APPOCatalog
-        )
+        return SingleAgentRLModuleSpec(module_class=RLModule, catalog_class=APPOCatalog)
 
     @override(ImpalaConfig)
     def get_learner_hyperparameters(self) -> AppoHyperparameters:
@@ -282,9 +280,6 @@ class APPO(Impala):
     @override(Impala)
     def setup(self, config: AlgorithmConfig):
         super().setup(config)
-
-        #TODO
-        print(f"minibatch_size={self.config.minibatch_size}")
 
         # TODO(avnishn):
         # this attribute isn't used anywhere else in the code. I think we can safely
@@ -408,7 +403,7 @@ class APPO(Impala):
         if config["framework"] == "torch":
             if config._enable_rl_module_api:
                 from ray.rllib.algorithms.appo.torch.appo_torch_policy_rlm import (
-                    APPOTorchPolicyWithRLModule
+                    APPOTorchPolicyWithRLModule,
                 )
 
                 return APPOTorchPolicyWithRLModule

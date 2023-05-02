@@ -19,10 +19,6 @@ torch, nn = try_import_torch()
 class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
     """Implements the IMPALA loss function in torch."""
 
-    def __init__(self, *args, **kwargs):
-        TorchLearner.__init__(self, *args, **kwargs)
-        ImpalaLearner.__init__(self, *args, **kwargs)
-
     @override(TorchLearner)
     def compute_loss_per_module(
         self, module_id: str, batch: SampleBatch, fwd_out: Mapping[str, TensorType]
@@ -41,26 +37,22 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
             target_actions_logp,
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
         behaviour_actions_logp_time_major = make_time_major(
             behaviour_actions_logp,
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
         values_time_major = make_time_major(
             values,
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
         bootstrap_value = values_time_major[-1]
         rewards_time_major = make_time_major(
             batch[SampleBatch.REWARDS],
             trajectory_len=self.hps.rollout_frag_or_episode_len,
             recurrent_seq_len=self.hps.recurrent_seq_len,
-            drop_last=self.hps.vtrace_drop_last_ts,
         )
 
         # the discount factor that is used should be gamma except for timesteps where
@@ -71,7 +63,6 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
                 batch[SampleBatch.TERMINATEDS],
                 trajectory_len=self.hps.rollout_frag_or_episode_len,
                 recurrent_seq_len=self.hps.recurrent_seq_len,
-                drop_last=self.hps.vtrace_drop_last_ts,
             ).type(dtype=torch.float32)
         ) * self.hps.discount_factor
 
@@ -79,7 +70,7 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
         #  dist_class` in the old code torch impala policy?
         device = behaviour_actions_logp_time_major[0].device
 
-        # TODO(Artur): See if we should compute v-trace corrected targets on CPU
+        # Note that vtrace will compute the main loop on the CPU for better performance.
         vtrace_adjusted_target_values, pg_advantages = vtrace_torch(
             target_action_log_probs=target_actions_logp_time_major,
             behaviour_action_log_probs=behaviour_actions_logp_time_major,
@@ -90,8 +81,6 @@ class ImpalaTorchLearner(TorchLearner, ImpalaLearner):
             clip_rho_threshold=self.hps.vtrace_clip_rho_threshold,
             clip_pg_rho_threshold=self.hps.vtrace_clip_pg_rho_threshold,
         )
-        vtrace_adjusted_target_values = vtrace_adjusted_target_values.to(device)
-        pg_advantages = pg_advantages.to(device)
 
         # Sample size is T x B, where T is the trajectory length and B is the batch size
         # We mean over the batch size for consistency with the pre-RLModule
