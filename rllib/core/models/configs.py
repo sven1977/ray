@@ -485,8 +485,15 @@ class CNNEncoderConfig(ModelConfig):
             form of `(width, height, channels)`.
         cnn_filter_specifiers: A list of lists, where each element of an inner list
             contains elements of the form
-            `[number of channels/filters, [kernel width, kernel height], stride]` to
-            specify a convolutional layer stacked in order of the outer list.
+            `[number of channels/filters, kernel, stride, [padding=same]?]` to specify a
+            convolutional layer stacked in order of the outer list.
+            Note that `padding` is "same" by default and that `kernel` and `stride`
+            may be privided as single ints (square) or as a tuple/list of two ints
+            (width and height dimensions) for non-squared kernel/stride shapes.
+            A good rule of thumb for constructing CNN stacks is:
+            When using padding="same", the input "image" will be reduced in size by
+            stride, e.g. input=(84, 84, 3) stride=2 kernel=x padding="same" filters=16
+            -> output=(42, 42, 16).
         cnn_activation: The activation function to use after each layer (
             except for the output).
         cnn_use_layernorm: Whether to insert a LayerNorm functionality
@@ -502,6 +509,7 @@ class CNNEncoderConfig(ModelConfig):
     )
     cnn_activation: str = "relu"
     cnn_use_layernorm: bool = False
+    TODO: compute output_dims automatically!
     output_dims: Union[List[int], Tuple[int]] = None
     output_activation: str = "linear"
     use_bias: bool = True

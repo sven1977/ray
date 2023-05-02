@@ -363,16 +363,27 @@ class Catalog:
                     model_config_dict["conv_filters"] = get_filter_config(
                         observation_space.shape
                     )
+                # Either we only flatten after the last Conv2D OR we flatten +
+                # final Dense.
+                TODO: no more final dense in CNNEncoders
+                output_dims = [
+                    model_config_dict.get("conv_flattened_dim") or encoder_latent_dim
+                ]
 
                 encoder_config = CNNEncoderConfig(
                     input_dims=observation_space.shape,
                     cnn_filter_specifiers=model_config_dict["conv_filters"],
-                    cnn_activation=activation,
+                    cnn_activation=model_config_dict["conv_activation"],
                     cnn_use_layernorm=model_config_dict.get(
                         "conv_use_layernorm", False
                     ),
-                    output_dims=[encoder_latent_dim],
-                    output_activation=output_activation,
+                    TODO: remove this options cnn_add_final_dense=model_config_dict.get("conv_add_final_dense"),
+                    #TODO (sven): Add to docstrings that output_activation only applies to
+                    # a possible final Dense layer (not to any CNN layers!).
+                    # Also add to docstrings that `conv_flattened_dim` becomes output_dims[0] iff
+                    # `conv_add_final_dense` = False.
+                    output_dims=output_dims,
+                    TODO: if no final dense, no output activation necessary output_activation=None,
                 )
             # input_space is a 2D Box
             elif (

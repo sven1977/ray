@@ -301,11 +301,11 @@ class Encoder(Model, abc.ABC):
 
     @override(Model)
     def get_input_specs(self) -> Optional[Spec]:
-        return convert_to_canonical_format([SampleBatch.OBS, STATE_IN])
+        return convert_to_canonical_format([SampleBatch.OBS])
 
     @override(Model)
     def get_output_specs(self) -> Optional[Spec]:
-        return convert_to_canonical_format([ENCODER_OUT, STATE_OUT])
+        return convert_to_canonical_format([ENCODER_OUT])
 
     @abc.abstractmethod
     def _forward(self, input_dict: NestedDict, **kwargs) -> NestedDict:

@@ -48,6 +48,7 @@ class TfCNNEncoder(TfModel, Encoder):
         Encoder.__init__(self, config)
 
         layers = []
+        layers.append(tf.keras.layers.Input(shape=config.input_dims, dtype=tf.float32))
         # The bare-bones CNN (no flatten, no succeeding dense).
         cnn = TfCNN(
             input_dims=config.input_dims,
@@ -63,6 +64,7 @@ class TfCNNEncoder(TfModel, Encoder):
 
         # Add a final linear layer to make sure that the outputs have the correct
         # dimensionality (output_dims).
+        TODO: remove!
         output_activation = get_activation_fn(config.output_activation, framework="tf2")
         layers.append(
             tf.keras.layers.Dense(config.output_dims[0], activation=output_activation),
