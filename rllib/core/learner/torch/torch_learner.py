@@ -24,6 +24,7 @@ from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.core.learner.learner import (
     FrameworkHyperparameters,
     Learner,
+    LEARNER_RESULTS_CURR_LR_KEY,
     ParamOptimizerPair,
     NamedParamOptimizerPairs,
     ParamType,
@@ -34,7 +35,11 @@ from ray.rllib.core.rl_module.torch.torch_rl_module import (
     TorchDDPRLModuleWithTargetNetworksInterface,
 )
 from ray.rllib.policy.sample_batch import MultiAgentBatch
-from ray.rllib.utils.annotations import override
+from ray.rllib.utils.annotations import (
+    override,
+    OverrideToImplementCustomLogic,
+    OverrideToImplementCustomLogic_CallToSuperRecommended,
+)
 from ray.rllib.utils.typing import TensorType
 from ray.rllib.utils.nested_dict import NestedDict
 from ray.rllib.utils.torch_utils import (
@@ -77,7 +82,9 @@ class TorchLearner(Learner):
         self, module_id: ModuleID
     ) -> Union[ParamOptimizerPair, NamedParamOptimizerPairs]:
         module = self._module[module_id]
-        lr = self._optimizer_config["lr"]
+        # TODO (sven): Move lr from optimizer config to Learner HPs?
+        #  We might not need optimizer config.
+        lr = self.curr_lr_per_module[module_id]
         pair: ParamOptimizerPair = (
             self.get_parameters(module),
             torch.optim.Adam(self.get_parameters(module), lr=lr),
@@ -95,6 +102,18 @@ class TorchLearner(Learner):
         grads = {pid: p.grad for pid, p in self._params.items()}
 
         return grads
+
+    @OverrideToImplementCustomLogic_CallToSuperRecommended
+    @override(Learner)
+    def additional_update_per_module(
+        self, module_id: ModuleID, *, timestep: int, **kwargs
+    ) -> Mapping[str, Any]:
+        # Handle lr scheduling updates and apply new learning rates to the optimizers.
+        value = self._optimizer_config["lr"]
+        if self.hps.lr_schedule is not None:
+            value = self.lr_schedule_per_module[module_id].value(t=timestep)
+            self.curr_lr_per_module[module_id].data = torch.tensor(value)
+        return {LEARNER_RESULTS_CURR_LR_KEY: value}
 
     @override(Learner)
     def postprocess_gradients(
@@ -242,30 +261,32 @@ class TorchLearner(Learner):
             self._device = torch.device("cpu")
 
         super().build()
-        # if the module is a MultiAgentRLModule and nn.Module we can simply assume
+
+        self._make_modules_ddp_if_necessary()
+
+    @OverrideToImplementCustomLogic
+    def _make_modules_ddp_if_necessary(self) -> None:
+        """Default logic for (maybe) making all Modules within self._module DDP."""
+
+        # If the module is a MultiAgentRLModule and nn.Module we can simply assume
         # all the submodules are registered. Otherwise, we need to loop through
         # each submodule and move it to the correct device.
         # TODO (Kourosh): This can result in missing modules if the user does not
-        # register them in the MultiAgentRLModule. We should find a better way to
-        # handle this.
+        #  register them in the MultiAgentRLModule. We should find a better way to
+        #  handle this.
         if self._distributed:
-            # TODO (sven): Shouldn't self._module always be MARL?
+            # Single agent module: Convert to `TorchDDPRLModule`.
             if isinstance(self._module, TorchRLModule):
                 self._module = TorchDDPRLModule(self._module)
+            # Multi agent module: Convert each submodule to `TorchDDPRLModule`.
             else:
                 assert isinstance(self._module, MultiAgentRLModule)
                 for key in self._module.keys():
                     sub_module = self._module[key]
                     if isinstance(sub_module, TorchRLModule):
-                        distr_class = (
-                            TorchDDPRLModuleWithTargetNetworksInterface
-                            if isinstance(
-                                sub_module, RLModuleWithTargetNetworksInterface
-                            )
-                            else TorchDDPRLModule
-                        )
+                        # Wrap and override the module ID key in self._module.
                         self._module.add_module(
-                            key, distr_class(sub_module), override=True
+                            key, TorchDDPRLModule(sub_module), override=True
                         )
 
 
@@ -303,3 +324,23 @@ class TorchLearner(Learner):
             for key in module.keys():
                 if isinstance(module[key], torch.nn.Module):
                     module[key].to(self._device)
+
+    @override(Learner)
+    def _get_tensor_variable(
+        self, value, dtype=None, trainable=False
+    ) -> "torch.Tensor":
+        return torch.tensor(
+            value,
+            requires_grad=trainable,
+            device=self._device,
+            dtype=(
+                dtype
+                or (
+                    torch.float32
+                    if isinstance(value, float)
+                    else torch.int32
+                    if isinstance(value, int)
+                    else None
+                )
+            ),
+        )

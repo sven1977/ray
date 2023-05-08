@@ -1,8 +1,8 @@
 from typing import List
 
 from ray.rllib.algorithms.appo.appo_learner import (
-    OLD_ACTION_DIST_KEY,
     OLD_ACTION_DIST_LOGITS_KEY,
+    OLD_ACTION_DIST_KEY,
 )
 from ray.rllib.algorithms.ppo.tf.ppo_tf_rl_module import PPOTfRLModule
 from ray.rllib.core.models.base import ACTOR
@@ -38,9 +38,9 @@ class APPOTfRLModule(PPOTfRLModule, RLModuleWithTargetNetworksInterface):
     @override(PPOTfRLModule)
     def output_specs_train(self) -> List[str]:
         return [
-            SampleBatch.ACTION_DIST,
+            SampleBatch.ACTION_DIST_INPUTS,
             SampleBatch.VF_PREDS,
-            OLD_ACTION_DIST_KEY,
+            OLD_ACTION_DIST_LOGITS_KEY,
         ]
 
     @override(PPOTfRLModule)

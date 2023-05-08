@@ -140,8 +140,7 @@ class LearnerGroup:
             self._in_queue = deque(maxlen=max_queue_len)
 
     def get_in_queue_stats(self) -> Mapping[str, Any]:
-        """Returns the current stats for the input queue for this learner group.
-        """
+        """Returns the current stats for the input queue for this learner group."""
         return {
             "learner_group_queue_size": len(self._in_queue),
             "learner_group_queue_ts_dropped": self._in_queue_ts_dropped,
@@ -338,7 +337,7 @@ class LearnerGroup:
             return self._learner.additional_update(**kwargs)
         else:
             results = self._worker_manager.foreach_actor(
-                [lambda w: w.additional_update(**kwargs) for worker in self._workers]
+                [lambda w: w.additional_update(**kwargs) for _ in self._workers]
             )
             results = self._get_results(results)
             if reduce_fn is None:
