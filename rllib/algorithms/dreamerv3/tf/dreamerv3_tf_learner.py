@@ -244,61 +244,62 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         # computed during world model training.
         # Everything goes in as BxT: We are starting a new dream trajectory at every
         # actually encountered timestep in the batch, so we are creating B*T
-        # trajectories of len `horizon_H`.
-        dream_data = self.module[module_id].dreamer_model.dream_trajectory(
-            start_states={
-                "h": fwd_out["h_states_BxT"],
-                "z": fwd_out["z_posterior_states_BxT"],
-            },
-            start_is_terminated=tf.reshape(batch["is_terminated"], [-1]),  # ->BxT
-            timesteps_H=hps.horizon_H,
-            gamma=hps.gamma,
-        )
-        if hps.summarize_dream_data:
-            # To reduce this massive mount of data a little, slice out a T=1 piece
-            # from each stats that has the shape (H, BxT), meaning convert e.g.
-            # `rewards_dreamed_t0_to_H_BxT` into `rewards_dreamed_t0_to_H_Bx1`.
-            # This will reduce the amount of data to be transferred and reported
-            # by the factor of `batch_length_T`.
-            self.register_metrics(
-                module_id,
-                {
-                    # Replace 'T' with '1'.
-                    "DREAM_DATA_" + key[:-1] + "1": value[:, hps.batch_size_B]
-                    for key, value in dream_data.items()
-                    if key.endswith("H_BxT")
+        # trajectories each of len `horizon_H`.
+        with FreezeParameters(self.module[module_id].world_model.trainable_variables):
+            dream_data = self.module[module_id].dreamer_model.dream_trajectory(
+                start_states={
+                    "h": fwd_out["h_states_BxT"],
+                    "z": fwd_out["z_posterior_states_BxT"],
                 },
+                start_is_terminated=tf.reshape(batch["is_terminated"], [-1]),  # ->BxT
+                timesteps_H=hps.horizon_H,
+                gamma=hps.gamma,
+            )
+            if hps.summarize_dream_data:
+                # To reduce this massive mount of data a little, slice out a T=1 piece
+                # from each stats that has the shape (H, BxT), meaning convert e.g.
+                # `rewards_dreamed_t0_to_H_BxT` into `rewards_dreamed_t0_to_H_Bx1`.
+                # This will reduce the amount of data to be transferred and reported
+                # by the factor of `batch_length_T`.
+                self.register_metrics(
+                    module_id,
+                    {
+                        # Replace 'T' with '1'.
+                        "DREAM_DATA_" + key[:-1] + "1": value[:, hps.batch_size_B]
+                        for key, value in dream_data.items()
+                        if key.endswith("H_BxT")
+                    },
+                )
+
+            value_targets_t0_to_Hm1_BxT = self._compute_value_targets(
+                hps=hps,
+                # Learn critic in symlog'd space.
+                rewards_t0_to_H_BxT=dream_data["rewards_dreamed_t0_to_H_BxT"],
+                intrinsic_rewards_t1_to_H_BxT=(
+                    dream_data["rewards_intrinsic_t1_to_H_B"] if hps.use_curiosity else None
+                ),
+                continues_t0_to_H_BxT=dream_data["continues_dreamed_t0_to_H_BxT"],
+                value_predictions_t0_to_H_BxT=dream_data["values_dreamed_t0_to_H_BxT"],
+            )
+            self.register_metric(
+                module_id, "VALUE_TARGETS_H_BxT", value_targets_t0_to_Hm1_BxT
             )
 
-        value_targets_t0_to_Hm1_BxT = self._compute_value_targets(
-            hps=hps,
-            # Learn critic in symlog'd space.
-            rewards_t0_to_H_BxT=dream_data["rewards_dreamed_t0_to_H_BxT"],
-            intrinsic_rewards_t1_to_H_BxT=(
-                dream_data["rewards_intrinsic_t1_to_H_B"] if hps.use_curiosity else None
-            ),
-            continues_t0_to_H_BxT=dream_data["continues_dreamed_t0_to_H_BxT"],
-            value_predictions_t0_to_H_BxT=dream_data["values_dreamed_t0_to_H_BxT"],
-        )
-        self.register_metric(
-            module_id, "VALUE_TARGETS_H_BxT", value_targets_t0_to_Hm1_BxT
-        )
-
-        CRITIC_L_total = self._compute_critic_loss(
-            module_id=module_id,
-            hps=hps,
-            dream_data=dream_data,
-            value_targets_t0_to_Hm1_BxT=value_targets_t0_to_Hm1_BxT,
-        )
-        if hps.train_actor:
-            ACTOR_L_total = self._compute_actor_loss(
+            CRITIC_L_total = self._compute_critic_loss(
                 module_id=module_id,
                 hps=hps,
                 dream_data=dream_data,
                 value_targets_t0_to_Hm1_BxT=value_targets_t0_to_Hm1_BxT,
             )
-        else:
-            ACTOR_L_total = 0.0
+            if hps.train_actor:
+                ACTOR_L_total = self._compute_actor_loss(
+                    module_id=module_id,
+                    hps=hps,
+                    dream_data=dream_data,
+                    value_targets_t0_to_Hm1_BxT=value_targets_t0_to_Hm1_BxT,
+                )
+            else:
+                ACTOR_L_total = 0.0
 
         # if hps.use_curiosity:
         #    L_disagree = self._compute_disagree_loss(dream_data=dream_data)
@@ -910,3 +911,18 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
 
         # Return advantages.
         return scaled_value_targets_H_B - scaled_value_predictions_H_B
+
+
+# Modified from https://github.com/juliusfrost/dreamer-pytorch
+class FreezeParameters:
+    def __init__(self, parameters):
+        self.parameters = parameters
+        self.param_states = [p.trainable for p in self.parameters]
+
+    def __enter__(self):
+        for param in self.parameters:
+            param.trainable = False
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for i, param in enumerate(self.parameters):
+            param.trainable = self.param_states[i]
