@@ -97,10 +97,13 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
         # [2]: "The mean of the reward predictor pφ(ˆrt | zˆt) is used as reward
         # sequence rˆ1:H."
         probs = tf.nn.softmax(logits)
-        possible_outcomes = tf.linspace(
-            self.lower_bound,
-            self.upper_bound,
-            self.num_buckets,
+        possible_outcomes = tf.cast(
+            tf.linspace(
+                self.lower_bound,
+                self.upper_bound,
+                self.num_buckets,
+            ),
+            tf.keras.mixed_precision.global_policy().compute_dtype,
         )
         # probs=possible_outcomes=[B, `num_buckets`]
 

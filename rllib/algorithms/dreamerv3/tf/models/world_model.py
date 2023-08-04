@@ -137,7 +137,10 @@ class WorldModel(tf.keras.Model):
         # Use our Dynamics predictor for initial stochastic state, BUT with greedy
         # (mode) instead of sampling.
         self.initial_h = tf.Variable(
-            tf.zeros(shape=(self.num_gru_units,), dtype=tf.float32),
+            tf.zeros(
+                shape=(self.num_gru_units,),
+                dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+            ),
             trainable=True,
             name="initial_h",
         )

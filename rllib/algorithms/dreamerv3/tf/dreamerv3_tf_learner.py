@@ -326,8 +326,8 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
 
         Args:
             hps: The DreamerV3LearnerHyperparameters to use.
-            rewards_B_T: The rewards batch in the shape (B, T) and of type float32.
-            continues_B_T: The continues batch in the shape (B, T) and of type float32
+            rewards_B_T: The rewards batch in the shape (B, T) and of type float.
+            continues_B_T: The continues batch in the shape (B, T) and of type float
                 (1.0 -> continue; 0.0 -> end of episode).
             fwd_out: The `forward_train` outputs of the DreamerV3RLModule.
         """
@@ -826,10 +826,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             hps: The DreamerV3LearnerHyperparameters to use.
             value_targets_t0_to_Hm1_BxT: The value targets computed by
                 `self._compute_value_targets` in the shape of (t0 to H-1, BxT)
-                and of type float32.
+                and of type float.
             value_predictions_t0_to_Hm1_BxT: The critic's value predictions over the
                 dreamed trajectories (w/o the last timestep). The shape of this
-                tensor is (t0 to H-1, BxT) and the type is float32.
+                tensor is (t0 to H-1, BxT) and the type is float.
 
         Returns:
             The scaled value targets used by the actor for REINFORCE policy updates

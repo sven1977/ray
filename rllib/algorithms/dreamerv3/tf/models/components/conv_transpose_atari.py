@@ -123,7 +123,10 @@ class ConvTransposeAtari(tf.keras.Model):
         # Flatten last two dims of z.
         assert len(z.shape) == 3
         z_shape = tf.shape(z)
-        z = tf.reshape(tf.cast(z, tf.float32), shape=(z_shape[0], -1))
+        z = tf.reshape(
+            tf.cast(z, tf.keras.mixed_precision.global_policy().compute_dtype),
+            shape=(z_shape[0], -1),
+        )
         assert len(z.shape) == 2
         input_ = tf.concat([h, z], axis=-1)
 

@@ -47,7 +47,7 @@ class ContinuePredictor(tf.keras.Model):
         # Flatten last two dims of z.
         assert len(z.shape) == 3
         z_shape = tf.shape(z)
-        z = tf.reshape(tf.cast(z, tf.float32), shape=(z_shape[0], -1))
+        z = tf.reshape(z, shape=(z_shape[0], -1))
         assert len(z.shape) == 2
         out = tf.concat([h, z], axis=-1)
         # Send h-cat-z through MLP.
@@ -57,7 +57,10 @@ class ContinuePredictor(tf.keras.Model):
         # where they should be just [B].
         logits = tf.squeeze(out, axis=-1)
         # Create the Bernoulli distribution object.
-        bernoulli = tfp.distributions.Bernoulli(logits=logits, dtype=tf.float32)
+        bernoulli = tfp.distributions.Bernoulli(
+            logits=logits,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+        )
 
         # TODO: Draw a sample?
         # continue_ = bernoulli.sample()

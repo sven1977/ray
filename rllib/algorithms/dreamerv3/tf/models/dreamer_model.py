@@ -245,7 +245,7 @@ class DreamerModel(tf.keras.Model):
                 1,
                 action_dim,
             ),
-            dtype=tf.float32,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
         )
         return states
 

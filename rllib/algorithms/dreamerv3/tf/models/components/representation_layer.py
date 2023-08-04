@@ -113,7 +113,10 @@ class RepresentationLayer(tf.keras.layers.Layer):
         )
 
         # Draw a one-hot sample (B, num_categoricals, num_classes).
-        sample = tf.cast(distribution.sample(), tf.float32)
+        sample = tf.cast(
+            distribution.sample(),
+            tf.keras.mixed_precision.global_policy().compute_dtype,
+        )
         # Make sure we can take gradients "straight-through" the sampling step
         # by adding the probs and subtracting the sg(probs). Note that `sample`
         # does not have any gradients as it's the result of a Categorical sample step,

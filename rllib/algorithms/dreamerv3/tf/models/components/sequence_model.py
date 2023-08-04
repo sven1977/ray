@@ -71,6 +71,7 @@ class SequenceModel(tf.keras.Model):
             return_sequences=False,
             return_state=False,
             time_major=True,
+            dtype=self.dtype,
             # Note: Changing these activations is most likely a bad idea!
             # In experiments, setting one of both of them to silu deteriorated
             # performance significantly.
@@ -90,7 +91,7 @@ class SequenceModel(tf.keras.Model):
         """
         # Flatten last two dims of z.
         z_shape = tf.shape(z)
-        z = tf.reshape(tf.cast(z, tf.float32), shape=(z_shape[0], -1))
+        z = tf.reshape(z, shape=(z_shape[0], -1))
         out = tf.concat([z, a], axis=-1)
         # Pass through pre-GRU layer.
         out = self.pre_gru_layer(out)

@@ -48,10 +48,16 @@ class ActorNetwork(tf.keras.Model):
         # The EMA decay variables used for the [Percentile(R, 95%) - Percentile(R, 5%)]
         # diff to scale value targets for the actor loss.
         self.ema_value_target_pct5 = tf.Variable(
-            np.nan, dtype=tf.float32, trainable=False, name="value_target_pct5"
+            np.nan,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+            trainable=False,
+            name="value_target_pct5",
         )
         self.ema_value_target_pct95 = tf.Variable(
-            np.nan, dtype=tf.float32, trainable=False, name="value_target_pct95"
+            np.nan,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+            trainable=False,
+            name="value_target_pct95",
         )
 
         # For discrete actions, use a single MLP that computes logits.
@@ -94,7 +100,7 @@ class ActorNetwork(tf.keras.Model):
         # Flatten last two dims of z.
         assert len(z.shape) == 3
         z_shape = tf.shape(z)
-        z = tf.reshape(tf.cast(z, tf.float32), shape=(z_shape[0], -1))
+        z = tf.reshape(z, shape=(z_shape[0], -1))
         assert len(z.shape) == 2
         out = tf.concat([h, z], axis=-1)
         # Send h-cat-z through MLP.
@@ -119,9 +125,10 @@ class ActorNetwork(tf.keras.Model):
             distr_params = action_logits
             distr = self.get_action_dist_object(distr_params)
 
-            action = tf.cast(tf.stop_gradient(distr.sample()), tf.float32) + (
-                action_probs - tf.stop_gradient(action_probs)
-            )
+            action = tf.cast(
+                tf.stop_gradient(distr.sample()),
+                tf.keras.mixed_precision.global_policy().compute_dtype,
+            ) + (action_probs - tf.stop_gradient(action_probs))
 
         elif isinstance(self.action_space, Box):
             # Send h-cat-z through MLP to compute stddev logits for Normal dist
