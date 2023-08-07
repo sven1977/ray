@@ -49,13 +49,11 @@ class ActorNetwork(tf.keras.Model):
         # diff to scale value targets for the actor loss.
         self.ema_value_target_pct5 = tf.Variable(
             np.nan,
-            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
             trainable=False,
             name="value_target_pct5",
         )
         self.ema_value_target_pct95 = tf.Variable(
             np.nan,
-            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
             trainable=False,
             name="value_target_pct95",
         )
@@ -86,7 +84,7 @@ class ActorNetwork(tf.keras.Model):
         else:
             raise ValueError(f"Invalid action space: {action_space}")
 
-    @tf.function
+    #@tf.function
     def call(self, h, z, return_distr_params=False):
         """Performs a forward pass through this policy network.
 
@@ -104,7 +102,7 @@ class ActorNetwork(tf.keras.Model):
         assert len(z.shape) == 2
         out = tf.concat([h, z], axis=-1)
         # Send h-cat-z through MLP.
-        action_logits = self.mlp(out)
+        action_logits = tf.cast(self.mlp(out), tf.float32)
 
         if isinstance(self.action_space, Discrete):
             action_probs = tf.nn.softmax(action_logits)
@@ -125,14 +123,13 @@ class ActorNetwork(tf.keras.Model):
             distr_params = action_logits
             distr = self.get_action_dist_object(distr_params)
 
-            action = tf.cast(
-                tf.stop_gradient(distr.sample()),
-                tf.keras.mixed_precision.global_policy().compute_dtype,
-            ) + (action_probs - tf.stop_gradient(action_probs))
+            action = tf.cast(tf.stop_gradient(distr.sample()), tf.float32) + (
+                action_probs - tf.stop_gradient(action_probs)
+            )
 
         elif isinstance(self.action_space, Box):
             # Send h-cat-z through MLP to compute stddev logits for Normal dist
-            std_logits = self.std_mlp(out)
+            std_logits = tf.cast(self.std_mlp(out), tf.float32)
             # minstd, maxstd taken from [1] from configs.yaml
             minstd = 0.1
             maxstd = 1.0

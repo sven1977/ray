@@ -87,7 +87,7 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
         """
         # Compute the `num_buckets` weights.
         assert len(inputs.shape) == 2
-        logits = self.reward_buckets_layer(inputs)
+        logits = tf.cast(self.reward_buckets_layer(inputs), tf.float32)
         # out=[B, `num_buckets`]
 
         # Compute the expected(!) reward using the formula:
@@ -97,13 +97,10 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
         # [2]: "The mean of the reward predictor pφ(ˆrt | zˆt) is used as reward
         # sequence rˆ1:H."
         probs = tf.nn.softmax(logits)
-        possible_outcomes = tf.cast(
-            tf.linspace(
-                self.lower_bound,
-                self.upper_bound,
-                self.num_buckets,
-            ),
-            tf.keras.mixed_precision.global_policy().compute_dtype,
+        possible_outcomes = tf.linspace(
+            self.lower_bound,
+            self.upper_bound,
+            self.num_buckets,
         )
         # probs=possible_outcomes=[B, `num_buckets`]
 

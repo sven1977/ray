@@ -55,16 +55,11 @@ class ContinuePredictor(tf.keras.Model):
         # Remove the extra [B, 1] dimension at the end to get a proper Bernoulli
         # distribution. Otherwise, tfp will think that the batch dims are [B, 1]
         # where they should be just [B].
-        logits = tf.squeeze(out, axis=-1)
+        logits = tf.cast(tf.squeeze(out, axis=-1), tf.float32)
         # Create the Bernoulli distribution object.
-        bernoulli = tfp.distributions.Bernoulli(
-            logits=logits,
-            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
-        )
+        bernoulli = tfp.distributions.Bernoulli(logits=logits, dtype=tf.float32)
 
-        # TODO: Draw a sample?
-        # continue_ = bernoulli.sample()
-        # OR: Take the mode (greedy, deterministic "sample").
+        # Take the mode (greedy, deterministic "sample").
         continue_ = bernoulli.mode()
 
         # Return Bernoulli sample (whether to continue) OR (continue?, Bernoulli prob).

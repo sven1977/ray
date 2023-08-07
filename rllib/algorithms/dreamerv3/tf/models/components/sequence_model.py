@@ -71,7 +71,6 @@ class SequenceModel(tf.keras.Model):
             return_sequences=False,
             return_state=False,
             time_major=True,
-            dtype=self.dtype,
             # Note: Changing these activations is most likely a bad idea!
             # In experiments, setting one of both of them to silu deteriorated
             # performance significantly.

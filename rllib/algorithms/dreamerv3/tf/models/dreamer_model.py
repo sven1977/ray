@@ -69,7 +69,7 @@ class DreamerModel(tf.keras.Model):
                 intrinsic_rewards_scale=intrinsic_rewards_scale,
             )
 
-    @tf.function
+    #@tf.function
     def call(
         self,
         inputs,
@@ -133,7 +133,7 @@ class DreamerModel(tf.keras.Model):
             "values_ema": values_ema,
         }
 
-    @tf.function
+    #@tf.function
     def forward_inference(self, observations, previous_states, is_first, training=None):
         """Performs a (non-exploring) action computation step given obs and states.
 
@@ -165,7 +165,7 @@ class DreamerModel(tf.keras.Model):
         actions = distr.mode()
         return actions, {"h": states["h"], "z": states["z"], "a": actions}
 
-    @tf.function
+    #@tf.function
     def forward_exploration(
         self, observations, previous_states, is_first, training=None
     ):
@@ -194,7 +194,7 @@ class DreamerModel(tf.keras.Model):
         actions = self.actor(h=states["h"], z=states["z"])
         return actions, {"h": states["h"], "z": states["z"], "a": actions}
 
-    @tf.function
+    #@tf.function
     def forward_train(self, observations, actions, is_first, training=None):
         """Performs a training forward pass given observations and actions.
 
@@ -223,7 +223,7 @@ class DreamerModel(tf.keras.Model):
             is_first=is_first,
         )
 
-    @tf.function
+    #@tf.function
     def get_initial_state(self):
         """Returns the (current) initial state of the dreamer model (a, h-, z-states).
 
@@ -249,7 +249,7 @@ class DreamerModel(tf.keras.Model):
         )
         return states
 
-    @tf.function
+    #@tf.function
     def dream_trajectory(
         self, *, start_states, start_is_terminated, timesteps_H, gamma
     ):
@@ -296,7 +296,7 @@ class DreamerModel(tf.keras.Model):
             z=tf.stop_gradient(z),
             return_distr_params=True,
         )
-        a_dreamed_t0_to_H.append(a)
+        a_dreamed_t0_to_H.append(tf.cast(a, self.world_model._comp_dtype))
         a_dreamed_dist_params_t0_to_H.append(a_dist_params)
 
         for i in range(timesteps_H):
@@ -314,7 +314,7 @@ class DreamerModel(tf.keras.Model):
                 z=tf.stop_gradient(z),
                 return_distr_params=True,
             )
-            a_dreamed_t0_to_H.append(a)
+            a_dreamed_t0_to_H.append(tf.cast(a, self.world_model._comp_dtype))
             a_dreamed_dist_params_t0_to_H.append(a_dist_params)
 
         h_states_H_B = tf.stack(h_states_t0_to_H, axis=0)  # (T, B, ...)
@@ -330,9 +330,9 @@ class DreamerModel(tf.keras.Model):
 
         # Compute r using reward predictor.
         r_dreamed_H_B = tf.reshape(
-            inverse_symlog(
+            tf.cast(inverse_symlog(
                 self.world_model.reward_predictor(h=h_states_HxB, z=z_states_prior_HxB)
-            ),
+            ), self.world_model._comp_dtype),
             shape=[timesteps_H + 1, -1],
         )
 
@@ -359,7 +359,10 @@ class DreamerModel(tf.keras.Model):
             h=h_states_HxB,
             z=z_states_prior_HxB,
         )
-        c_dreamed_H_B = tf.reshape(c_dreamed_HxB, [timesteps_H + 1, -1])
+        c_dreamed_H_B = tf.reshape(tf.cast(
+            c_dreamed_HxB,
+            self.world_model._comp_dtype,
+        ), [timesteps_H + 1, -1])
         # Force-set first `continue` flags to False iff `start_is_terminated`.
         # Note: This will cause the loss-weights for this row in the batch to be
         # completely zero'd out. In general, we don't use dreamed data past any
@@ -400,9 +403,6 @@ class DreamerModel(tf.keras.Model):
             "rewards_dreamed_t0_to_H_BxT": r_dreamed_H_B,
             "continues_dreamed_t0_to_H_BxT": c_dreamed_H_B,
             "actions_dreamed_t0_to_H_BxT": a_dreamed_H_B,
-            # "actions_dreamed_distributions_t0_to_H_BxT": (
-            #    a_dreamed_distributions_t0_to_H
-            # ),
             "actions_dreamed_dist_params_t0_to_H_BxT": a_dreamed_dist_params_H_B,
             "values_dreamed_t0_to_H_BxT": v_dreamed_H_B,
             "values_symlog_dreamed_logits_t0_to_HxBxT": v_symlog_dreamed_logits_HxB,
@@ -420,7 +420,7 @@ class DreamerModel(tf.keras.Model):
 
         return ret
 
-    @tf.function
+    #@tf.function
     def dream_trajectory_with_burn_in(
         self,
         *,
@@ -501,7 +501,11 @@ class DreamerModel(tf.keras.Model):
             elif use_random_actions_in_dream:
                 if isinstance(self.action_space, gym.spaces.Discrete):
                     a = tf.random.randint((B,), 0, self.action_space.n, tf.int64)
-                    a = tf.one_hot(a, depth=self.action_space.n)
+                    a = tf.one_hot(
+                        a,
+                        depth=self.action_space.n,
+                        dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+                    )
                 # TODO: Support cont. action spaces with bound other than 0.0 and 1.0.
                 else:
                     a = tf.random.uniform(

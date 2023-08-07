@@ -10,6 +10,8 @@ https://arxiv.org/pdf/2010.02193.pdf
 from typing import Any, Dict, Mapping, Tuple
 
 import gymnasium as gym
+import numpy as np
+import tree  # pip install dm_tree
 
 from ray.rllib.algorithms.dreamerv3.dreamerv3_learner import (
     DreamerV3Learner,
@@ -115,11 +117,21 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                 if optimizer_name == "actor"
                 else hps.critic_grad_clip_by_global_norm
             )
+            if hps.np_dtype == np.float16:
+                grads_sub_dict = tree.map_structure(
+                    lambda v: tf.cast(v, tf.float32),
+                    grads_sub_dict,
+                )
             global_norm = clip_gradients(
                 grads_sub_dict,
                 grad_clip=grad_clip,
                 grad_clip_by="global_norm",
             )
+            if hps.np_dtype == np.float16:
+                grads_sub_dict = tree.map_structure(
+                    lambda v: tf.cast(v, tf.float16),
+                    grads_sub_dict,
+                )
             module_gradients_dict.update(grads_sub_dict)
 
             # DreamerV3 stats have the format: [WORLD_MODEL|ACTOR|CRITIC]_[stats name].
@@ -177,7 +189,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         prediction_losses = self._compute_world_model_prediction_losses(
             hps=hps,
             rewards_B_T=batch[SampleBatch.REWARDS],
-            continues_B_T=(1.0 - batch["is_terminated"]),
+            continues_B_T=(1.0 - tf.cast(batch["is_terminated"], tf.float32)),
             fwd_out=fwd_out,
         )
 
@@ -370,7 +382,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         # [B x num_buckets].
         reward_logits_BxT = fwd_out["reward_logits_BxT"]
         # Learn to produce symlog'd reward predictions.
-        rewards_symlog_B_T = symlog(rewards_B_T)
+        rewards_symlog_B_T = symlog(tf.cast(rewards_B_T, tf.float32))
         # Fold time dim.
         rewards_symlog_BxT = tf.reshape(rewards_symlog_B_T, shape=[-1])
 
@@ -644,10 +656,16 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
 
         # From here on: B=BxT
         value_targets_t0_to_Hm1_B = tf.stop_gradient(value_targets_t0_to_Hm1_BxT)
-        value_symlog_targets_t0_to_Hm1_B = symlog(value_targets_t0_to_Hm1_B)
+        value_symlog_targets_t0_to_Hm1_B = symlog(
+            value_targets_t0_to_Hm1_B,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+        )
         # Fold time rank (for two_hot'ing).
         value_symlog_targets_HxB = tf.reshape(value_symlog_targets_t0_to_Hm1_B, (-1,))
-        value_symlog_targets_two_hot_HxB = two_hot(value_symlog_targets_HxB)
+        value_symlog_targets_two_hot_HxB = two_hot(
+            value_symlog_targets_HxB,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+        )
         # Unfold time rank.
         value_symlog_targets_two_hot_t0_to_Hm1_B = tf.reshape(
             value_symlog_targets_two_hot_HxB,
@@ -681,7 +699,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         )[:-1]
         # Fold time rank (for two_hot'ing).
         value_symlog_ema_HxB = tf.reshape(value_symlog_ema_t0_to_Hm1_B, (-1,))
-        value_symlog_ema_two_hot_HxB = two_hot(value_symlog_ema_HxB)
+        value_symlog_ema_two_hot_HxB = two_hot(
+            value_symlog_ema_HxB,
+            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
+        )
         # Unfold time rank.
         value_symlog_ema_two_hot_t0_to_Hm1_B = tf.reshape(
             value_symlog_ema_two_hot_HxB,
@@ -872,10 +893,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         actor.ema_value_target_pct95.assign(new_val_pct95)
 
         # [1] eq. 11 (first term).
-        # Danijar's code: TODO: describe ...
         offset = actor.ema_value_target_pct5
         invscale = tf.math.maximum(
-            1e-8, (actor.ema_value_target_pct95 - actor.ema_value_target_pct5)
+            tf.cast(1e-8, tf.keras.mixed_precision.global_policy().compute_dtype),
+            actor.ema_value_target_pct95 - actor.ema_value_target_pct5
         )
         scaled_value_targets_H_B = (value_targets_H_B - offset) / invscale
         scaled_value_predictions_H_B = (value_predictions_H_B - offset) / invscale

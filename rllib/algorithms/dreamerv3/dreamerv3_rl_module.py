@@ -42,8 +42,8 @@ class DreamerV3RLModule(RLModule, abc.ABC):
         model_size = self.config.model_config_dict["model_size"]
 
         if self.config.model_config_dict["np_dtype"] == np.float16:
-            #tf.config.
-            tf.keras.mixed_precision.set_global_policy("float16")
+            tf.compat.v1.keras.layers.enable_v2_dtype_behavior()
+            tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
         # Build encoder and decoder from catalog.
         catalog = self.config.get_catalog()
@@ -99,10 +99,18 @@ class DreamerV3RLModule(RLModule, abc.ABC):
             )
 
         self.dreamer_model(
-            inputs=_convert_to_tf(test_obs, self.config.model_config_dict["dl_dtype"]),
-            actions=_convert_to_tf(test_actions, self.config.model_config_dict["dl_dtype"]),
-            is_first=_convert_to_tf(np.ones((B, T), self.config.model_config_dict["dl_dtype"])),
-            start_is_terminated_BxT=_convert_to_tf(np.zeros((B * T,), self.config.model_config_dict["dl_dtype"])),
+            inputs=_convert_to_tf(
+                test_obs, self.config.model_config_dict["dl_dtype"]
+            ),
+            actions=_convert_to_tf(
+                test_actions, self.config.model_config_dict["dl_dtype"]
+            ),
+            is_first=_convert_to_tf(
+                np.ones((B, T)), self.config.model_config_dict["dl_dtype"]
+            ),
+            start_is_terminated_BxT=_convert_to_tf(
+                np.zeros((B * T,)), self.config.model_config_dict["dl_dtype"]
+            ),
             horizon_H=horizon_H,
             gamma=gamma,
         )
