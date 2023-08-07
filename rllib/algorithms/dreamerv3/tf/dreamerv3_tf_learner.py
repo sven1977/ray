@@ -10,8 +10,6 @@ https://arxiv.org/pdf/2010.02193.pdf
 from typing import Any, Dict, Mapping, Tuple
 
 import gymnasium as gym
-import numpy as np
-import tree  # pip install dm_tree
 
 from ray.rllib.algorithms.dreamerv3.dreamerv3_learner import (
     DreamerV3Learner,
@@ -117,21 +115,11 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                 if optimizer_name == "actor"
                 else hps.critic_grad_clip_by_global_norm
             )
-            if hps.np_dtype == np.float16:
-                grads_sub_dict = tree.map_structure(
-                    lambda v: tf.cast(v, tf.float32),
-                    grads_sub_dict,
-                )
             global_norm = clip_gradients(
                 grads_sub_dict,
                 grad_clip=grad_clip,
                 grad_clip_by="global_norm",
             )
-            if hps.np_dtype == np.float16:
-                grads_sub_dict = tree.map_structure(
-                    lambda v: tf.cast(v, tf.float16),
-                    grads_sub_dict,
-                )
             module_gradients_dict.update(grads_sub_dict)
 
             # DreamerV3 stats have the format: [WORLD_MODEL|ACTOR|CRITIC]_[stats name].
@@ -338,8 +326,8 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
 
         Args:
             hps: The DreamerV3LearnerHyperparameters to use.
-            rewards_B_T: The rewards batch in the shape (B, T) and of type float.
-            continues_B_T: The continues batch in the shape (B, T) and of type float
+            rewards_B_T: The rewards batch in the shape (B, T) and of type float32.
+            continues_B_T: The continues batch in the shape (B, T) and of type float32
                 (1.0 -> continue; 0.0 -> end of episode).
             fwd_out: The `forward_train` outputs of the DreamerV3RLModule.
         """
@@ -656,16 +644,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
 
         # From here on: B=BxT
         value_targets_t0_to_Hm1_B = tf.stop_gradient(value_targets_t0_to_Hm1_BxT)
-        value_symlog_targets_t0_to_Hm1_B = symlog(
-            value_targets_t0_to_Hm1_B,
-            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
-        )
+        value_symlog_targets_t0_to_Hm1_B = symlog(value_targets_t0_to_Hm1_B)
         # Fold time rank (for two_hot'ing).
         value_symlog_targets_HxB = tf.reshape(value_symlog_targets_t0_to_Hm1_B, (-1,))
-        value_symlog_targets_two_hot_HxB = two_hot(
-            value_symlog_targets_HxB,
-            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
-        )
+        value_symlog_targets_two_hot_HxB = two_hot(value_symlog_targets_HxB)
         # Unfold time rank.
         value_symlog_targets_two_hot_t0_to_Hm1_B = tf.reshape(
             value_symlog_targets_two_hot_HxB,
@@ -699,10 +681,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         )[:-1]
         # Fold time rank (for two_hot'ing).
         value_symlog_ema_HxB = tf.reshape(value_symlog_ema_t0_to_Hm1_B, (-1,))
-        value_symlog_ema_two_hot_HxB = two_hot(
-            value_symlog_ema_HxB,
-            dtype=tf.keras.mixed_precision.global_policy().compute_dtype,
-        )
+        value_symlog_ema_two_hot_HxB = two_hot(value_symlog_ema_HxB)
         # Unfold time rank.
         value_symlog_ema_two_hot_t0_to_Hm1_B = tf.reshape(
             value_symlog_ema_two_hot_HxB,
@@ -847,10 +826,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             hps: The DreamerV3LearnerHyperparameters to use.
             value_targets_t0_to_Hm1_BxT: The value targets computed by
                 `self._compute_value_targets` in the shape of (t0 to H-1, BxT)
-                and of type float.
+                and of type float32.
             value_predictions_t0_to_Hm1_BxT: The critic's value predictions over the
                 dreamed trajectories (w/o the last timestep). The shape of this
-                tensor is (t0 to H-1, BxT) and the type is float.
+                tensor is (t0 to H-1, BxT) and the type is float32.
 
         Returns:
             The scaled value targets used by the actor for REINFORCE policy updates
@@ -895,7 +874,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         # [1] eq. 11 (first term).
         offset = actor.ema_value_target_pct5
         invscale = tf.math.maximum(
-            tf.cast(1e-8, tf.keras.mixed_precision.global_policy().compute_dtype),
+            1e-8,
             actor.ema_value_target_pct95 - actor.ema_value_target_pct5
         )
         scaled_value_targets_H_B = (value_targets_H_B - offset) / invscale
