@@ -296,7 +296,7 @@ class DreamerModel(tf.keras.Model):
             z=tf.stop_gradient(z),
             return_distr_params=True,
         )
-        a_dreamed_t0_to_H.append(tf.cast(a, self.world_model._comp_dtype))
+        a_dreamed_t0_to_H.append(a)
         a_dreamed_dist_params_t0_to_H.append(a_dist_params)
 
         for i in range(timesteps_H):
@@ -314,7 +314,7 @@ class DreamerModel(tf.keras.Model):
                 z=tf.stop_gradient(z),
                 return_distr_params=True,
             )
-            a_dreamed_t0_to_H.append(tf.cast(a, self.world_model._comp_dtype))
+            a_dreamed_t0_to_H.append(a)
             a_dreamed_dist_params_t0_to_H.append(a_dist_params)
 
         h_states_H_B = tf.stack(h_states_t0_to_H, axis=0)  # (T, B, ...)
@@ -330,9 +330,9 @@ class DreamerModel(tf.keras.Model):
 
         # Compute r using reward predictor.
         r_dreamed_H_B = tf.reshape(
-            tf.cast(inverse_symlog(
+            inverse_symlog(
                 self.world_model.reward_predictor(h=h_states_HxB, z=z_states_prior_HxB)
-            ), self.world_model._comp_dtype),
+            ),
             shape=[timesteps_H + 1, -1],
         )
 
@@ -359,16 +359,16 @@ class DreamerModel(tf.keras.Model):
             h=h_states_HxB,
             z=z_states_prior_HxB,
         )
-        c_dreamed_H_B = tf.reshape(tf.cast(
-            c_dreamed_HxB,
-            self.world_model._comp_dtype,
-        ), [timesteps_H + 1, -1])
+        c_dreamed_H_B = tf.reshape(c_dreamed_HxB, [timesteps_H + 1, -1])
         # Force-set first `continue` flags to False iff `start_is_terminated`.
         # Note: This will cause the loss-weights for this row in the batch to be
         # completely zero'd out. In general, we don't use dreamed data past any
         # predicted (or actual first) continue=False flags.
         c_dreamed_H_B = tf.concat(
-            [1.0 - tf.expand_dims(start_is_terminated, 0), c_dreamed_H_B[1:]],
+            [1.0 - tf.expand_dims(
+                tf.cast(start_is_terminated, tf.float32),
+                0,
+            ), c_dreamed_H_B[1:]],
             axis=0,
         )
 
