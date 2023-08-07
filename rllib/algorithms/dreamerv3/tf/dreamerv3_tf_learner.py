@@ -874,8 +874,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         # [1] eq. 11 (first term).
         offset = actor.ema_value_target_pct5
         invscale = tf.math.maximum(
-            1e-8,
-            actor.ema_value_target_pct95 - actor.ema_value_target_pct5
+            1e-8, actor.ema_value_target_pct95 - actor.ema_value_target_pct5
         )
         scaled_value_targets_H_B = (value_targets_H_B - offset) / invscale
         scaled_value_predictions_H_B = (value_predictions_H_B - offset) / invscale

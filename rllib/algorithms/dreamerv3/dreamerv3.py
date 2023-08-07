@@ -610,12 +610,6 @@ class DreamerV3(Algorithm):
                 replayed_steps = self.config.batch_size_B * self.config.batch_length_T
                 replayed_steps_this_iter += replayed_steps
 
-                # Convert some bool columns to float and one-hot actions.
-                #sample["is_first"] = sample["is_first"].astype(self.config.np_dtype)
-                #sample["is_last"] = sample["is_last"].astype(self.config.np_dtype)
-                #sample["is_terminated"] = sample["is_terminated"].astype(
-                #    self.config.np_dtype
-                #)
                 if isinstance(env_runner.env.single_action_space, gym.spaces.Discrete):
                     sample["actions_ints"] = sample[SampleBatch.ACTIONS]
                     sample[SampleBatch.ACTIONS] = one_hot(

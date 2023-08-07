@@ -318,7 +318,9 @@ def _report_continues(
     descr_prefix = (descr_prefix + "_") if descr_prefix else ""
     # Continue MSE.
     mse_sampled_vs_computed_continues = np.mean(
-        np.square(computed_continues - sampled_continues.astype(computed_continues.dtype))
+        np.square(
+            computed_continues - sampled_continues.astype(computed_continues.dtype)
+        )
     )
     results.update(
         {

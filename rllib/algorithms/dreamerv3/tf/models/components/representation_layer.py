@@ -114,10 +114,6 @@ class RepresentationLayer(tf.keras.layers.Layer):
 
         # Draw a one-hot sample (B, num_categoricals, num_classes).
         sample = tf.cast(distribution.sample(), tf.float32)
-        #tf.cast(
-        #    distribution.sample(),
-        #    tf.keras.mixed_precision.global_policy().compute_dtype,
-        #)
         # Make sure we can take gradients "straight-through" the sampling step
         # by adding the probs and subtracting the sg(probs). Note that `sample`
         # does not have any gradients as it's the result of a Categorical sample step,
@@ -125,9 +121,10 @@ class RepresentationLayer(tf.keras.layers.Layer):
         # [1] "The representations are sampled from a vector of softmax distributions
         # and we take straight-through gradients through the sampling step."
         # [2] Algorithm 1.
-        differentiable_sample = tf.cast((
-            tf.stop_gradient(sample) + probs - tf.stop_gradient(probs)
-        ), tf.keras.mixed_precision.global_policy().compute_dtype)
+        differentiable_sample = tf.cast(
+            (tf.stop_gradient(sample) + probs - tf.stop_gradient(probs)),
+            tf.keras.mixed_precision.global_policy().compute_dtype,
+        )
         if return_z_probs:
             return differentiable_sample, probs
         return differentiable_sample

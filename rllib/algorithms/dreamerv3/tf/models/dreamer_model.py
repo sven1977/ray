@@ -69,7 +69,7 @@ class DreamerModel(tf.keras.Model):
                 intrinsic_rewards_scale=intrinsic_rewards_scale,
             )
 
-    #@tf.function
+    @tf.function
     def call(
         self,
         inputs,
@@ -133,7 +133,7 @@ class DreamerModel(tf.keras.Model):
             "values_ema": values_ema,
         }
 
-    #@tf.function
+    @tf.function
     def forward_inference(self, observations, previous_states, is_first, training=None):
         """Performs a (non-exploring) action computation step given obs and states.
 
@@ -165,7 +165,7 @@ class DreamerModel(tf.keras.Model):
         actions = distr.mode()
         return actions, {"h": states["h"], "z": states["z"], "a": actions}
 
-    #@tf.function
+    @tf.function
     def forward_exploration(
         self, observations, previous_states, is_first, training=None
     ):
@@ -194,7 +194,7 @@ class DreamerModel(tf.keras.Model):
         actions = self.actor(h=states["h"], z=states["z"])
         return actions, {"h": states["h"], "z": states["z"], "a": actions}
 
-    #@tf.function
+    @tf.function
     def forward_train(self, observations, actions, is_first, training=None):
         """Performs a training forward pass given observations and actions.
 
@@ -223,7 +223,7 @@ class DreamerModel(tf.keras.Model):
             is_first=is_first,
         )
 
-    #@tf.function
+    @tf.function
     def get_initial_state(self):
         """Returns the (current) initial state of the dreamer model (a, h-, z-states).
 
@@ -249,7 +249,7 @@ class DreamerModel(tf.keras.Model):
         )
         return states
 
-    #@tf.function
+    @tf.function
     def dream_trajectory(
         self, *, start_states, start_is_terminated, timesteps_H, gamma
     ):
@@ -365,10 +365,14 @@ class DreamerModel(tf.keras.Model):
         # completely zero'd out. In general, we don't use dreamed data past any
         # predicted (or actual first) continue=False flags.
         c_dreamed_H_B = tf.concat(
-            [1.0 - tf.expand_dims(
-                tf.cast(start_is_terminated, tf.float32),
-                0,
-            ), c_dreamed_H_B[1:]],
+            [
+                1.0
+                - tf.expand_dims(
+                    tf.cast(start_is_terminated, tf.float32),
+                    0,
+                ),
+                c_dreamed_H_B[1:],
+            ],
             axis=0,
         )
 
@@ -420,7 +424,7 @@ class DreamerModel(tf.keras.Model):
 
         return ret
 
-    #@tf.function
+    @tf.function
     def dream_trajectory_with_burn_in(
         self,
         *,

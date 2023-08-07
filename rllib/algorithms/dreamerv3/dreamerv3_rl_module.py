@@ -99,9 +99,7 @@ class DreamerV3RLModule(RLModule, abc.ABC):
             )
 
         self.dreamer_model(
-            inputs=_convert_to_tf(
-                test_obs, self.config.model_config_dict["dl_dtype"]
-            ),
+            inputs=_convert_to_tf(test_obs, self.config.model_config_dict["dl_dtype"]),
             actions=_convert_to_tf(
                 test_actions, self.config.model_config_dict["dl_dtype"]
             ),

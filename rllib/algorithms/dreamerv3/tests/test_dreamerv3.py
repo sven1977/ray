@@ -47,13 +47,11 @@ class TestDreamerV3(unittest.TestCase):
                 model_size="nano",  # Use a tiny model for testing
                 symlog_obs=True,
                 use_float16=True,
-                world_model_grad_clip_by_global_norm=10.0,#TODO:
             )
             .resources(
-                num_learner_workers=0,
-                #num_learner_workers=2,  # Try with 2 Learners.
-                #num_cpus_per_learner_worker=1,
-                #num_gpus_per_learner_worker=0,
+                num_learner_workers=2,  # Try with 2 Learners.
+                num_cpus_per_learner_worker=1,
+                num_gpus_per_learner_worker=0,
             )
         )
 
