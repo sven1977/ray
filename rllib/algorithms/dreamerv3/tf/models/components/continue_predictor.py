@@ -24,15 +24,20 @@ class ContinuePredictor(tf.keras.Model):
     terminal.
     """
 
-    def __init__(self, *, model_size: Optional[str] = "XS"):
+    def __init__(self, *, input_size: int, model_size: Optional[str] = "XS"):
         """Initializes a ContinuePredictor instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Determines the exact size of the underlying MLP.
         """
         super().__init__(name="continue_predictor")
-        self.mlp = MLP(model_size=model_size, output_layer_size=1)
+        self.mlp = MLP(
+            input_size=input_size,
+            model_size=model_size,
+            output_layer_size=1,
+        )
 
     def call(self, h, z, return_distribution=False):
         """Performs a forward pass through the continue predictor.

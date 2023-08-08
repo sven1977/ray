@@ -23,12 +23,14 @@ class VectorDecoder(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         observation_space: gym.Space,
     ):
         """Initializes a VectorDecoder instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Determines the exact size of the underlying MLP.
             observation_space: The observation space to decode back into. This must
@@ -42,6 +44,7 @@ class VectorDecoder(tf.keras.Model):
         )
 
         self.mlp = MLP(
+            input_size=input_size,
             model_size=model_size,
             output_layer_size=observation_space.shape[0],
         )

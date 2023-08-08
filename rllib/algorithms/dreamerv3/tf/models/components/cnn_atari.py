@@ -40,9 +40,11 @@ class CNNAtari(tf.keras.Model):
         # SiLU as the activation function. For better framework support, we use
         # same-padded convolutions with stride 2 and kernel size 3 instead of
         # valid-padded convolutions with larger kernels ..."
-        # HOWEVER: In Danijar's DreamerV3 repo, kernel size=4 is used, so we use it
+        # HOWEVER: In author's DreamerV3 repo, kernel size=4 is used, so we use it
         # here, too.
-        self.conv_layers = [
+        layers = [
+            tf.keras.layers.Input((64, 64, 3)),
+
             tf.keras.layers.Conv2D(
                 filters=1 * cnn_multiplier,
                 kernel_size=4,
@@ -52,6 +54,9 @@ class CNNAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
+
             tf.keras.layers.Conv2D(
                 filters=2 * cnn_multiplier,
                 kernel_size=4,
@@ -61,6 +66,9 @@ class CNNAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
+
             tf.keras.layers.Conv2D(
                 filters=4 * cnn_multiplier,
                 kernel_size=4,
@@ -70,6 +78,9 @@ class CNNAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
+
             # .. until output is 4 x 4 x [num_filters].
             tf.keras.layers.Conv2D(
                 filters=8 * cnn_multiplier,
@@ -80,12 +91,14 @@ class CNNAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
+
+            # -> 4 x 4 x num_filters -> now flatten.
+            tf.keras.layers.Flatten(data_format="channels_last"),
         ]
-        self.layer_normalizations = []
-        for _ in range(len(self.conv_layers)):
-            self.layer_normalizations.append(tf.keras.layers.LayerNormalization())
-        # -> 4 x 4 x num_filters -> now flatten.
-        self.flatten_layer = tf.keras.layers.Flatten(data_format="channels_last")
+
+        self.net = tf.keras.models.Sequential(layers)
 
     def call(self, inputs):
         """Performs a forward pass through the CNN Atari encoder.
@@ -96,8 +109,4 @@ class CNNAtari(tf.keras.Model):
         # [B, h, w] -> grayscale.
         if len(inputs.shape) == 3:
             inputs = tf.expand_dims(inputs, -1)
-        out = inputs
-        for conv_2d, layer_norm in zip(self.conv_layers, self.layer_normalizations):
-            out = tf.nn.silu(layer_norm(inputs=conv_2d(out)))
-        assert out.shape[1] == 4 and out.shape[2] == 4
-        return self.flatten_layer(out)
+        return self.net(inputs)

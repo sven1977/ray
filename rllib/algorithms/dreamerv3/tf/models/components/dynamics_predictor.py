@@ -9,6 +9,7 @@ from ray.rllib.algorithms.dreamerv3.tf.models.components.mlp import MLP
 from ray.rllib.algorithms.dreamerv3.tf.models.components.representation_layer import (
     RepresentationLayer,
 )
+from ray.rllib.algorithms.dreamerv3.utils import get_dense_hidden_units
 from ray.rllib.utils.framework import try_import_tf
 
 _, tf, _ = try_import_tf()
@@ -27,6 +28,7 @@ class DynamicsPredictor(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         num_categoricals: Optional[int] = None,
         num_classes_per_categorical: Optional[int] = None,
@@ -34,6 +36,7 @@ class DynamicsPredictor(tf.keras.Model):
         """Initializes a DynamicsPredictor instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the different parameters.
             num_categoricals: Overrides the number of categoricals used in the z-states.
@@ -44,16 +47,20 @@ class DynamicsPredictor(tf.keras.Model):
         """
         super().__init__(name="dynamics_predictor")
 
+        self.model_size = model_size
+
         self.mlp = MLP(
-            # TODO: In Danijar's code, the Dynamics Net only has a single layer, no
-            #  matter the model size.
+            input_size=input_size,
+            # In the author's original code, the Dynamics Net only has a single layer,
+            # no matter the model size.
             num_dense_layers=1,
-            model_size=model_size,
+            model_size=self.model_size,
             output_layer_size=None,
         )
         # The (prior) z-state generating layer.
         self.representation_layer = RepresentationLayer(
-            model_size=model_size,
+            input_size=get_dense_hidden_units(self.model_size),
+            model_size=self.model_size,
             num_categoricals=num_categoricals,
             num_classes_per_categorical=num_classes_per_categorical,
         )

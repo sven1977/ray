@@ -3,9 +3,10 @@
 D. Hafner, J. Pasukonis, J. Ba, T. Lillicrap
 https://arxiv.org/pdf/2301.04104v1.pdf
 """
-from typing import Optional
+from typing import Optional, Tuple
 
 import gymnasium as gym
+import numpy as np
 import tree  # pip install dm_tree
 
 from ray.rllib.algorithms.dreamerv3.tf.models.components.continue_predictor import (
@@ -24,7 +25,7 @@ from ray.rllib.algorithms.dreamerv3.tf.models.components.reward_predictor import
 from ray.rllib.algorithms.dreamerv3.tf.models.components.sequence_model import (
     SequenceModel,
 )
-from ray.rllib.algorithms.dreamerv3.utils import get_gru_units
+from ray.rllib.algorithms.dreamerv3.utils import get_dense_hidden_units, get_gru_units
 from ray.rllib.utils.framework import try_import_tf
 from ray.rllib.utils.tf_utils import symlog
 
@@ -59,6 +60,7 @@ class WorldModel(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_shape: Tuple[int],
         model_size: str = "XS",
         action_space: gym.Space,
         batch_length_T: int = 64,
@@ -70,6 +72,7 @@ class WorldModel(tf.keras.Model):
         """Initializes a WorldModel instance.
 
         Args:
+             input_shape: The shape of the observations used as input to the encoder.
              model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the different network sizes.
              action_space: The action space the our environment used.
@@ -108,10 +111,13 @@ class WorldModel(tf.keras.Model):
 
         # Encoder (latent 1D vector generator) (xt -> lt).
         self.encoder = encoder
+        encoder_out_size = int(self.encoder.compute_output_shape(input_shape)[1])
+        h_size = get_gru_units(model_size=self.model_size, override=num_gru_units)
 
         # Posterior predictor consisting of an MLP and a RepresentationLayer:
         # [ht, lt] -> zt.
         self.posterior_mlp = MLP(
+            input_size=encoder_out_size + h_size,
             model_size=self.model_size,
             output_layer_size=None,
             # In Danijar's code, the posterior predictor only has a single layer,
@@ -121,37 +127,51 @@ class WorldModel(tf.keras.Model):
         )
         # The (posterior) z-state generating layer.
         self.posterior_representation_layer = RepresentationLayer(
+            input_size=get_dense_hidden_units(self.model_size),
             model_size=self.model_size,
         )
 
         # Dynamics (prior z-state) predictor: ht -> z^t
-        self.dynamics_predictor = DynamicsPredictor(model_size=self.model_size)
+        self.dynamics_predictor = DynamicsPredictor(
+            input_size=h_size,
+            model_size=self.model_size,
+        )
+        z_size = int(np.prod(
+            self.dynamics_predictor.compute_output_shape((None, h_size))[1:]
+        ))
 
         # GRU for the RSSM: [at, ht, zt] -> ht+1
-        self.num_gru_units = get_gru_units(
-            model_size=self.model_size,
-            override=num_gru_units,
-        )
         # Initial h-state variable (learnt).
         # -> tanh(self.initial_h) -> deterministic state
         # Use our Dynamics predictor for initial stochastic state, BUT with greedy
         # (mode) instead of sampling.
         self.initial_h = tf.Variable(
-            tf.zeros(shape=(self.num_gru_units,), dtype=tf.float32),
+            tf.zeros(shape=(h_size,), dtype=tf.float32),
             trainable=True,
             name="initial_h",
         )
         # The actual sequence model containing the GRU layer.
+        a_size = (
+            self.action_space.n if isinstance(self.action_space, gym.spaces.Discrete)
+            else int(np.prod(self.action_space.shape))
+        )
         self.sequence_model = SequenceModel(
+            input_size=a_size + z_size,
             model_size=self.model_size,
             action_space=self.action_space,
-            num_gru_units=self.num_gru_units,
+            num_gru_units=h_size,
         )
 
         # Reward Predictor: [ht, zt] -> rt.
-        self.reward_predictor = RewardPredictor(model_size=self.model_size)
+        self.reward_predictor = RewardPredictor(
+            input_size=h_size + z_size,
+            model_size=self.model_size,
+        )
         # Continue Predictor: [ht, zt] -> ct.
-        self.continue_predictor = ContinuePredictor(model_size=self.model_size)
+        self.continue_predictor = ContinuePredictor(
+            input_size=h_size + z_size,
+            model_size=self.model_size,
+        )
 
         # Decoder: [ht, zt] -> x^t.
         self.decoder = decoder

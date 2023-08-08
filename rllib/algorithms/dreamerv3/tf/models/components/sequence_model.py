@@ -8,7 +8,7 @@ from typing import Optional
 import gymnasium as gym
 
 from ray.rllib.algorithms.dreamerv3.tf.models.components.mlp import MLP
-from ray.rllib.algorithms.dreamerv3.utils import get_gru_units
+from ray.rllib.algorithms.dreamerv3.utils import get_dense_hidden_units, get_gru_units
 from ray.rllib.utils.framework import try_import_tf
 
 _, tf, _ = try_import_tf()
@@ -39,6 +39,7 @@ class SequenceModel(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         action_space: gym.Space,
         num_gru_units: Optional[int] = None,
@@ -46,6 +47,7 @@ class SequenceModel(tf.keras.Model):
         """Initializes a SequenceModel instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the number of GRU units used.
             action_space: The action space the our environment used.
@@ -62,6 +64,7 @@ class SequenceModel(tf.keras.Model):
         # prior to the GRU (but always only with 1 layer), which is not mentioned in
         # the paper.
         self.pre_gru_layer = MLP(
+            input_size=input_size,
             num_dense_layers=1,
             model_size=model_size,
             output_layer_size=None,
@@ -77,6 +80,10 @@ class SequenceModel(tf.keras.Model):
             # activation=tf.nn.silu,
             # recurrent_activation=tf.nn.silu,
         )
+        # Make sure GRU layer is built, so we already create its trainable variables
+        # here. This is not needed for the above MLP b/c it knows its input_size upon
+        # construction.
+        self.gru_unit.build((None, None, get_dense_hidden_units(model_size)))
 
     def call(self, a, h, z):
         """

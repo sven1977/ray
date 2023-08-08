@@ -30,15 +30,17 @@ class ActorNetwork(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         action_space: gym.Space,
     ):
         """Initializes an ActorNetwork instance.
 
         Args:
-             model_size: The "Model Size" used according to [1] Appendinx B.
+            input_size: The size (int) of the input tensor.
+            model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the different network sizes.
-             action_space: The action space the our environment used.
+            action_space: The action space the our environment used.
         """
         super().__init__(name="actor")
 
@@ -57,6 +59,7 @@ class ActorNetwork(tf.keras.Model):
         # For discrete actions, use a single MLP that computes logits.
         if isinstance(self.action_space, Discrete):
             self.mlp = MLP(
+                input_size=input_size,
                 model_size=self.model_size,
                 output_layer_size=self.action_space.n,
                 name="actor_mlp",
@@ -68,11 +71,13 @@ class ActorNetwork(tf.keras.Model):
         elif isinstance(action_space, Box):
             output_layer_size = np.prod(action_space.shape)
             self.mlp = MLP(
+                input_size=input_size,
                 model_size=self.model_size,
                 output_layer_size=output_layer_size,
                 name="actor_mlp_mean",
             )
             self.std_mlp = MLP(
+                input_size=input_size,
                 model_size=self.model_size,
                 output_layer_size=output_layer_size,
                 name="actor_mlp_std",

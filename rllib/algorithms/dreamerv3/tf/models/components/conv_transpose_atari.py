@@ -29,6 +29,7 @@ class ConvTransposeAtari(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         cnn_multiplier: Optional[int] = None,
         gray_scaled: bool,
@@ -36,6 +37,7 @@ class ConvTransposeAtari(tf.keras.Model):
         """Initializes a ConvTransposeAtari instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the `cnn_multiplier`.
             cnn_multiplier: Optional override for the additional factor used to multiply
@@ -59,13 +61,20 @@ class ConvTransposeAtari(tf.keras.Model):
         # See appendix B in [1]:
         # "The decoder starts with a dense layer, followed by reshaping
         # to 4 × 4 × C and then inverts the encoder architecture. ..."
-        self.dense_layer = tf.keras.layers.Dense(
-            units=int(np.prod(self.input_dims)),
-            activation=None,
-            use_bias=True,
-        )
-        # Inverse conv2d stack. See cnn_atari.py for corresponding Conv2D stack.
-        self.conv_transpose_layers = [
+        layers = [
+            tf.keras.layers.Input((input_size,)),
+
+            tf.keras.layers.Dense(
+                units=int(np.prod(self.input_dims)),
+                activation=None,
+                use_bias=True,
+            ),
+
+            # Reshape to image format.
+            tf.keras.layers.Reshape(self.input_dims),
+
+            # Inverse conv2d stack. See cnn_atari.py for corresponding Conv2D stack.
+            # Create one LayerNorm layer for each of the Conv2DTranspose layers.
             tf.keras.layers.Conv2DTranspose(
                 filters=4 * cnn_multiplier,
                 kernel_size=4,
@@ -75,6 +84,9 @@ class ConvTransposeAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
+
             tf.keras.layers.Conv2DTranspose(
                 filters=2 * cnn_multiplier,
                 kernel_size=4,
@@ -84,6 +96,9 @@ class ConvTransposeAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
+
             tf.keras.layers.Conv2DTranspose(
                 filters=1 * cnn_multiplier,
                 kernel_size=4,
@@ -93,23 +108,23 @@ class ConvTransposeAtari(tf.keras.Model):
                 activation=None,
                 use_bias=False,
             ),
-        ]
-        # Create one LayerNorm layer for each of the Conv2DTranspose layers.
-        self.layer_normalizations = []
-        for _ in range(len(self.conv_transpose_layers)):
-            self.layer_normalizations.append(tf.keras.layers.LayerNormalization())
+            tf.keras.layers.LayerNormalization(),
+            tf.keras.layers.Activation("silu"),
 
-        # Important! No activation or layer norm for last layer as the outputs of
-        # this one go directly into the diag-gaussian as parameters.
-        self.output_conv2d_transpose = tf.keras.layers.Conv2DTranspose(
-            filters=1 if self.gray_scaled else 3,
-            kernel_size=4,
-            strides=(2, 2),
-            padding="same",
-            activation=None,
-            use_bias=True,  # Last layer does use bias (b/c has no LayerNorm).
-        )
-        # .. until output is 64 x 64 x 3 (or 1 for self.gray_scaled=True).
+            # Important! No activation or layer norm for last layer as the outputs of
+            # this one go directly into the diag-gaussian as parameters.
+            tf.keras.layers.Conv2DTranspose(
+                filters=1 if self.gray_scaled else 3,
+                kernel_size=4,
+                strides=(2, 2),
+                padding="same",
+                activation=None,
+                use_bias=True,  # Last layer does use bias (b/c has no LayerNorm).
+            )
+            # .. until output is 64 x 64 x 3 (or 1 for self.gray_scaled=True).
+        ]
+
+        self.net = tf.keras.models.Sequential(layers)
 
     def call(self, h, z):
         """Performs a forward pass through the Conv2D transpose decoder.
@@ -127,19 +142,8 @@ class ConvTransposeAtari(tf.keras.Model):
         assert len(z.shape) == 2
         input_ = tf.concat([h, z], axis=-1)
 
-        # Feed through initial dense layer to get the right number of input nodes
-        # for the first conv2dtranspose layer.
-        out = self.dense_layer(input_)
-        # Reshape to image format.
-        out = tf.reshape(out, shape=(-1,) + self.input_dims)
-
         # Pass through stack of Conv2DTransport layers (and layer norms).
-        for conv_transpose_2d, layer_norm in zip(
-            self.conv_transpose_layers, self.layer_normalizations
-        ):
-            out = tf.nn.silu(layer_norm(inputs=conv_transpose_2d(out)))
-        # Last output conv2d-transpose layer:
-        out = self.output_conv2d_transpose(out)
+        out = self.net(input_)
         out += 0.5  # See Danijar's code
         out_shape = tf.shape(out)
 

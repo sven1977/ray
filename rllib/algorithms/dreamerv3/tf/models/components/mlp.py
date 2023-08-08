@@ -29,6 +29,7 @@ class MLP(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         num_dense_layers: Optional[int] = None,
         dense_hidden_units: Optional[int] = None,
@@ -39,6 +40,7 @@ class MLP(tf.keras.Model):
         """Initializes an MLP instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the different network sizes.
             num_dense_layers: The number of hidden layers in the MLP. If None,
@@ -58,9 +60,12 @@ class MLP(tf.keras.Model):
             model_size, override=dense_hidden_units
         )
 
-        self.dense_layers = []
+        layers = [
+            tf.keras.layers.Input((input_size,))
+        ]
+
         for _ in range(num_dense_layers):
-            self.dense_layers.append(
+            layers.append(
                 tf.keras.layers.Dense(
                     dense_hidden_units,
                     trainable=trainable,
@@ -71,18 +76,19 @@ class MLP(tf.keras.Model):
                     use_bias=False,
                 )
             )
-
-        self.layer_normalizations = []
-        for _ in range(len(self.dense_layers)):
-            self.layer_normalizations.append(
+            layers.append(
                 tf.keras.layers.LayerNormalization(trainable=trainable)
             )
-
-        self.output_layer = None
-        if output_layer_size:
-            self.output_layer = tf.keras.layers.Dense(
-                output_layer_size, activation=None, trainable=trainable
+            layers.append(
+                tf.keras.layers.Activation("silu")
             )
+
+        if output_layer_size:
+            layers.append(tf.keras.layers.Dense(
+                output_layer_size, activation=None, trainable=trainable
+            ))
+
+        self.net = tf.keras.models.Sequential(layers)
 
     def call(self, input_):
         """Performs a forward pass through this MLP.
@@ -90,15 +96,4 @@ class MLP(tf.keras.Model):
         Args:
             input_: The input tensor for the MLP dense stack.
         """
-        out = input_
-
-        for dense_layer, layer_norm in zip(
-            self.dense_layers, self.layer_normalizations
-        ):
-            # In this order: layer, normalization, activation.
-            out = tf.nn.silu(layer_norm(dense_layer(out)))
-
-        if self.output_layer is not None:
-            out = self.output_layer(out)
-
-        return out
+        return self.net(input_)

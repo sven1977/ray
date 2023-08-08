@@ -44,6 +44,7 @@ class DreamerV3RLModule(RLModule, abc.ABC):
 
         # Build the world model (containing encoder and decoder).
         self.world_model = WorldModel(
+            input_shape=(None,) + self.config.observation_space.shape,
             model_size=model_size,
             action_space=self.config.action_space,
             batch_length_T=T,
@@ -52,10 +53,12 @@ class DreamerV3RLModule(RLModule, abc.ABC):
             symlog_obs=symlog_obs,
         )
         self.actor = ActorNetwork(
+            input_size=catalog.h_plus_z_flat,
             action_space=self.config.action_space,
             model_size=model_size,
         )
         self.critic = CriticNetwork(
+            input_size=catalog.h_plus_z_flat,
             model_size=model_size,
         )
         # Build the final dreamer model (containing the world model).
@@ -67,37 +70,6 @@ class DreamerV3RLModule(RLModule, abc.ABC):
             critic=self.critic,
         )
         self.action_dist_cls = catalog.get_action_dist_cls(framework=self.framework)
-
-        # Perform a test `call()` to force building the dreamer model's variables.
-        test_obs = np.tile(
-            np.expand_dims(self.config.observation_space.sample(), (0, 1)),
-            reps=(B, T) + (1,) * len(self.config.observation_space.shape),
-        )
-        if isinstance(self.config.action_space, gym.spaces.Discrete):
-            test_actions = np.tile(
-                np.expand_dims(
-                    one_hot(
-                        self.config.action_space.sample(),
-                        depth=self.config.action_space.n,
-                    ),
-                    (0, 1),
-                ),
-                reps=(B, T, 1),
-            )
-        else:
-            test_actions = np.tile(
-                np.expand_dims(self.config.action_space.sample(), (0, 1)),
-                reps=(B, T, 1),
-            )
-
-        self.dreamer_model(
-            inputs=_convert_to_tf(test_obs),
-            actions=_convert_to_tf(test_actions.astype(np.float32)),
-            is_first=_convert_to_tf(np.ones((B, T), np.float32)),
-            start_is_terminated_BxT=_convert_to_tf(np.zeros((B * T,), np.float32)),
-            horizon_H=horizon_H,
-            gamma=gamma,
-        )
 
         # Initialize the critic EMA net:
         self.critic.init_ema()

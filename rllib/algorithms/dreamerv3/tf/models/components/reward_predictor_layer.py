@@ -28,6 +28,7 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
     def __init__(
         self,
         *,
+        input_size: int,
         num_buckets: int = 255,
         lower_bound: float = -20.0,
         upper_bound: float = 20.0,
@@ -36,6 +37,7 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
         """Initializes a RewardPredictorLayer instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             num_buckets: The number of buckets to create. Note that the number of
                 possible symlog'd outcomes from the used distribution is
                 `num_buckets` + 1:
@@ -57,19 +59,23 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
 
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
-        self.reward_buckets_layer = tf.keras.layers.Dense(
-            units=self.num_buckets,
-            activation=None,
-            # From [1]:
-            # "We further noticed that the randomly initialized reward predictor and
-            # critic networks at the start of training can result in large predicted
-            # rewards that can delay the onset of learning. We initialize the output
-            # weights of the reward predictor and critic to zeros, which effectively
-            # alleviates the problem and accelerates early learning."
-            kernel_initializer="zeros",
-            bias_initializer="zeros",  # zero-bias is default anyways
-            trainable=trainable,
-        )
+        layers = [
+            tf.keras.layers.Input((input_size,)),
+            tf.keras.layers.Dense(
+                units=self.num_buckets,
+                activation=None,
+                # From [1]:
+                # "We further noticed that the randomly initialized reward predictor and
+                # critic networks at the start of training can result in large predicted
+                # rewards that can delay the onset of learning. We initialize the output
+                # weights of the reward predictor and critic to zeros, which effectively
+                # alleviates the problem and accelerates early learning."
+                kernel_initializer="zeros",
+                bias_initializer="zeros",  # zero-bias is default anyways
+                trainable=trainable,
+            ),
+        ]
+        self.net = tf.keras.models.Sequential(layers)
 
     def call(self, inputs, return_logits=False):
         """Computes the expected reward using N equal sized buckets of possible values.
@@ -87,7 +93,7 @@ class RewardPredictorLayer(tf.keras.layers.Layer):
         """
         # Compute the `num_buckets` weights.
         assert len(inputs.shape) == 2
-        logits = self.reward_buckets_layer(inputs)
+        logits = self.net(inputs)
         # out=[B, `num_buckets`]
 
         # Compute the expected(!) reward using the formula:

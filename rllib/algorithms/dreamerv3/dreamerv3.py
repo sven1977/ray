@@ -501,10 +501,6 @@ class DreamerV3(Algorithm):
                 DEFAULT_POLICY_ID
             ]
 
-        # Summarize (single-agent) RLModule (only once) here.
-        if self.config.framework_str == "tf2":
-            self.workers.local_worker().module.dreamer_model.summary(expand_nested=True)
-
         # Create a replay buffer for storing actual env samples.
         self.replay_buffer = EpisodeReplayBuffer(
             capacity=self.config.replay_buffer_config["capacity"],
@@ -542,15 +538,32 @@ class DreamerV3(Algorithm):
                 # c) we have not sampled at all yet in this `training_step()` call.
                 or not have_sampled
             ):
+                # Sample using the env runner's module.
                 done_episodes, ongoing_episodes = env_runner.sample()
                 have_sampled = True
 
                 # We took B x T env steps.
-                env_steps_last_sample = sum(
+                env_steps_last_regular_sample = sum(
                     len(eps) for eps in done_episodes + ongoing_episodes
                 )
-                self._counters[NUM_AGENT_STEPS_SAMPLED] += env_steps_last_sample
-                self._counters[NUM_ENV_STEPS_SAMPLED] += env_steps_last_sample
+
+                # If we have never sampled before (just started the algo and not
+                # recovered from a checkpoint), sample B random actions first.
+                if self._counters[NUM_AGENT_STEPS_SAMPLED] == 0:
+                    d_, o_ = env_runner.sample(
+                        num_timesteps=(
+                            self.config.batch_size_B * self.config.batch_length_T
+                        ) - env_steps_last_regular_sample,
+                        random_actions=True,
+                    )
+                    done_episodes += d_
+                    ongoing_episodes += o_
+
+                total_sampled = sum(
+                    len(eps) for eps in done_episodes + ongoing_episodes
+                )
+                self._counters[NUM_AGENT_STEPS_SAMPLED] += total_sampled
+                self._counters[NUM_ENV_STEPS_SAMPLED] += total_sampled
 
                 # Add ongoing and finished episodes into buffer. The buffer will
                 # automatically take care of properly concatenating (by episode IDs)
@@ -569,12 +582,12 @@ class DreamerV3(Algorithm):
         # go back and collect more samples again from the actual environment.
         # However, when calculating the `training_ratio` here, we use only the
         # trained steps in this very `training_step()` call over the most recent sample
-        # amount (`env_steps_last_sample`), not the global values. This is to avoid a
-        # heavy overtraining at the very beginning when we have just pre-filled the
-        # buffer with the minimum amount of samples.
+        # amount (`env_steps_last_regular_sample`), not the global values. This is to
+        # avoid a heavy overtraining at the very beginning when we have just pre-filled
+        # the buffer with the minimum amount of samples.
         replayed_steps_this_iter = sub_iter = 0
         while (
-            replayed_steps_this_iter / env_steps_last_sample
+            replayed_steps_this_iter / env_steps_last_regular_sample
         ) < self.config.training_ratio:
 
             # Time individual batch updates.

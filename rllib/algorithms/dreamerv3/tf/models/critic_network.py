@@ -28,6 +28,7 @@ class CriticNetwork(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         num_buckets: int = 255,
         lower_bound: float = -20.0,
@@ -37,6 +38,7 @@ class CriticNetwork(tf.keras.Model):
         """Initializes a CriticNetwork instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                Use None for manually setting the different network sizes.
             num_buckets: The number of buckets to create. Note that the number of
@@ -73,10 +75,13 @@ class CriticNetwork(tf.keras.Model):
         # the critic loss term such that the weights of this fast critic stay close
         # to the EMA weights (see below).
         self.mlp = MLP(
+            input_size=input_size,
             model_size=self.model_size,
             output_layer_size=None,
         )
+        mlp_output_size = int(self.mlp.compute_output_shape((None, input_size))[1])
         self.return_layer = RewardPredictorLayer(
+            input_size=mlp_output_size,
             num_buckets=num_buckets,
             lower_bound=lower_bound,
             upper_bound=upper_bound,
@@ -86,11 +91,13 @@ class CriticNetwork(tf.keras.Model):
         # target net, BUT not used to compute anything, just for the
         # weights regularizer term inside the critic loss).
         self.mlp_ema = MLP(
+            input_size=input_size,
             model_size=self.model_size,
             output_layer_size=None,
             trainable=False,
         )
         self.return_layer_ema = RewardPredictorLayer(
+            input_size=mlp_output_size,
             num_buckets=num_buckets,
             lower_bound=lower_bound,
             upper_bound=upper_bound,

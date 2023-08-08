@@ -23,6 +23,7 @@ class RewardPredictor(tf.keras.Model):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         num_buckets: int = 255,
         lower_bound: float = -20.0,
@@ -31,6 +32,7 @@ class RewardPredictor(tf.keras.Model):
         """Initializes a RewardPredictor instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Determines the exact size of the underlying MLP.
             num_buckets: The number of buckets to create. Note that the number of
@@ -52,10 +54,12 @@ class RewardPredictor(tf.keras.Model):
         super().__init__(name="reward_predictor")
 
         self.mlp = MLP(
+            input_size=input_size,
             model_size=model_size,
             output_layer_size=None,
         )
         self.reward_layer = RewardPredictorLayer(
+            input_size=int(self.mlp.compute_output_shape((None, input_size))[1]),
             num_buckets=num_buckets,
             lower_bound=lower_bound,
             upper_bound=upper_bound,

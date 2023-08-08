@@ -30,6 +30,7 @@ class RepresentationLayer(tf.keras.layers.Layer):
     def __init__(
         self,
         *,
+        input_size: int,
         model_size: Optional[str] = "XS",
         num_categoricals: Optional[int] = None,
         num_classes_per_categorical: Optional[int] = None,
@@ -37,6 +38,7 @@ class RepresentationLayer(tf.keras.layers.Layer):
         """Initializes a RepresentationLayer instance.
 
         Args:
+            input_size: The size (int) of the input tensor.
             model_size: The "Model Size" used according to [1] Appendinx B.
                 Use None for manually setting the different parameters.
             num_categoricals: Overrides the number of categoricals used in the z-states.
@@ -56,10 +58,15 @@ class RepresentationLayer(tf.keras.layers.Layer):
             name=f"z{self.num_categoricals}x{self.num_classes_per_categorical}"
         )
 
-        self.z_generating_layer = tf.keras.layers.Dense(
-            self.num_categoricals * self.num_classes_per_categorical,
-            activation=None,
-        )
+        layers = [
+            tf.keras.layers.Input((input_size,)),
+            tf.keras.layers.Dense(
+                self.num_categoricals * self.num_classes_per_categorical,
+                activation=None,
+            )
+        ]
+
+        self.net = tf.keras.models.Sequential(layers)
 
     def call(self, inputs, return_z_probs=False):
         """Produces a discrete, differentiable z-sample from some 1D input tensor.
@@ -86,7 +93,7 @@ class RepresentationLayer(tf.keras.layers.Layer):
         """
         # Compute the logits (no activation) for our `num_categoricals` Categorical
         # distributions (with `num_classes_per_categorical` classes each).
-        logits = self.z_generating_layer(inputs)
+        logits = self.net(inputs)
         # Reshape the logits to [B, num_categoricals, num_classes]
         logits = tf.reshape(
             logits,

@@ -1,5 +1,11 @@
 import gymnasium as gym
+import numpy as np
 
+from ray.rllib.algorithms.dreamerv3.utils import (
+    get_gru_units,
+    get_num_z_classes,
+    get_num_z_categoricals,
+)
 from ray.rllib.core.models.catalog import Catalog
 from ray.rllib.core.models.base import Encoder, Model
 from ray.rllib.utils import override
@@ -32,6 +38,10 @@ class DreamerV3Catalog(Catalog):
         self.is_gray_scale = (
             self.is_img_space and len(self.observation_space.shape) == 2
         )
+        # Compute the size of the vector coming out of the sequence model.
+        self.h_plus_z_flat = get_gru_units(self.model_size) + (
+            get_num_z_categoricals(self.model_size) * get_num_z_classes(self.model_size)
+        )
 
         # TODO (sven): We should work with sub-component configurations here,
         #  and even try replacing all current Dreamer model components with
@@ -53,7 +63,11 @@ class DreamerV3Catalog(Catalog):
         else:
             from ray.rllib.algorithms.dreamerv3.tf.models.components.mlp import MLP
 
-            return MLP(model_size=self.model_size, name="vector_encoder")
+            return MLP(
+                input_size=int(np.prod(self.observation_space.shape)),
+                model_size=self.model_size,
+                name="vector_encoder",
+            )
 
     def build_decoder(self, framework: str) -> Model:
         """Builds the World-Model's decoder network depending on the obs space."""
@@ -66,6 +80,7 @@ class DreamerV3Catalog(Catalog):
             )
 
             return conv_transpose_atari.ConvTransposeAtari(
+                input_size=self.h_plus_z_flat,
                 model_size=self.model_size,
                 gray_scaled=self.is_gray_scale,
             )
@@ -75,6 +90,7 @@ class DreamerV3Catalog(Catalog):
             )
 
             return vector_decoder.VectorDecoder(
+                input_size=self.h_plus_z_flat,
                 model_size=self.model_size,
                 observation_space=self.observation_space,
             )
