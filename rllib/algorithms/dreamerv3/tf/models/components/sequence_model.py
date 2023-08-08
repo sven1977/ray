@@ -63,13 +63,17 @@ class SequenceModel(tf.keras.Model):
         # In Danijar's code, there is an additional layer (units=[model_size])
         # prior to the GRU (but always only with 1 layer), which is not mentioned in
         # the paper.
-        self.pre_gru_layer = MLP(
+        inputs = tf.keras.layers.Input((input_size,))
+        initial_state_h = tf.keras.layers.Input((num_gru_units,))
+        #self.pre_gru_layer = MLP(
+        out = MLP(
             input_size=input_size,
             num_dense_layers=1,
             model_size=model_size,
             output_layer_size=None,
-        )
-        self.gru_unit = tf.keras.layers.GRU(
+        )(inputs)
+        #self.gru_unit = tf.keras.layers.GRU(
+        out = tf.keras.layers.GRU(
             num_gru_units,
             return_sequences=False,
             return_state=False,
@@ -79,11 +83,13 @@ class SequenceModel(tf.keras.Model):
             # performance significantly.
             # activation=tf.nn.silu,
             # recurrent_activation=tf.nn.silu,
-        )
-        # Make sure GRU layer is built, so we already create its trainable variables
-        # here. This is not needed for the above MLP b/c it knows its input_size upon
-        # construction.
-        self.gru_unit.build((None, None, get_dense_hidden_units(model_size)))
+        )(tf.expand_dims(out, axis=0), initial_state=initial_state_h)
+        ## Make sure GRU layer is built, so we already create its trainable variables
+        ## here. This is not needed for the above MLP b/c it knows its input_size upon
+        ## construction.
+        #self.gru_unit.build((None, None, get_dense_hidden_units(model_size)))
+
+        self.net = tf.keras.models.Model([inputs, initial_state_h], [out])
 
     def call(self, a, h, z):
         """
@@ -100,8 +106,9 @@ class SequenceModel(tf.keras.Model):
         z = tf.reshape(tf.cast(z, tf.float32), shape=(z_shape[0], -1))
         out = tf.concat([z, a], axis=-1)
         # Pass through pre-GRU layer.
-        out = self.pre_gru_layer(out)
-        # Pass through (time-major) GRU.
-        h_next = self.gru_unit(tf.expand_dims(out, axis=0), initial_state=h)
+        h_next = self.net(out, h)
+        #out = self.pre_gru_layer(out)
+        ## Pass through (time-major) GRU.
+        #h_next = self.gru_unit(tf.expand_dims(out, axis=0), initial_state=h)
         # Return the GRU's output (the next h-state).
         return h_next
