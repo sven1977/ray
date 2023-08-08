@@ -540,12 +540,18 @@ class DreamerV3(Algorithm):
             ):
                 # Sample using the env runner's module.
                 done_episodes, ongoing_episodes = env_runner.sample()
+                # Add ongoing and finished episodes into buffer. The buffer will
+                # automatically take care of properly concatenating (by episode IDs)
+                # the different chunks of the same episodes, even if they come in via
+                # separate `add()` calls.
+                self.replay_buffer.add(episodes=done_episodes + ongoing_episodes)
                 have_sampled = True
 
                 # We took B x T env steps.
                 env_steps_last_regular_sample = sum(
                     len(eps) for eps in done_episodes + ongoing_episodes
                 )
+                total_sampled = env_steps_last_regular_sample
 
                 # If we have never sampled before (just started the algo and not
                 # recovered from a checkpoint), sample B random actions first.
@@ -556,20 +562,12 @@ class DreamerV3(Algorithm):
                         ) - env_steps_last_regular_sample,
                         random_actions=True,
                     )
-                    done_episodes += d_
-                    ongoing_episodes += o_
+                    self.replay_buffer.add(episodes=d_ + o_)
+                    total_sampled += sum(len(eps) for eps in d_)
+                    ongoing_episodes += sum(len(eps) for eps in o_)
 
-                total_sampled = sum(
-                    len(eps) for eps in done_episodes + ongoing_episodes
-                )
                 self._counters[NUM_AGENT_STEPS_SAMPLED] += total_sampled
                 self._counters[NUM_ENV_STEPS_SAMPLED] += total_sampled
-
-                # Add ongoing and finished episodes into buffer. The buffer will
-                # automatically take care of properly concatenating (by episode IDs)
-                # the different chunks of the same episodes, even if they come in via
-                # separate `add()` calls.
-                self.replay_buffer.add(episodes=done_episodes + ongoing_episodes)
 
         # Summarize environment interaction and buffer data.
         results[ALL_MODULES] = report_sampling_and_replay_buffer(
