@@ -106,7 +106,7 @@ class SequenceModel(tf.keras.Model):
         z = tf.reshape(tf.cast(z, tf.float32), shape=(z_shape[0], -1))
         out = tf.concat([z, a], axis=-1)
         # Pass through pre-GRU layer.
-        h_next = self.net(out, h)
+        h_next = self.net([out, h])
         #out = self.pre_gru_layer(out)
         ## Pass through (time-major) GRU.
         #h_next = self.gru_unit(tf.expand_dims(out, axis=0), initial_state=h)
