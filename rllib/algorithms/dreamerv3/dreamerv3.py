@@ -563,8 +563,7 @@ class DreamerV3(Algorithm):
                         random_actions=True,
                     )
                     self.replay_buffer.add(episodes=d_ + o_)
-                    total_sampled += sum(len(eps) for eps in d_)
-                    ongoing_episodes += sum(len(eps) for eps in o_)
+                    total_sampled += sum(len(eps) for eps in d_ + o_)
 
                 self._counters[NUM_AGENT_STEPS_SAMPLED] += total_sampled
                 self._counters[NUM_ENV_STEPS_SAMPLED] += total_sampled
