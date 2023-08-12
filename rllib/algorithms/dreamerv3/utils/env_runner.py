@@ -24,8 +24,9 @@ from ray.rllib.evaluation.metrics import RolloutMetrics
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID, SampleBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_tf
-from ray.rllib.utils.replay_buffers.episode_replay_buffer import _Episode as Episode
 from ray.rllib.utils.numpy import one_hot
+from ray.rllib.utils.replay_buffers.episode_replay_buffer import _Episode as Episode
+from ray.rllib.utils.spaces.space_utils import get_base_struct_from_space
 
 _, tf, _ = try_import_tf()
 
@@ -82,6 +83,15 @@ class DreamerV3EnvRunner(EnvRunner):
                 make_kwargs=dict(
                     self.config.env_config, **{"render_mode": "rgb_array"}
                 ),
+            )
+        # Gymnasium Robotics
+        elif self.config.env.startswith("GRB/"):
+            self.env = gym.vector.make(
+                self.config.env[4:],
+                wrappers=[DictFlatten],
+                num_envs=self.config.num_envs_per_worker,
+                asynchronous=self.config.remote_worker_envs,
+                **dict(self.config.env_config),
             )
         # DeepMind Control.
         elif self.config.env.startswith("DMC/"):
@@ -550,3 +560,25 @@ class ActionClip(gym.ActionWrapper):
 
     def action(self, action):
         return np.clip(action, self._low, self._high)
+
+
+class DictFlatten(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        base_struct = get_base_struct_from_space(self.env.observation_space)
+        flat_shapes = tree.flatten(
+            tree.map_structure(
+                lambda space: space.shape, base_struct
+            )
+        )
+        self.observation_space = gym.spaces.Box(
+            low=-3.0,
+            high=3.0,
+            shape=(sum(flat_shapes),),
+            dtype=np.float32,
+        )
+
+    def observation(self, observation):
+        return np.concatenate([
+            np.array(value, np.float32).flatten() for value in tree.flatten(observation)
+        ])
