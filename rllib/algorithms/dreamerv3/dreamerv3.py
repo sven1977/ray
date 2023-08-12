@@ -612,7 +612,7 @@ class DreamerV3(Algorithm):
                 # update.
                 with self._timers["critic_ema_update"]:
                     self.learner_group.additional_update(
-                        timestep=self._counters[NUM_ENV_STEPS_TRAINED],
+                        timestep=self._counters[NUM_ENV_STEPS_SAMPLED],
                         reduce_fn=self._reduce_results,
                     )
 
