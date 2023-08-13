@@ -9,10 +9,14 @@ from typing import Optional, Tuple
 
 import pyarrow.fs
 
+import ray
 from ray import train, tune
+from ray.air._internal.uri_utils import URI
 from ray.air.constants import EXPR_RESULT_FILE
-from ray.train._internal.storage import _download_from_fs_path
+from ray.train._internal.storage import _download_from_fs_path, StorageContext
 from ray.train._checkpoint import Checkpoint as NewCheckpoint
+from ray.train.base_trainer import TrainingFailedError
+from ray.train.constants import RAY_AIR_NEW_PERSISTENCE_MODE
 from ray.train.data_parallel_trainer import DataParallelTrainer
 
 from ray.air.tests.test_checkpoints import mock_s3_bucket_uri
@@ -26,11 +30,20 @@ def dummy_context_manager():
     yield "dummy value"
 
 
-@pytest.fixture(autouse=True)
-def enable_new_persistence_mode(monkeypatch):
-    monkeypatch.setenv("RAY_AIR_NEW_PERSISTENCE_MODE", "1")
+@pytest.fixture(scope="module")
+def enable_new_persistence_mode():
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv(RAY_AIR_NEW_PERSISTENCE_MODE, "1")
+        yield
+        mp.setenv(RAY_AIR_NEW_PERSISTENCE_MODE, "0")
+
+
+@pytest.fixture(autouse=True, scope="module")
+def ray_start_4_cpus(enable_new_persistence_mode):
+    # Make sure to set the env var before calling ray.init()
+    ray.init(num_cpus=4)
     yield
-    monkeypatch.setenv("RAY_AIR_NEW_PERSISTENCE_MODE", "0")
+    ray.shutdown()
 
 
 def _create_mock_custom_fs(custom_fs_root_dir: Path) -> pyarrow.fs.FileSystem:
@@ -143,28 +156,78 @@ def train_fn(config):
     for i in range(start, config.get("num_iterations", 5)):
         time.sleep(0.25)
 
-        checkpoint_file_name = "checkpoint.pkl"
+        temp_dir = tempfile.mkdtemp()
+        with open(os.path.join(temp_dir, "checkpoint.pkl"), "wb") as f:
+            pickle.dump({"iter": i}, f)
+
         artifact_file_name = f"artifact-iter={i}.txt"
         if in_trainer:
             rank = train.get_context().get_world_rank()
-            checkpoint_file_name = f"checkpoint_shard-rank={rank}.pkl"
             artifact_file_name = f"artifact-rank={rank}-iter={i}.txt"
+
+            checkpoint_file_name = f"checkpoint_shard-rank={rank}.pkl"
+            with open(os.path.join(temp_dir, checkpoint_file_name), "wb") as f:
+                pickle.dump({"iter": i}, f)
 
         with open(artifact_file_name, "w") as f:
             f.write(f"{i}")
-
-        temp_dir = tempfile.mkdtemp()
-        with open(os.path.join(temp_dir, checkpoint_file_name), "wb") as f:
-            pickle.dump({"iter": i}, f)
 
         train.report(
             {"iter": i, _SCORE_KEY: i},
             checkpoint=NewCheckpoint.from_directory(temp_dir),
         )
+        if i in config.get("fail_iters", []):
+            raise RuntimeError(f"Failing on iter={i}!!")
+
+
+def _resume_from_checkpoint(checkpoint: NewCheckpoint, expected_state: dict):
+    print(f"\nStarting run with `resume_from_checkpoint`: {checkpoint}\n")
+
+    def assert_fn(config):
+        checkpoint_to_check = train.get_checkpoint()
+        with checkpoint_to_check.as_directory() as checkpoint_dir:
+            with open(os.path.join(checkpoint_dir, "checkpoint.pkl"), "rb") as f:
+                state = pickle.load(f)
+
+        print("Loaded state from `resume_from_checkpoint`:", state)
+        print("Expected state:", expected_state)
+        assert state == expected_state, (state, expected_state)
+
+        dummy_ckpt = tempfile.mkdtemp()
+        with open(os.path.join(dummy_ckpt, "dummy.txt"), "w") as f:
+            f.write("data")
+        train.report({"dummy": 1}, checkpoint=NewCheckpoint.from_directory(dummy_ckpt))
+
+    trainer = DataParallelTrainer(
+        assert_fn,
+        scaling_config=train.ScalingConfig(num_workers=2),
+        run_config=train.RunConfig(name="test_resume_from_checkpoint"),
+        resume_from_checkpoint=checkpoint,
+    )
+    result = trainer.fit()
+
+    # Make sure that the checkpoint indexing starts from scratch.
+    assert Path(
+        result.checkpoint.path
+    ).name == StorageContext._make_checkpoint_dir_name(0)
 
 
 @pytest.mark.parametrize("storage_path_type", [None, "nfs", "cloud", "custom_fs"])
-def test_tuner(monkeypatch, storage_path_type, tmp_path):
+@pytest.mark.parametrize(
+    "checkpoint_config",
+    [
+        train.CheckpointConfig(),
+        train.CheckpointConfig(num_to_keep=2),
+        train.CheckpointConfig(
+            num_to_keep=1,
+            checkpoint_score_attribute=_SCORE_KEY,
+            checkpoint_score_order="max",
+        ),
+    ],
+)
+def test_tuner(
+    monkeypatch, tmp_path, storage_path_type, checkpoint_config: train.CheckpointConfig
+):
     """End-to-end test that the new persistence mode works with the Tuner API.
     This test covers many `storage_path_type` options:
     - storage_path=None --> save locally to the default local path (e.g., ~/ray_results)
@@ -193,7 +256,6 @@ def test_tuner(monkeypatch, storage_path_type, tmp_path):
     └── train_fn_a2b9e_00001_1_...
         └── ...                     <- Same as above
     """
-
     # Set the cache dir to some temp directory
     LOCAL_CACHE_DIR = tmp_path / "ray_results"
     monkeypatch.setenv("RAY_AIR_LOCAL_CACHE_DIR", str(LOCAL_CACHE_DIR))
@@ -208,13 +270,14 @@ def test_tuner(monkeypatch, storage_path_type, tmp_path):
         NUM_TRIALS = 2
         tuner = tune.Tuner(
             train_fn,
-            param_space={"num_iterations": NUM_ITERATIONS},
+            param_space={"num_iterations": NUM_ITERATIONS, "fail_iters": [2, 4]},
             run_config=train.RunConfig(
                 storage_path=storage_path,
                 storage_filesystem=storage_filesystem,
                 name=exp_name,
                 verbose=0,
                 failure_config=train.FailureConfig(max_failures=1),
+                checkpoint_config=checkpoint_config,
             ),
             # 2 samples, running 1 at at time to test with actor reuse
             tune_config=tune.TuneConfig(
@@ -222,6 +285,16 @@ def test_tuner(monkeypatch, storage_path_type, tmp_path):
             ),
         )
         result_grid = tuner.fit()
+        assert result_grid.errors
+
+        restored_tuner = tune.Tuner.restore(
+            path=str(URI(storage_path or str(LOCAL_CACHE_DIR)) / exp_name),
+            trainable=train_fn,
+            storage_filesystem=storage_filesystem,
+            resume_errored=True,
+        )
+        result_grid = restored_tuner.fit()
+        assert not result_grid.errors
 
         local_inspect_dir, storage_fs_path = _get_local_inspect_dir(
             root_local_path=tmp_path,
@@ -239,19 +312,35 @@ def test_tuner(monkeypatch, storage_path_type, tmp_path):
     for result in result_grid:
         trial_fs_path = _convert_path_to_fs_path(result.path, storage_filesystem)
         assert trial_fs_path.startswith(experiment_fs_path)
-        # TODO(justinvyu): Trainable syncing of artifacts and checkpoints
-        # is not yet implemented for the new persistence path.
-        # for checkpoint, _ in result.best_checkpoints:
-        #     assert checkpoint.path.startswith(trial_fs_path)
+        for checkpoint, _ in result.best_checkpoints:
+            assert checkpoint.path.startswith(trial_fs_path)
 
     # Next, inspect the storage path contents.
     assert len(list(local_inspect_dir.glob("*"))) == 1  # Only expect 1 experiment dir
     exp_dir = local_inspect_dir / exp_name
 
     # Files synced by the driver
-    assert len(list(exp_dir.glob("basic-variant-state-*"))) == 1
-    assert len(list(exp_dir.glob("experiment_state-*"))) == 1
-    assert len(list(exp_dir.glob("tuner.pkl"))) == 1
+    assert (exp_dir / "tuner.pkl").exists()
+    # 2 copies of these files:
+    # 1 for the initial run, and 1 for the manually restored run.
+    assert len(list(exp_dir.glob("basic-variant-state-*"))) == 2
+    assert len(list(exp_dir.glob("experiment_state-*"))) == 2
+
+    # Files synced by the worker
+    assert len(list(exp_dir.glob("train_fn_*"))) == NUM_TRIALS
+    for trial_dir in exp_dir.glob("train_fn_*"):
+        # If set, expect num_to_keep. Otherwise, expect to see all of them.
+        expected_num_checkpoints = checkpoint_config.num_to_keep or NUM_ITERATIONS
+
+        assert len(list(trial_dir.glob("checkpoint_*"))) == expected_num_checkpoints
+        for checkpoint_dir in trial_dir.glob("checkpoint_*"):
+            # 1 shared checkpoint.pkl file, written by all workers.
+            assert len(list(checkpoint_dir.glob("checkpoint.pkl"))) == 1
+
+        # NOTE: These next 2 are technically synced by the driver.
+        # TODO(justinvyu): In a follow-up PR, artifacts will be synced by the workers.
+        assert len(list(trial_dir.glob("artifact-*"))) == NUM_ITERATIONS
+        assert len(list(trial_dir.glob(EXPR_RESULT_FILE))) == 1
 
 
 @pytest.mark.parametrize("storage_path_type", [None, "nfs", "cloud", "custom_fs"])
@@ -273,11 +362,12 @@ def test_trainer(
     """
     TODO(justinvyu): Test for these once implemented:
     - artifacts
-    - restoration, train.get_checkpoint
 
     {storage_path}/{exp_name}
-    ├── experiment_state-2023-07-28_10-00-38.json
+    ├── experiment_state-2023-07-28_10-00-38.json       <- Initial exp state
     ├── basic-variant-state-2023-07-28_10-00-38.json
+    ├── experiment_state-2023-07-28_10-01-38.json       <- Restored exp state
+    ├── basic-variant-state-2023-07-28_10-01-38.json
     ├── trainer.pkl
     ├── tuner.pkl
     └── DataParallelTrainer_46367_00000_0_...
@@ -287,6 +377,7 @@ def test_trainer(
         ├── progress.csv
         ├── result.json
         ├── checkpoint_000000
+        │   ├── checkpoint.pkl                    <- Shared checkpoint file
         │   ├── checkpoint_shard-rank=0.pkl       <- Worker checkpoint shards
         │   └── checkpoint_shard-rank=1.pkl
         ├── ...
@@ -309,7 +400,11 @@ def test_trainer(
         NUM_WORKERS = 2
         trainer = DataParallelTrainer(
             train_fn,
-            train_loop_config={"in_trainer": True, "num_iterations": NUM_ITERATIONS},
+            train_loop_config={
+                "in_trainer": True,
+                "num_iterations": NUM_ITERATIONS,
+                "fail_iters": [2, 4],
+            },
             scaling_config=train.ScalingConfig(num_workers=2),
             run_config=train.RunConfig(
                 storage_path=storage_path,
@@ -317,9 +412,29 @@ def test_trainer(
                 name=exp_name,
                 verbose=0,
                 checkpoint_config=checkpoint_config,
+                failure_config=train.FailureConfig(max_failures=1),
             ),
         )
-        result = trainer.fit()
+        print("\nStarting initial run.\n")
+        with pytest.raises(TrainingFailedError):
+            result = trainer.fit()
+
+        print("\nStarting manually restored run.\n")
+        restored_trainer = DataParallelTrainer.restore(
+            path=str(URI(storage_path or str(LOCAL_CACHE_DIR)) / exp_name),
+            storage_filesystem=storage_filesystem,
+        )
+        result = restored_trainer.fit()
+
+        with monkeypatch.context() as m:
+            # This is so that the `resume_from_checkpoint` run doesn't mess up the
+            # assertions later for the `storage_path=None` case.
+            m.setenv(
+                "RAY_AIR_LOCAL_CACHE_DIR", str(tmp_path / "resume_from_checkpoint")
+            )
+            _resume_from_checkpoint(
+                result.checkpoint, expected_state={"iter": NUM_ITERATIONS - 1}
+            )
 
         local_inspect_dir, storage_fs_path = _get_local_inspect_dir(
             root_local_path=tmp_path,
@@ -339,10 +454,12 @@ def test_trainer(
     exp_dir = local_inspect_dir / exp_name
 
     # Files synced by the driver
-    assert len(list(exp_dir.glob("basic-variant-state-*"))) == 1
-    assert len(list(exp_dir.glob("experiment_state-*"))) == 1
     assert len(list(exp_dir.glob("tuner.pkl"))) == 1
     assert len(list(exp_dir.glob("trainer.pkl"))) == 1
+    # 2 copies of these files:
+    # 1 for the initial run, and 1 for the manually restored run.
+    assert len(list(exp_dir.glob("basic-variant-state-*"))) == 2
+    assert len(list(exp_dir.glob("experiment_state-*"))) == 2
 
     # Files synced by the worker
     assert len(list(exp_dir.glob("DataParallelTrainer_*"))) == 1
@@ -352,6 +469,8 @@ def test_trainer(
 
         assert len(list(trial_dir.glob("checkpoint_*"))) == expected_num_checkpoints
         for checkpoint_dir in trial_dir.glob("checkpoint_*"):
+            # 1 shared checkpoint.pkl file, written by all workers.
+            assert len(list(checkpoint_dir.glob("checkpoint.pkl"))) == 1
             # 1 checkpoint shard per worker.
             assert (
                 len(list(checkpoint_dir.glob("checkpoint_shard-*.pkl"))) == NUM_WORKERS
