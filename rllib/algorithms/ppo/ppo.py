@@ -24,6 +24,7 @@ from ray.rllib.algorithms.ppo.ppo_learner import (
     LEARNER_RESULTS_KL_KEY,
 )
 from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 from ray.rllib.execution.rollout_ops import (
     standardize_fields,
     synchronous_parallel_sample,
@@ -122,6 +123,8 @@ class PPOConfig(PGConfig):
         self.lr = 5e-5
         self.model["vf_share_layers"] = False
         self._disable_preprocessor_api = False
+        # TODO: Support this setting, but don't make it the default yet.
+        self.env_runner_cls = SingleAgentEnvRunner
         # __sphinx_doc_end__
         # fmt: on
 
