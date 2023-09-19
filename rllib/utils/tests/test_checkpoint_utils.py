@@ -172,7 +172,7 @@ class TestCheckpointUtils(unittest.TestCase):
         pickle_state = algo1.__getstate__()
         # Create standard (pickle-based) checkpoint.
         with tempfile.TemporaryDirectory() as pickle_cp_dir:
-            pickle_cp_dir = algo1.save(checkpoint_dir=pickle_cp_dir).checkpoint.path
+            pickle_cp_dir = algo1.save(checkpoint_dir=pickle_cp_dir) #.checkpoint.path
             pickle_cp_info = get_checkpoint_info(pickle_cp_dir)
             # Now convert pickle checkpoint to msgpack using the provided
             # utility function.
@@ -267,6 +267,63 @@ class TestCheckpointUtils(unittest.TestCase):
             pickle_state["policy_spec"]["config"]
         )
         check(pickle_state, msgpack_state)
+
+    def test_msgpack_policy_checkpoint_translation_multi_agent(self):
+        """Tests, whether a multi-agent pol checkpoint can be converted into msgpack ...
+
+        ... and recovered back into Policy objects, which are identical to
+        pickle-checkpoint-recovered Policies (given same initial config).
+        """
+        # Base config used for both pickle-based checkpoint and msgpack-based one.
+        def mapping_fn(aid, episode, worker, **kwargs):
+            return "pol" + str(aid)
+
+        tune.register_env("ma", lambda _: MultiAgentCartPole(config={"num_agents": 3}))
+
+        config = (
+            DQNConfig()
+            .environment("ma")
+            .multi_agent(
+                policies=["pol0", "pol1", "pol2"],
+                policy_mapping_fn=mapping_fn,
+                policies_to_train={"pol0", "pol1"},
+            )
+        )
+        # Build algorithm object.
+        algo1 = config.build()
+
+        pol0 = algo1.get_policy("pol0")
+        # Get its state.
+        pickle_state = pol0.get_state()
+
+        # Create standard (pickle-based) checkpoint.
+        with tempfile.TemporaryDirectory() as pickle_cp_dir:
+            pol0.export_checkpoint(pickle_cp_dir)
+            #pickle_cp_dir = algo1.save(checkpoint_dir=pickle_cp_dir) #.checkpoint.path
+            pickle_cp_info = get_checkpoint_info(pickle_cp_dir)
+            # Now convert pickle checkpoint to msgpack using the provided
+            # utility function.
+            with tempfile.TemporaryDirectory() as msgpack_cp_dir:
+                convert_to_msgpack_policy_checkpoint(pickle_cp_dir, msgpack_cp_dir)
+                msgpack_cp_info = get_checkpoint_info(msgpack_cp_dir)
+                # Try recreating a new algorithm object from the msgpack checkpoint.
+                pol0_recovered = Policy.from_checkpoint(msgpack_cp_dir)
+        # Get the state of the algorithm recovered from msgpack.
+        msgpack_state = pol0_recovered.get_state()
+
+        # Make sure JSON info files are different.
+        self.assertTrue(pickle_cp_info["format"] == "cloudpickle")
+        self.assertTrue(msgpack_cp_info["format"] == "msgpack")
+
+        pickle_state["policy_spec"]["config"] = AlgorithmConfig._serialize_dict(
+            pickle_state["policy_spec"]["config"]
+        )
+        msgpack_state["policy_spec"]["config"] = AlgorithmConfig._serialize_dict(
+            msgpack_state["policy_spec"]["config"]
+        )
+
+        check(pickle_state, msgpack_state)
+        algo1.stop()
 
 
 if __name__ == "__main__":
