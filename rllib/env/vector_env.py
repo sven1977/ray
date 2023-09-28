@@ -19,6 +19,8 @@ from ray.util import log_once
 logger = logging.getLogger(__name__)
 
 
+# TODO (sven): Deprecate inn favor of gymnasium.vector.Env with async mode (parallelism
+#  vis python multiprocessing).
 @PublicAPI
 class VectorEnv:
     """An environment that supports batch evaluation using clones of sub-envs."""

@@ -568,6 +568,7 @@ def make_multi_agent(
     return MultiEnv
 
 
+# TODO (sven): Deprecate w/o replacement.
 @PublicAPI
 class MultiAgentEnvWrapper(BaseEnv):
     """Internal adapter of MultiAgentEnv to BaseEnv.

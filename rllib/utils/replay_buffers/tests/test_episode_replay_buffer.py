@@ -2,16 +2,14 @@ import unittest
 
 import numpy as np
 
-from ray.rllib.utils.replay_buffers.episode_replay_buffer import (
-    _Episode,
-    EpisodeReplayBuffer,
-)
+from ray.rllib.env.single_agent_episode import SingleAgentEpisode
+from ray.rllib.utils.replay_buffers.episode_replay_buffer import EpisodeReplayBuffer
 
 
 class TestEpisodeReplayBuffer(unittest.TestCase):
     @staticmethod
     def _get_episode(episode_len=None, id_=None):
-        eps = _Episode(id_=id_, observations=[0.0])
+        eps = SingleAgentEpisode(id_=id_, observations=[0.0])
         ts = np.random.randint(1, 200) if episode_len is None else episode_len
         for t in range(ts):
             eps.add_timestep(

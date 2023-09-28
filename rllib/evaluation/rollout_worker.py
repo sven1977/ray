@@ -1886,7 +1886,7 @@ class RolloutWorker(ParallelIteratorWorker, EnvRunner):
                     or new_policy.action_connectors is None
                 ):
                     # TODO(jungong) : revisit this. It will be nicer to create
-                    # connectors as the last step of Policy.__init__().
+                    #  connectors as the last step of Policy.__init__().
                     create_connectors_for_policy(new_policy, policy_spec.config)
                 maybe_get_filters_for_syncing(self, name)
             else:

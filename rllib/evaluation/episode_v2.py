@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ray.rllib.evaluation.rollout_worker import RolloutWorker
 
 
+# TODO (sven): Deprecate in favor of SingleAgent- or MultiAgentEpisode.
 @DeveloperAPI
 class EpisodeV2:
     """Tracks the current state of a (possibly multi-agent) episode."""
@@ -32,7 +33,7 @@ class EpisodeV2:
         worker: Optional["RolloutWorker"] = None,
         callbacks: Optional["DefaultCallbacks"] = None,
     ):
-        """Initializes an Episode instance.
+        """Initializes an EpisodeV2 instance.
 
         Args:
             env_id: The environment's ID in which this episode runs.
@@ -282,7 +283,7 @@ class EpisodeV2:
             # Error if no DONE at end of this agent's trajectory.
             if is_done and check_dones and not pre_batch.is_terminated_or_truncated():
                 raise ValueError(
-                    "Episode {} terminated for all agents, but we still "
+                    "EpisodeV2 {} terminated for all agents, but we still "
                     "don't have a last observation for agent {} (policy "
                     "{}). ".format(self.episode_id, agent_id, self.policy_for(agent_id))
                     + "Please ensure that you include the last observations "

@@ -24,7 +24,7 @@ from ray.rllib.algorithms.dreamerv3.dreamerv3_learner import (
     DreamerV3LearnerHyperparameters,
 )
 from ray.rllib.algorithms.dreamerv3.utils import do_symlog_obs
-from ray.rllib.algorithms.dreamerv3.utils.env_runner import DreamerV3EnvRunner
+from ray.rllib.algorithms.dreamerv3.utils.dreamerv3_env_runner import DreamerV3EnvRunner
 from ray.rllib.algorithms.dreamerv3.utils.summaries import (
     report_predicted_vs_sampled_obs,
     report_sampling_and_replay_buffer,
@@ -152,7 +152,7 @@ class DreamerV3Config(AlgorithmConfig):
         self.rollout_fragment_length = 1
         # Since we are using a gymnasium-based EnvRunner, we can utilitze its
         # vectorization capabilities w/o suffering performance losses (as we would
-        # with RLlib's `RemoteVectorEnv`).
+        # with RLlib's `RemoteBaseEnv`).
         self.remote_worker_envs = True
         # Dreamer only runs on the new API stack.
         self._enable_learner_api = True

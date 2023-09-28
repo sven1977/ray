@@ -78,11 +78,11 @@ class TestDreamerV3(unittest.TestCase):
 
                     def env_creator(ctx):
                         import gymnasium as gym
-                        from ray.rllib.algorithms.dreamerv3.utils.env_runner import (
-                            OneHot,
+                        from ray.rllib.algorithms.dreamerv3.utils import (
+                            dreamerv3_env_runner
                         )
 
-                        return OneHot(gym.make("FrozenLake-v1"))
+                        return dreamerv3_env_runner.OneHot(gym.make("FrozenLake-v1"))
 
                     tune.register_env("frozen-lake-one-hot", env_creator)
                     env = "frozen-lake-one-hot"

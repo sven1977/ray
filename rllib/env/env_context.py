@@ -5,6 +5,8 @@ from ray.rllib.utils.annotations import PublicAPI
 from ray.rllib.utils.typing import EnvConfigDict
 
 
+# TODO (sven): Deprecate without replacement. If `env_config` is provided, these should
+#  be passed as make_kwargs to `gym.make()` (or used otherwise by a custom EnvRunner).
 @PublicAPI
 class EnvContext(dict):
     """Wraps env configurations to include extra rllib metadata.

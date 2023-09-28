@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# TODO (sven): Deprecate in favor of gymnasium.vector.Env with async mode (parallelism
+#  vis python multiprocessing).
 @PublicAPI
 class RemoteBaseEnv(BaseEnv):
     """BaseEnv that executes its sub environments as @ray.remote actors.
@@ -39,7 +41,7 @@ class RemoteBaseEnv(BaseEnv):
         worker: Optional["RolloutWorker"] = None,
         restart_failed_sub_environments: bool = False,
     ):
-        """Initializes a RemoteVectorEnv instance.
+        """Initializes a RemoteBaseEnv instance.
 
         Args:
             make_env: Callable that produces a single (non-vectorized) env,

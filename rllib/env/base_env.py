@@ -14,6 +14,8 @@ ASYNC_RESET_RETURN = "async_reset_return"
 logger = logging.getLogger(__name__)
 
 
+# TODO (sven): Deprecate in favor of gymnasium.vector.Env or MultiAgentEnv, dependent
+#  on the use case and the specific EnvRunner used.
 @PublicAPI
 class BaseEnv:
     """The lowest-level env interface used by RLlib for sampling.

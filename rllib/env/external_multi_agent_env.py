@@ -7,6 +7,7 @@ from ray.rllib.env.external_env import ExternalEnv, _ExternalEnvEpisode
 from ray.rllib.utils.typing import MultiAgentDict
 
 
+# TODO (sven): Deprecate in favor of a tcp capable MultiAgentEnv(gymnasium.Env) adapter.
 @PublicAPI
 class ExternalMultiAgentEnv(ExternalEnv):
     """This is the multi-agent version of ExternalEnv."""

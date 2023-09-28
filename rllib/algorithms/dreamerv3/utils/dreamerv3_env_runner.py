@@ -20,12 +20,12 @@ from ray.rllib.core.models.base import STATE_IN, STATE_OUT
 from ray.rllib.env.env_runner import EnvRunner
 from ray.rllib.env.wrappers.atari_wrappers import NoopResetEnv, MaxAndSkipEnv
 from ray.rllib.env.wrappers.dm_control_wrapper import DMCEnv
+from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 from ray.rllib.env.utils import _gym_env_creator
 from ray.rllib.evaluation.metrics import RolloutMetrics
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID, SampleBatch
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_tf
-from ray.rllib.utils.replay_buffers.episode_replay_buffer import _Episode as Episode
 from ray.rllib.utils.numpy import one_hot
 from ray.tune.registry import ENV_CREATOR, _global_registry
 
@@ -163,7 +163,7 @@ class DreamerV3EnvRunner(EnvRunner):
         explore: bool = True,
         random_actions: bool = False,
         with_render_data: bool = False,
-    ) -> Tuple[List[Episode], List[Episode]]:
+    ) -> Tuple[List[SingleAgentEpisode], List[SingleAgentEpisode]]:
         """Runs and returns a sample (n timesteps or m episodes) on the environment(s).
 
         Timesteps or episodes are counted in total (across all vectorized
@@ -185,14 +185,14 @@ class DreamerV3EnvRunner(EnvRunner):
                 If False, will still reset the environment(s) if they were left in
                 a terminated or truncated state during previous sample calls.
             with_render_data: If True, will record rendering images per timestep
-                in the returned Episodes. This data can be used to create video
+                in the returned SingleAgentEpisodes. This data can be used to create video
                 reports.
                 TODO (sven): Note that this is only supported for runnign with
                  `num_episodes` yet.
 
         Returns:
-            A tuple consisting of a) list of Episode instances that are done and
-            b) list of Episode instances that are still ongoing.
+            A tuple consisting of a) list of SingleAgentEpisode instances that are done
+            and b) list of SingleAgentEpisode instances that are still ongoing.
         """
         # If no execution details are provided, use self.config.
         if num_timesteps is None and num_episodes is None:
@@ -229,7 +229,7 @@ class DreamerV3EnvRunner(EnvRunner):
         explore: bool = True,
         random_actions: bool = False,
         force_reset: bool = False,
-    ) -> Tuple[List[Episode], List[Episode]]:
+    ) -> Tuple[List[SingleAgentEpisode], List[SingleAgentEpisode]]:
         """Helper method to run n timesteps.
 
         See docstring of self.sample() for more details.
@@ -246,7 +246,7 @@ class DreamerV3EnvRunner(EnvRunner):
         if force_reset or self._needs_initial_reset:
             obs, _ = self.env.reset()
 
-            self._episodes = [Episode() for _ in range(self.num_envs)]
+            self._episodes = [SingleAgentEpisode() for _ in range(self.num_envs)]
             states = initial_states
             # Set is_first to True for all rows (all sub-envs just got reset).
             is_first = np.ones((self.num_envs,))
@@ -263,7 +263,7 @@ class DreamerV3EnvRunner(EnvRunner):
             # Pick up stored observations and states from previous timesteps.
             obs = np.stack([eps.observations[-1] for eps in self._episodes])
             # Compile the initial state for each batch row: If episode just started, use
-            # model's initial state, if not, use state stored last in Episode.
+            # model's initial state, if not, use state stored last in SingleAgentEpisode.
             states = {
                 k: np.stack(
                     [
@@ -333,7 +333,9 @@ class DreamerV3EnvRunner(EnvRunner):
                     is_first[i] = True
                     done_episodes_to_return.append(self._episodes[i])
                     # Create a new episode object.
-                    self._episodes[i] = Episode(observations=[obs[i]], states=s)
+                    self._episodes[i] = SingleAgentEpisode(
+                        observations=[obs[i]], states=s
+                    )
                 else:
                     self._episodes[i].add_timestep(
                         obs[i], actions[i], rewards[i], state=s
@@ -344,7 +346,7 @@ class DreamerV3EnvRunner(EnvRunner):
         self._done_episodes_for_metrics.extend(done_episodes_to_return)
         # ... and all ongoing episode chunks. Also, make sure, we return
         # a copy and start new chunks so that callers of this function
-        # don't alter our ongoing and returned Episode objects.
+        # don't alter our ongoing and returned SingleAgentEpisode objects.
         ongoing_episodes = self._episodes
         self._episodes = [eps.create_successor() for eps in self._episodes]
         for eps in ongoing_episodes:
@@ -360,7 +362,7 @@ class DreamerV3EnvRunner(EnvRunner):
         explore: bool = True,
         random_actions: bool = False,
         with_render_data: bool = False,
-    ) -> List[Episode]:
+    ) -> List[SingleAgentEpisode]:
         """Helper method to run n episodes.
 
         See docstring of `self.sample()` for more details.
@@ -368,7 +370,7 @@ class DreamerV3EnvRunner(EnvRunner):
         done_episodes_to_return = []
 
         obs, _ = self.env.reset()
-        episodes = [Episode() for _ in range(self.num_envs)]
+        episodes = [SingleAgentEpisode() for _ in range(self.num_envs)]
 
         # Multiply states n times according to our vector env batch size (num_envs).
         states = tree.map_structure(
@@ -443,7 +445,7 @@ class DreamerV3EnvRunner(EnvRunner):
                         states[k][i] = v.numpy()
                     is_first[i] = True
 
-                    episodes[i] = Episode(
+                    episodes[i] = SingleAgentEpisode(
                         observations=[obs[i]],
                         states=s,
                         render_images=[render_images[i]],

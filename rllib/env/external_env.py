@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ray.rllib.models.preprocessors import Preprocessor
 
 
+# TODO (sven): Deprecate in favor of a tcp capable gymnasium adapter.
 @PublicAPI
 class ExternalEnv(threading.Thread):
     """An environment that interfaces with external agents.

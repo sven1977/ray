@@ -30,7 +30,7 @@ def register_connector(name: str, cls: Connector):
 
 @PublicAPI(stability="alpha")
 def get_connector(name: str, ctx: ConnectorContext, params: Any = None) -> Connector:
-    # TODO(jungong) : switch the order of parameters man!!
+    # TODO (jungong): switch the order of parameters.
     """Get a connector by its name and serialized config.
 
     Args:

@@ -1608,7 +1608,7 @@ class Algorithm(Trainable, AlgorithmBase):
 
                 if not pp.is_identity():
                     # Note(Kourosh): This call will leave the policy's connector
-                    # in eval mode. would that be a problem?
+                    #  in eval mode. would that be a problem?
                     pp.in_eval()
                     if observation is not None:
                         _input_dict = {SampleBatch.OBS: observation}
@@ -2158,8 +2158,6 @@ class Algorithm(Trainable, AlgorithmBase):
     def log_result(self, result: ResultDict) -> None:
         # Log after the callback is invoked, so that the user has a chance
         # to mutate the result.
-        # TODO: Remove `algorithm` arg at some point to fully deprecate the old
-        #  signature.
         self.callbacks.on_train_result(algorithm=self, result=result)
         # Then log according to Trainable's logging logic.
         Trainable.log_result(self, result)

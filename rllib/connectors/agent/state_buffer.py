@@ -49,10 +49,6 @@ class StateBufferConnector(AgentConnector):
                     "usually be ignore, unless it is from restoring a stashed policy."
                 )
 
-    @override(Connector)
-    def in_eval(self):
-        super().in_eval()
-
     def reset(self, env_id: str):
         # States should not be carried over between episodes.
         if env_id in self._states:

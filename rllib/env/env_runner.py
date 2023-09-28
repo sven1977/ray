@@ -1,11 +1,12 @@
 import abc
 from typing import Any, Dict
 
+from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
 from ray.rllib.utils.actor_manager import FaultAwareApply
-from ray.rllib.utils.annotations import ExperimentalAPI
+from ray.util.annotations import PublicAPI
 
 
-@ExperimentalAPI
+@PublicAPI(stability="alpha")
 class EnvRunner(FaultAwareApply, metaclass=abc.ABCMeta):
     """Base class for distributed RL-style data collection from an environment.
 
@@ -23,11 +24,11 @@ class EnvRunner(FaultAwareApply, metaclass=abc.ABCMeta):
     individual Actors are running.
     """
 
-    def __init__(self, *, config, **kwargs):
+    def __init__(self, *, config: AlgorithmConfig, **kwargs):
         """Initializes an EnvRunner instance.
 
         Args:
-            config: The config to use to setup this EnvRunner.
+            config: The AlgorithmConfig to use to setup this EnvRunner.
             **kwargs: Forward compatibility kwargs.
         """
         self.config = config
