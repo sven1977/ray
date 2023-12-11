@@ -24,13 +24,13 @@ from ray.rllib.algorithms.dreamerv3.dreamerv3_learner import (
     DreamerV3LearnerHyperparameters,
 )
 from ray.rllib.algorithms.dreamerv3.utils import do_symlog_obs
-from ray.rllib.algorithms.dreamerv3.utils.env_runner import DreamerV3EnvRunner
 from ray.rllib.algorithms.dreamerv3.utils.summaries import (
     report_predicted_vs_sampled_obs,
     report_sampling_and_replay_buffer,
 )
 from ray.rllib.core.learner.learner import LearnerHyperparameters
 from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
+from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 from ray.rllib.models.catalog import MODEL_DEFAULTS
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID, SampleBatch
 from ray.rllib.utils import deep_update
@@ -145,7 +145,7 @@ class DreamerV3Config(AlgorithmConfig):
         self.gamma = 0.997  # [1] eq. 7.
         # Do not use! Set `batch_size_B` and `batch_length_T` instead.
         self.train_batch_size = None
-        self.env_runner_cls = DreamerV3EnvRunner
+        self.env_runner_cls = SingleAgentEnvRunner
         self.num_rollout_workers = 0
         self.rollout_fragment_length = 1
         # Since we are using a gymnasium-based EnvRunner, we can utilitze its

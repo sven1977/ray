@@ -87,7 +87,7 @@ class SingleAgentEnvRunner(EnvRunner):
         except NotImplementedError:
             self.module = None
 
-        # This should be the default.
+        # Initially, we need to reset our vector env.
         self._needs_initial_reset: bool = True
         self._episodes: List[Optional["SingleAgentEpisode"]] = [
             None for _ in range(self.num_envs)
@@ -170,7 +170,7 @@ class SingleAgentEnvRunner(EnvRunner):
         else:
             initial_states = {}
 
-        # Have to reset the env (on all vector sub_envs).
+        # Have to reset the env (on all vector sub-envs).
         if force_reset or self._needs_initial_reset:
             obs, infos = self.env.reset()
 
