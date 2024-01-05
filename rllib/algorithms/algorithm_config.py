@@ -479,6 +479,7 @@ class AlgorithmConfig(_Config):
 
         # `self.rl_module()`
         self._rl_module_spec = None
+        self.model_config_dict = None
         # Helper to keep track of the original exploration config when dis-/enabling
         # rl modules.
         self.__prior_exploration_config = None
