@@ -60,12 +60,9 @@ class DefaultLearnerConnector(ConnectorV2):
         if not episodes:
             return data
 
-        if isinstance(episodes[0], MultiAgentEpisode):
-            # TODO (sven): Support multi-agent cases, in which user defined learner
-            #  connector pieces before this (default) one here.
-            #  Probably the only solution here would be to introduce the connector
-            #  input/output types.
-            # assert not data
+        is_multi_agent = isinstance(episodes[0], MultiAgentEpisode)
+
+        if is_multi_agent:
             module_to_episodes = defaultdict(list)
             for ma_episode in episodes:
                 for agent_id, sa_episode in ma_episode.agent_episodes.items():
@@ -80,7 +77,13 @@ class DefaultLearnerConnector(ConnectorV2):
             # Get the data dicts for all episodes.
             data_dicts = [eps.get_data_dict() for eps in episode_list]
             sa_module = rl_module[module_id]
-            sa_data = data.get(module_id, {})
+            # TODO (sven): Fix this hack, where single agent data (e.g. data[obs])
+            #  comes in from the previous learner connector pieces, but part of
+            #  `data` has also already a moduleID key (default_policy) from the
+            #  `_preprocess_train_data` call.
+            sa_data = data.get(module_id, {} if is_multi_agent else data)
+            if SampleBatch.OBS in data and not is_multi_agent:
+                sa_data[SampleBatch.OBS] = data.pop(SampleBatch.OBS)
 
             state_in = None
             T = sa_module.config.model_config_dict.get("max_seq_len")

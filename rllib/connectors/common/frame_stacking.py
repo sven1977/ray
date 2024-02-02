@@ -49,18 +49,19 @@ class _FrameStackingConnector(ConnectorV2):
         self.as_learner_connector = as_learner_connector
 
         # Some assumptions: Space is box AND last dim (the stacking one) is 1.
-        assert isinstance(self.observation_space, gym.spaces.Box)
-        assert self.observation_space.shape[-1] == 1
-
-        # Change our observation space according to the given stacking settings.
-        self.observation_space = gym.spaces.Box(
-            low=np.repeat(self.observation_space.low, repeats=self.num_frames, axis=-1),
-            high=np.repeat(
-                self.observation_space.high, repeats=self.num_frames, axis=-1
-            ),
-            shape=list(self.observation_space.shape)[:-1] + [self.num_frames],
-            dtype=self.observation_space.dtype,
-        )
+        if not self.as_learner_connector:
+            assert isinstance(self.observation_space, gym.spaces.Box)
+            assert self.observation_space.shape[-1] == 1
+    
+            # Change our observation space according to the given stacking settings.
+            self.observation_space = gym.spaces.Box(
+                low=np.repeat(self.observation_space.low, repeats=self.num_frames, axis=-1),
+                high=np.repeat(
+                    self.observation_space.high, repeats=self.num_frames, axis=-1
+                ),
+                shape=list(self.observation_space.shape)[:-1] + [self.num_frames],
+                dtype=self.observation_space.dtype,
+            )
 
     @override(ConnectorV2)
     def __call__(

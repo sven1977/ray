@@ -19,6 +19,8 @@ from typing import (
     Union,
 )
 
+import gymnasium as gym
+
 import ray
 from ray.rllib.connectors.learner.learner_connector_pipeline import (
     LearnerConnectorPipeline,
@@ -296,13 +298,16 @@ class Learner:
 
         # Build learner connector pipeline used on this Learner worker.
         if self.config.uses_new_env_runners:
-            # TODO (sven): Figure out which space to provide here. For now,
-            #  it doesn't matter, as the default connector piece doesn't use
-            #  this information anyway.
-            #  module_spec = self._module_spec.as_multi_agent()
+            #module_spec = self._module_spec.as_multi_agent()
             self._learner_connector = self.config.build_learner_connector(
-                input_observation_space=None,
-                input_action_space=None,
+                input_observation_space=None,#gym.spaces.Dict({
+                    #module_id: spec.observation_space
+                    #for module_id, spec in module_spec.module_specs.items()
+                #}),
+                input_action_space=None,#gym.spaces.Dict({
+                    #module_id: spec.action_space
+                    #for module_id, spec in module_spec.module_specs.items()
+                #}),
             )
 
         # Build the module to be trained by this learner.

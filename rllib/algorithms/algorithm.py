@@ -727,12 +727,24 @@ class Algorithm(Trainable, AlgorithmBase):
             #  However, this is hacky (information leak) and should not remain this
             #  way. For other EnvRunner classes (that don't have this property),
             #  Algorithm should infer this itself.
-            if hasattr(local_worker, "marl_module_spec"):
-                module_spec: MultiAgentRLModuleSpec = local_worker.marl_module_spec
-            else:
-                policy_dict, _ = self.config.get_multi_agent_setup(env=local_worker.env)
+            if hasattr(local_worker, "module") and local_worker.module is not None:
+                marl_module_dict = dict(local_worker.module.as_multi_agent())
+                spaces = {
+                    mid: (mod.config.observation_space, mod.config.action_space)
+                    for mid, mod in marl_module_dict.items()
+                }
+                policy_dict, _ = self.config.get_multi_agent_setup(
+                    env=local_worker.env, spaces=spaces
+                )
                 module_spec: MultiAgentRLModuleSpec = self.config.get_marl_module_spec(
                     policy_dict=policy_dict
+                )
+            elif hasattr(local_worker, "marl_module_spec"):
+                module_spec: MultiAgentRLModuleSpec = local_worker.marl_module_spec
+            else:
+                raise AttributeError(
+                    "Your local EnvRunner/RolloutWorker does NOT have any property "
+                    "referring to its RLModule!"
                 )
             self.learner_group = self.config.build_learner_group(
                 rl_module_spec=module_spec,
