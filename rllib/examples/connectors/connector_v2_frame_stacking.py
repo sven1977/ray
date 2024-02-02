@@ -7,14 +7,7 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.connectors.env_to_module.frame_stacking import FrameStackingEnvToModule
 from ray.rllib.connectors.learner.frame_stacking import FrameStackingLearner
 from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
-from ray.rllib.env.wrappers.atari_wrappers import (
-    EpisodicLifeEnv,
-    # FrameStack,  # <- we do not want env-based frame stacking
-    MaxAndSkipEnv,
-    NoopResetEnv,
-    NormalizedImageEnv,
-    WarpFrame,  # gray + resize
-)
+from ray.rllib.env.wrappers.atari_wrappers import wrap_atari_for_new_api_stack
 from ray.rllib.utils.test_utils import check_learning_achieved
 
 
@@ -31,6 +24,12 @@ parser.add_argument(
     type=int,
     default=0,
     help="The number of GPUs (Learner workers) to use.",
+)
+parser.add_argument(
+    "--num-env-runners",
+    type=int,
+    default=2,
+    help="The number of EnvRunners to use.",
 )
 parser.add_argument(
     "--num-frames",
@@ -86,27 +85,9 @@ if __name__ == "__main__":
     # We would like our frame stacking connector to do this job.
     tune.register_env(
         "env",
-        (
-            lambda cfg: (
-                EpisodicLifeEnv(  # each life is one episode
-                    MaxAndSkipEnv(  # frameskip=4 and take max over these 4 frames
-                        NoopResetEnv(  # perform n noops after a reset
-                            # partial(FrameStack, k=4)(  # <- no env-based framestacking
-                            NormalizedImageEnv(
-                                partial(WarpFrame, dim=64)(  # grayscale + resize
-                                    partial(
-                                        gym.wrappers.TimeLimit, max_episode_steps=108000
-                                    )(
-                                        gym.make(
-                                            "ALE/Pong-v5",
-                                            **dict(cfg, **{"render_mode": "rgb_array"})
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
+        lambda cfg: (
+            wrap_atari_for_new_api_stack(
+                gym.make("ALE/Pong-v5", **cfg, **{"render_mode": "rgb_array"})
             )
         ),
     )
@@ -130,6 +111,7 @@ if __name__ == "__main__":
             # ... new EnvRunner and our frame stacking env-to-module connector.
             env_runner_cls=SingleAgentEnvRunner,
             env_to_module_connector=_make_env_to_module_connector,
+            num_rollout_workers=args.num_env_runners,
         )
         .resources(
             num_learner_workers=args.num_gpus,
