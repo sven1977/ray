@@ -367,7 +367,7 @@ def wrap_atari_for_new_api_stack(
         env = FireResetEnv(env)
     # Framestack.
     if framestack:
-        env = FrameStack(k=framestack)
+        env = FrameStack(env, k=framestack)
     return env
 
 
