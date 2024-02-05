@@ -123,7 +123,7 @@ class MeanStdFilter(ConnectorV2):
             #  error). However, this would NOT work if our
             #  space were to be more more restrictive than the env's original space
             #  b/c then the adding of the original env observation would fail.
-            #episode.observation_space = episode.observations.space = self.observation_space
+            episode.observation_space = episode.observations.space = self.observation_space
             # TODO (sven): Add setter APIs to multi-agent episode.
             if isinstance(episode, MultiAgentEpisode):
                 for agent_id, val in normalized_observations.items():

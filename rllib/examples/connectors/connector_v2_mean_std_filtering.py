@@ -1,9 +1,13 @@
 import argparse
+import functools
 
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.connectors.env_to_module.mean_std_filter import MeanStdFilter
 from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
+from ray.rllib.utils.framework import try_import_torch
 from ray.rllib.utils.test_utils import check_learning_achieved
+
+torch, _ = try_import_torch()
 
 
 parser = argparse.ArgumentParser()
@@ -54,18 +58,18 @@ if __name__ == "__main__":
         .rollouts(
             # ... new EnvRunner and our frame stacking env-to-module connector.
             env_runner_cls=SingleAgentEnvRunner,
-            num_rollout_workers=0,
+            num_rollout_workers=2,
             num_envs_per_worker=20,
             # Define our custom connector pipeline.
             # Alternatively, return a list of n ConnectorV2 pieces (which will then be
             # included in an automatically generated EnvToModulePipeline or return a
             # EnvToModulePipeline directly.
-            env_to_module_connector=lambda env: (
-                MeanStdFilter(
-                    input_observation_space=env.single_observation_space,
-                    input_action_space=env.single_action_space,
-                )
-            ),
+            #env_to_module_connector=lambda env: (
+            #    MeanStdFilter(
+            #        input_observation_space=env.single_observation_space,
+            #        input_action_space=env.single_action_space,
+            #    )
+            #),
         )
         .resources(
             num_learner_workers=args.num_gpus,
@@ -80,9 +84,14 @@ if __name__ == "__main__":
             lr=0.0003 * (args.num_gpus or 1),
             lambda_=0.1,
             vf_clip_param=10.0,
-            #vf_loss_coeff=0.01,
+            vf_loss_coeff=0.01,
             model={
                 "fcnet_activation": "relu",
+                "fcnet_weights_initializer": torch.nn.init.xavier_uniform_,
+                "fcnet_bias_initializer": (
+                    functools.partial(torch.nn.init.constant_, val=0.0)
+                ),
+                "uses_new_env_runners": True,
             },
         )
     )
@@ -93,11 +102,17 @@ if __name__ == "__main__":
         "episode_reward_mean": args.stop_reward,
     }
 
+    #config.build().train()
+
     tuner = tune.Tuner(
         config.algo_class,
         param_space=config,
-        run_config=air.RunConfig(stop=stop, verbose=2),
-        tune_config=tune.TuneConfig(num_samples=1),
+        run_config=air.RunConfig(
+            stop=stop,
+            verbose=2,
+            checkpoint_config=air.CheckpointConfig(checkpoint_at_end=False),
+        ),
+        tune_config=tune.TuneConfig(num_samples=8),
     )
     results = tuner.fit()
 

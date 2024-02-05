@@ -161,8 +161,6 @@ if __name__ == "__main__":
         "episode_reward_mean": args.stop_reward,
     }
 
-    config.build().train()
-
     tuner = tune.Tuner(
         config.algo_class,
         param_space=config,

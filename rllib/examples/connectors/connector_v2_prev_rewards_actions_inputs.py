@@ -1,6 +1,7 @@
 import argparse
-import os
+import functools
 
+import torch.nn.init
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.connectors.env_to_module.prev_action_prev_reward import (
     PrevRewardPrevActionEnvToModule,
@@ -8,19 +9,19 @@ from ray.rllib.connectors.env_to_module.prev_action_prev_reward import (
 from ray.rllib.connectors.learner.prev_action_prev_reward import (
     PrevRewardPrevActionLearner,
 )
+from ray.rllib.core.rl_module.rl_module import SingleAgentRLModuleSpec
 from ray.rllib.env.single_agent_env_runner import SingleAgentEnvRunner
 from ray.rllib.examples.env.stateless_cartpole import StatelessCartPole
+from ray.rllib.examples.rl_module.lstm_w_prev_actions_rewards_rlm import (
+    TorchLSTMwPrevRewardsActionsRLM
+)
 from ray.rllib.utils.test_utils import check_learning_achieved
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--num-cpus", type=int, default=0)
-parser.add_argument(
-    "--framework",
-    choices=["tf", "tf2", "torch"],
-    default="torch",
-    help="The DL framework specifier.",
-)
+parser.add_argument("--n-prev-rewards", type=int, default=1)
+parser.add_argument("--n-prev-actions", type=int, default=1)
 parser.add_argument(
     "--as-test",
     action="store_true",
@@ -54,6 +55,8 @@ if __name__ == "__main__":
         return PrevRewardPrevActionEnvToModule(
             input_observation_space=env.single_observation_space,
             input_action_space=env.single_action_space,
+            n_prev_rewards=args.n_prev_rewards,
+            n_prev_actions=args.n_prev_actions,
         )
 
     def _learner_connector(input_observation_space, input_action_space):
@@ -61,14 +64,18 @@ if __name__ == "__main__":
         return PrevRewardPrevActionLearner(
             input_observation_space=input_observation_space,
             input_action_space=input_action_space,
+            n_prev_rewards=args.n_prev_rewards,
+            n_prev_actions=args.n_prev_actions,
         )
+
+    rlm_spec = SingleAgentRLModuleSpec(module_class=TorchLSTMwPrevRewardsActionsRLM)
 
     config = (
         PPOConfig()
         # Use new API stack.
         .experimental(_enable_new_api_stack=True)
-        .framework(args.framework)
         .environment(StatelessCartPole)
+        .rl_module(rl_module_spec=rlm_spec)
         # And new EnvRunner.
         .rollouts(
             env_runner_cls=SingleAgentEnvRunner,
@@ -85,6 +92,10 @@ if __name__ == "__main__":
             model={
                 "use_lstm": True,
                 "lstm_cell_size": 32,
+                "fcnet_weights_initializer": torch.nn.init.xavier_uniform_,
+                "fcnet_bias_initializer": (
+                    functools.partial(torch.nn.init.constant_, val=0.0)
+                ),
                 "vf_share_layers": True,
                 "uses_new_env_runners": True,
             },
@@ -99,8 +110,12 @@ if __name__ == "__main__":
 
     tuner = tune.Tuner(
         config.algo_class,
-        param_space=config.to_dict(),
-        run_config=air.RunConfig(stop=stop, verbose=1),
+        param_space=config,
+        run_config=air.RunConfig(
+            stop=stop,
+            verbose=1,
+            checkpoint_config=air.CheckpointConfig(checkpoint_at_end=False),
+        ),
         tune_config=tune.TuneConfig(num_samples=1),
     )
     results = tuner.fit()

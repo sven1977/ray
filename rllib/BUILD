@@ -393,8 +393,8 @@ py_test(
     tags = ["team:rllib", "exclusive", "learning_tests", "learning_tests_pendulum", "learning_tests_continuous", "no_tf_static_graph"],
     size = "large", # bazel may complain about it being too long sometimes - large is on purpose as some frameworks take longer
     srcs = ["tests/run_regression_tests.py"],
-    data = ["tuned_examples/ppo/multi_agent_pendulum_ppo.py"],
-    args = ["--dir=tuned_examples/ppo"]
+    data = ["tuned_examples/ppo/multi_agent_pendulum_ppo_envrunner.py"],
+    args = ["--dir=tuned_examples/ppo", "--num-cpus=5"]
 )
 
 py_test(
@@ -2810,28 +2810,57 @@ py_test(
     args = ["--as-test", "--framework=torch", "--stop-reward=7"]
 )
 
+# ConnectorV2 examples.
 py_test(
-    name = "examples/connectors/run_connector_policy",
-    main = "examples/connectors/run_connector_policy.py",
+    name = "examples/connectors/connector_v2_frame_stacking",
+    main = "examples/connectors/connector_v2_frame_stacking.py",
     tags = ["team:rllib", "exclusive", "examples"],
-    size = "small",
-    srcs = ["examples/connectors/run_connector_policy.py"],
+    size = "medium",
+    srcs = ["examples/connectors/connector_v2_frame_stacking.py"],
+    args = ["--as-test", "--framework=torch"]
 )
 
 py_test(
-    name = "examples/connectors/adapt_connector_policy",
-    main = "examples/connectors/adapt_connector_policy.py",
+    name = "examples/connectors/connector_v2_mean_std_filtering",
+    main = "examples/connectors/connector_v2_mean_std_filtering.py",
     tags = ["team:rllib", "exclusive", "examples"],
-    size = "small",
-    srcs = ["examples/connectors/adapt_connector_policy.py"],
+    size = "medium",
+    srcs = ["examples/connectors/connector_v2_mean_std_filtering.py"],
+    args = ["--as-test", "--framework=torch"]
 )
 
 py_test(
-    name = "examples/connectors/self_play_with_policy_checkpoint",
-    main = "examples/connectors/self_play_with_policy_checkpoint.py",
+    name = "examples/connectors/connector_v2_prev_rewards_actions_inputs",
+    main = "examples/connectors/connector_v2_prev_rewards_actions_inputs.py",
+    tags = ["team:rllib", "exclusive", "examples"],
+    size = "medium",
+    srcs = ["examples/connectors/connector_v2_prev_rewards_actions_inputs.py"],
+    args = ["--as-test", "--framework=torch"]
+)
+
+# Old connector (V1) examples.
+py_test(
+    name = "examples/connectors/v1/run_connector_policy",
+    main = "examples/connectors/v1/run_connector_policy.py",
     tags = ["team:rllib", "exclusive", "examples"],
     size = "small",
-    srcs = ["examples/connectors/self_play_with_policy_checkpoint.py"],
+    srcs = ["examples/connectors/v1/run_connector_policy.py"],
+)
+
+py_test(
+    name = "examples/connectors/v1/adapt_connector_policy",
+    main = "examples/connectors/v1/adapt_connector_policy.py",
+    tags = ["team:rllib", "exclusive", "examples"],
+    size = "small",
+    srcs = ["examples/connectors/v1/adapt_connector_policy.py"],
+)
+
+py_test(
+    name = "examples/connectors/v1/self_play_with_policy_checkpoint",
+    main = "examples/connectors/v1/self_play_with_policy_checkpoint.py",
+    tags = ["team:rllib", "exclusive", "examples"],
+    size = "small",
+    srcs = ["examples/connectors/v1/self_play_with_policy_checkpoint.py"],
     args = [
         "--train_iteration=1"  # Smoke test.
     ]
