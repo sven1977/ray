@@ -304,6 +304,13 @@ class SingleAgentEnvRunner(EnvRunner):
                         truncated=truncateds[env_index],
                         extra_model_outputs=extra_model_output,
                     )
+                    #TEST:
+                    self._env_to_module(
+                        episodes=[self._episodes[env_index]],
+                        rl_module=self.module,
+                        explore=explore,
+                    )
+                    #END TEST
 
                     # Make the `on_episode_step` callback (before finalizing the
                     # episode object).
