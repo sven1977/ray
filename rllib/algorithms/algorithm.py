@@ -458,6 +458,11 @@ class Algorithm(Trainable, AlgorithmBase):
         # Placeholder for our LearnerGroup responsible for updating the RLModule(s).
         self.learner_group: Optional["LearnerGroup"] = None
 
+        # Placeholder for a local metrics buffer instance storing Episode fragments
+        # (new API stack) and computing metrics as soon as these become complete
+        # episodes, then discarding these complete episodes to free memory.
+        self._metrics_episode_buffer = None
+
         # Create a default logger creator if no logger_creator is specified
         if logger_creator is None:
             # Default logdir prefix containing the agent's name and the
@@ -594,6 +599,10 @@ class Algorithm(Trainable, AlgorithmBase):
         self.local_replay_buffer = self._create_local_replay_buffer_if_necessary(
             self.config
         )
+
+        # Create the metrics episode buffer, if necessary.
+        if self.config.uses_new_env_runners:
+            self._metrics_episode_buffer = EpisodeReplayBuffer()
 
         # Create a dict, mapping ActorHandles to sets of open remote
         # requests (object refs). This way, we keep track, of which actors
@@ -861,27 +870,35 @@ class Algorithm(Trainable, AlgorithmBase):
             # Synchronize EnvToModule and ModuleToEnv connector states and broadcast new
             # states back to all workers.
             with self._timers[SYNCH_ENV_CONNECTOR_STATES_TIMER]:
+                # TODO (sven): Only do this every n iterations, based on user's needs.
                 # Merge connector states from all EnvRunners and broadcast updated
                 # states back to all EnvRunners.
                 self.workers.sync_connectors()
+
+            TODO: implement
+            results = self._compile_iteration_results(
+                step_ctx=train_iter_ctx,
+                iteration_results=results,
+            )
         else:
             self._sync_filters_if_needed(
                 central_worker=self.workers.local_worker(),
                 workers=self.workers,
                 config=self.config,
             )
+            episodes_this_iter = collect_episodes(
+                self.workers,
+                self._remote_worker_ids_for_metrics(),
+                timeout_seconds=self.config.metrics_episode_collection_timeout_s,
+            )
+            results = self._compile_iteration_results_old_and_hybrid_api_stacks(
+                episodes_this_iter=episodes_this_iter,
+                step_ctx=train_iter_ctx,
+                iteration_results=results,
+            )
 
-        episodes_this_iter = collect_episodes(
-            self.workers,
-            self._remote_worker_ids_for_metrics(),
-            timeout_seconds=self.config.metrics_episode_collection_timeout_s,
-        )
-        results = self._compile_iteration_results(
-            episodes_this_iter=episodes_this_iter,
-            step_ctx=train_iter_ctx,
-            iteration_results=results,
-        )
-
+        # TODO (sven): Deprecate this. Users should use more intuitive and transparent
+        #  callbacks that operate on the EnvRunners env objects directly.
         # Check `env_task_fn` for possible update of the env's task.
         if self.config.env_task_fn is not None:
             if not callable(self.config.env_task_fn):
@@ -3262,7 +3279,7 @@ class Algorithm(Trainable, AlgorithmBase):
         metrics = _worker.get_metrics()
         return sample_results, metrics, _weights_seq_no
 
-    def _compile_iteration_results(
+    def _compile_iteration_results_old_and_hybrid_api_stacks(
         self, *, episodes_this_iter, step_ctx, iteration_results=None
     ):
         # Return dict.
