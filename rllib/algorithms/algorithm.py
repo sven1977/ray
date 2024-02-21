@@ -3389,7 +3389,7 @@ class Algorithm(Trainable, AlgorithmBase):
                 self._episode_history[-missing:] + metrics_this_iter
             )
             assert (
-                len(metrics_this_iter)
+                len(metrics_this_iter_plus_smoothing)
                 == self.config.metrics_num_episodes_for_smoothing
             )
         # Note that when there are more than `metrics_num_episodes_for_smoothing`
