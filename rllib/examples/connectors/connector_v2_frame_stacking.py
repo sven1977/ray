@@ -75,7 +75,7 @@ if __name__ == "__main__":
             # Perform framestacking either through ConnectorV2 or right here through
             # the observation wrapper.
             framestack=(
-                args.num_framestack if args.use_gym_wrapper_framestacking else None
+                args.num_frames if args.use_gym_wrapper_framestacking else None
             ),
         )
 
