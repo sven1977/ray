@@ -36,7 +36,6 @@ stop = {
 
 
 if __name__ == "__main__":
-    config.build().train()
     from ray import air, tune
 
     tuner = tune.Tuner(
