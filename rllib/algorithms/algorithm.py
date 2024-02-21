@@ -501,7 +501,9 @@ class Algorithm(Trainable, AlgorithmBase):
         # episodes, then discarding these complete episodes to free memory.
         # Implemented - if required - via a simple Dict mapping Episode IDs to
         # Episode objects.
-        self._metrics_episode_buffer: Optional[Dict[EpisodeID, EpisodeType]] = None
+        self._metrics_episode_buffer: Optional[
+            Dict[EpisodeID, List[EpisodeType]]
+        ] = None
         self._timers = defaultdict(_Timer)
         self._counters = defaultdict(int)
         self._episode_history = []
@@ -877,7 +879,7 @@ class Algorithm(Trainable, AlgorithmBase):
             with self._timers[SYNCH_ENV_CONNECTOR_STATES_TIMER]:
                 # Merge connector states from all EnvRunners and broadcast updated
                 # states back to all EnvRunners.
-                if self.iteration % self.config.env_runner_connector_sync_freq == 0:
+                if self.iteration % 5 == 0:
                     self.workers.sync_connectors()
 
             results = self._compile_iteration_results(
@@ -2060,10 +2062,10 @@ class Algorithm(Trainable, AlgorithmBase):
             already_stored = self._metrics_episode_buffer.get(episode.id_)
             # Concat new chunk to already stashed chunk.
             if already_stored:
-                self._metrics_episode_buffer[episode.id_].concat_episode(episode)
+                self._metrics_episode_buffer[episode.id_].append(episode)
             # Create a new entry in buffer.
             else:
-                self._metrics_episode_buffer[episode.id_] = episode
+                self._metrics_episode_buffer[episode.id_] = [episode]
 
     @PublicAPI
     def get_policy(self, policy_id: PolicyID = DEFAULT_POLICY_ID) -> Policy:
@@ -3350,23 +3352,30 @@ class Algorithm(Trainable, AlgorithmBase):
         # Extract all done episodes from buffer, compile their metrics, and remove them
         # from the buffer.
         episodes_for_metrics = []
-        for eps_id, episode in self._metrics_episode_buffer.copy().items():
-            if episode.is_done:
-                episodes_for_metrics.append(episode)
+        for eps_id, episodes in self._metrics_episode_buffer.copy().items():
+            if episodes[-1].is_done:
+                episodes_for_metrics.extend(episodes)
                 del self._metrics_episode_buffer[eps_id]
 
         # Compile metrics (RolloutMetrics) from `episodes_for_metrics`.
         # Compute per-episode metrics (only on already completed episodes).
-        metrics_this_iter = []
+        metrics_this_iter_by_eps_id = defaultdict(lambda: [0, 0])
         for episode in episodes_for_metrics:
-            episode_length = len(episode)
-            episode_reward = episode.get_return()
-            metrics_this_iter.append(
-                RolloutMetrics(
-                    episode_length=episode_length,
-                    episode_reward=episode_reward,
-                )
-            )
+            #episode_length = len(episode)
+            #episode_reward = episode.get_return()
+            metrics_this_iter_by_eps_id[episode.id_][0] += len(episode)
+            metrics_this_iter_by_eps_id[episode.id_][1] += episode.get_return()#len(episode)
+            #.append(
+            #    RolloutMetrics(
+            #        episode_length=episode_length,
+            #        episode_reward=episode_reward,
+            #    )
+            #))
+
+        metrics_this_iter = [
+            RolloutMetrics(episode_length=v[0], episode_reward=v[1])
+            for v in metrics_this_iter_by_eps_id.values()
+        ]
 
         # Calculate how many (if any) of older, historical episodes we have to add to
         # `episodes_this_iter` in order to reach the required smoothing window.
