@@ -875,10 +875,10 @@ class Algorithm(Trainable, AlgorithmBase):
             # Synchronize EnvToModule and ModuleToEnv connector states and broadcast new
             # states back to all workers.
             with self._timers[SYNCH_ENV_CONNECTOR_STATES_TIMER]:
-                # TODO (sven): Only do this every n iterations, based on user's needs.
                 # Merge connector states from all EnvRunners and broadcast updated
                 # states back to all EnvRunners.
-                self.workers.sync_connectors()
+                if self.iteration % self.config.env_runner_connector_sync_freq == 0:
+                    self.workers.sync_connectors()
 
             results = self._compile_iteration_results(
                 step_ctx=train_iter_ctx,
