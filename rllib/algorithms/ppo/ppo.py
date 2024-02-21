@@ -427,6 +427,7 @@ class PPO(Algorithm):
                     lambda w: w.sample(), local_worker=False
                 )
             episodes = tree.flatten(episodes)
+            self.record_episodes_for_env_runner_results(episodes)
             # TODO (sven): single- vs multi-agent.
             self._counters[NUM_AGENT_STEPS_SAMPLED] += sum(len(e) for e in episodes)
             self._counters[NUM_ENV_STEPS_SAMPLED] += sum(len(e) for e in episodes)
@@ -452,16 +453,13 @@ class PPO(Algorithm):
         # Update weights - after learning on the local worker - on all remote
         # workers.
         with self._timers[SYNCH_WORKER_WEIGHTS_TIMER]:
-            if self.workers.num_remote_workers() > 0:
-                self.workers.sync_weights(
-                    # Sync weights from learner_group to all rollout workers.
-                    from_worker_or_learner_group=self.learner_group,
-                    policies=policies_to_update,
-                    global_vars=None,
-                )
-            else:
-                weights = self.learner_group.get_weights()
-                self.workers.local_worker().set_weights(weights)
+            self.workers.sync_weights(
+                # Sync weights from learner_group to all rollout workers (incl.
+                # the local one).
+                from_worker_or_learner_group=self.learner_group,
+                policies=policies_to_update,
+                global_vars=None,
+            )
 
         kl_dict = {}
         if self.config.use_kl_loss:

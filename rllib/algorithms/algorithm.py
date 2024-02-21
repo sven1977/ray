@@ -260,6 +260,8 @@ class Algorithm(Trainable, AlgorithmBase):
         "episodes_total",
         "sampler_results/episode_len_mean",
         "sampler_results/episode_reward_mean",
+        "env_runner_results/episode_len_mean",
+        "env_runner_results/episode_reward_mean",
         "evaluation/sampler_results/episode_reward_mean",
     )
 
@@ -458,11 +460,6 @@ class Algorithm(Trainable, AlgorithmBase):
         # Placeholder for our LearnerGroup responsible for updating the RLModule(s).
         self.learner_group: Optional["LearnerGroup"] = None
 
-        # Placeholder for a local metrics buffer instance storing Episode fragments
-        # (new API stack) and computing metrics as soon as these become complete
-        # episodes, then discarding these complete episodes to free memory.
-        self._metrics_episode_buffer = None
-
         # Create a default logger creator if no logger_creator is specified
         if logger_creator is None:
             # Default logdir prefix containing the agent's name and the
@@ -499,10 +496,15 @@ class Algorithm(Trainable, AlgorithmBase):
             logger_creator = default_logger_creator
 
         # Metrics-related properties.
+        # Placeholder for a local metrics buffer instance storing Episode fragments
+        # (new API stack) and computing metrics as soon as these become complete
+        # episodes, then discarding these complete episodes to free memory.
+        # Implemented - if required - via a simple Dict mapping Episode IDs to
+        # Episode objects.
+        self._metrics_episode_buffer: Optional[Dict[EpisodeID, EpisodeType]] = None
         self._timers = defaultdict(_Timer)
         self._counters = defaultdict(int)
         self._episode_history = []
-        self._episodes_to_be_collected = []
 
         # The fully qualified AlgorithmConfig used for evaluation
         # (or None if evaluation not setup).
@@ -514,12 +516,15 @@ class Algorithm(Trainable, AlgorithmBase):
         # (although their values may be nan), so that Tune does not complain
         # when we use these as stopping criteria.
         self.evaluation_metrics = {
-            # TODO: Don't dump sampler results into top-level.
             "evaluation": {
-                "episode_reward_max": np.nan,
-                "episode_reward_min": np.nan,
-                "episode_reward_mean": np.nan,
+                # TODO (sven): Deprecate `sampler_results` (replace with
+                #  `env_runner_results`).
                 "sampler_results": {
+                    "episode_reward_max": np.nan,
+                    "episode_reward_min": np.nan,
+                    "episode_reward_mean": np.nan,
+                },
+                "env_runner_results": {
                     "episode_reward_max": np.nan,
                     "episode_reward_min": np.nan,
                     "episode_reward_mean": np.nan,
@@ -602,7 +607,7 @@ class Algorithm(Trainable, AlgorithmBase):
 
         # Create the metrics episode buffer, if necessary.
         if self.config.uses_new_env_runners:
-            self._metrics_episode_buffer = EpisodeReplayBuffer()
+            self._metrics_episode_buffer = {}
 
         # Create a dict, mapping ActorHandles to sets of open remote
         # requests (object refs). This way, we keep track, of which actors
@@ -875,7 +880,6 @@ class Algorithm(Trainable, AlgorithmBase):
                 # states back to all EnvRunners.
                 self.workers.sync_connectors()
 
-            TODO: implement
             results = self._compile_iteration_results(
                 step_ctx=train_iter_ctx,
                 iteration_results=results,
@@ -1523,12 +1527,12 @@ class Algorithm(Trainable, AlgorithmBase):
         del weights_ref
         del remote_fn_partial
 
-        sampler_results = summarize_episodes(
+        env_runner_results = summarize_episodes(
             rollout_metrics,
             keep_custom_metrics=eval_cfg["keep_per_episode_custom_metrics"],
         )
 
-        metrics = dict({"sampler_results": sampler_results})
+        metrics = dict({"env_runner_results": env_runner_results})
         metrics[NUM_AGENT_STEPS_SAMPLED_THIS_ITER] = agent_steps_this_iter
         metrics[NUM_ENV_STEPS_SAMPLED_THIS_ITER] = env_steps_this_iter
 
@@ -2006,6 +2010,37 @@ class Algorithm(Trainable, AlgorithmBase):
             return actions, unbatched_states, infos
         else:
             return actions
+
+    @PublicAPI
+    def record_episodes_for_env_runner_results(
+        self,
+        episodes: List[EpisodeType],
+    ) -> None:
+        """Adds a list of Episodes to be processed for iteration metrics later on.
+
+        This should be called from within `self.training_steps()` by any algorithm
+        that would like to store all sampled episodes or episode chunks (single-
+        or multi-agent), which were returned from an `EnvRunner.sample()` method within
+        `self.training_step()` and which should be used for the to-be-compiled
+        iteration results.
+
+        The compiled metrics based on these episodes and episode chunks will be
+        available under the `env_runner_results` key in the per-iteration ResultDict.
+
+        Flow of information:
+
+        def training_step(self, ...):
+            ...
+            episodes = (
+                self.workers.foreach_worker(lambda env_runner: env_runner.sample())
+            )
+            self.record_episodes_for_env_runner_results(episodes)
+            ...
+            return results
+
+        The Algorithm object will then take `results`, compile the
+        """
+        TODO: continue docstring
 
     @PublicAPI
     def get_policy(self, policy_id: PolicyID = DEFAULT_POLICY_ID) -> Policy:
@@ -3279,6 +3314,124 @@ class Algorithm(Trainable, AlgorithmBase):
         metrics = _worker.get_metrics()
         return sample_results, metrics, _weights_seq_no
 
+    def _compile_iteration_results(self, *, step_ctx, iteration_results):
+        # Return dict.
+        results: ResultDict = {}
+        # Evaluation results.
+        results["evaluation"] = iteration_results.pop("evaluation", {})
+        # Custom metrics.
+        results["custom_metrics"] = iteration_results.pop("custom_metrics", {})
+        # Learner info.
+        results["info"] = {LEARNER_INFO: iteration_results}
+
+        # Extract all done episodes from buffer, compile their metrics, and remove them
+        # from the buffer.
+        episodes_for_metrics = []
+        for eps_id, episode in self._metrics_episode_buffer.copy().items():
+            if episode.is_done:
+                episodes_for_metrics.append(episode)
+                del self._metrics_episode_buffer[eps_id]
+
+        # Compile metrics (RolloutMetrics) from `episodes_for_metrics`.
+        # Compute per-episode metrics (only on already completed episodes).
+        metrics_this_iter = []
+        for episode in episodes_for_metrics:
+            episode_length = len(episode)
+            episode_reward = episode.get_return()
+            metrics_this_iter.append(
+                RolloutMetrics(
+                    episode_length=episode_length,
+                    episode_reward=episode_reward,
+                )
+            )
+
+        # Calculate how many (if any) of older, historical episodes we have to add to
+        # `episodes_this_iter` in order to reach the required smoothing window.
+        missing = self.config.metrics_num_episodes_for_smoothing - len(
+            episodes_for_metrics
+        )
+        # We have to add some older episodes to reach the smoothing window size.
+        metrics_this_iter_plus_smoothing = metrics_this_iter
+        if missing > 0:
+            metrics_this_iter_plus_smoothing = (
+                self._episode_history[-missing:] + metrics_this_iter
+            )
+            assert (
+                len(episodes_for_metrics)
+                <= self.config.metrics_num_episodes_for_smoothing
+            )
+        # Note that when there are more than `metrics_num_episodes_for_smoothing`
+        # episodes in `episodes_for_metrics`, leave them as-is. In this case, we'll
+        # compute the stats over that larger number.
+
+        # Add new episodes to our history and make sure it doesn't grow larger than
+        # needed.
+        self._episode_history.extend(metrics_this_iter)
+        self._episode_history = self._episode_history[
+            -self.config.metrics_num_episodes_for_smoothing :
+        ]
+        results["env_runner_results"] = summarize_episodes(
+            metrics_this_iter_plus_smoothing,
+            metrics_this_iter,
+            self.config.keep_per_episode_custom_metrics,
+        )
+
+        results["num_healthy_workers"] = self.workers.num_healthy_remote_workers()
+        results["num_in_flight_async_reqs"] = self.workers.num_in_flight_async_reqs()
+        results["num_remote_worker_restarts"] = (
+            self.workers.num_remote_worker_restarts()
+        )
+
+        # Train-steps- and env/agent-steps this iteration.
+        for c in [
+            NUM_AGENT_STEPS_SAMPLED,
+            NUM_AGENT_STEPS_TRAINED,
+            NUM_ENV_STEPS_SAMPLED,
+            NUM_ENV_STEPS_TRAINED,
+        ]:
+            results[c] = self._counters[c]
+
+        time_taken_sec = step_ctx.get_time_taken_sec()
+        if self.config.count_steps_by == "agent_steps":
+            results[NUM_AGENT_STEPS_SAMPLED + "_this_iter"] = step_ctx.sampled
+            results[NUM_AGENT_STEPS_TRAINED + "_this_iter"] = step_ctx.trained
+            results[NUM_AGENT_STEPS_SAMPLED + "_throughput_per_sec"] = (
+                step_ctx.sampled / time_taken_sec
+            )
+            results[NUM_AGENT_STEPS_TRAINED + "_throughput_per_sec"] = (
+                step_ctx.trained / time_taken_sec
+            )
+            # TODO: For CQL and other algos, count by trained steps.
+            results["timesteps_total"] = self._counters[NUM_AGENT_STEPS_SAMPLED]
+        else:
+            results[NUM_ENV_STEPS_SAMPLED + "_this_iter"] = step_ctx.sampled
+            results[NUM_ENV_STEPS_TRAINED + "_this_iter"] = step_ctx.trained
+            results[NUM_ENV_STEPS_SAMPLED + "_throughput_per_sec"] = (
+                step_ctx.sampled / time_taken_sec
+            )
+            results[NUM_ENV_STEPS_TRAINED + "_throughput_per_sec"] = (
+                step_ctx.trained / time_taken_sec
+            )
+            # TODO: For CQL and other algos, count by trained steps.
+            results["timesteps_total"] = self._counters[NUM_ENV_STEPS_SAMPLED]
+
+        # Process timer results.
+        timers = {}
+        for k, timer in self._timers.items():
+            timers["{}_time_ms".format(k)] = round(timer.mean * 1000, 3)
+            if timer.has_units_processed():
+                timers["{}_throughput".format(k)] = round(timer.mean_throughput, 3)
+        results["timers"] = timers
+
+        # Process counter results.
+        counters = {}
+        for k, counter in self._counters.items():
+            counters[k] = counter
+        results["counters"] = counters
+
+        return results
+
+    # TODO (sven): Deprecate with old API stack.
     def _compile_iteration_results_old_and_hybrid_api_stacks(
         self, *, episodes_this_iter, step_ctx, iteration_results=None
     ):
@@ -3320,7 +3473,7 @@ class Algorithm(Trainable, AlgorithmBase):
         self._episode_history = self._episode_history[
             -self.config.metrics_num_episodes_for_smoothing :
         ]
-        results["sampler_results"] = summarize_episodes(
+        results["env_runner_results"] = summarize_episodes(
             episodes_for_metrics,
             episodes_this_iter,
             self.config.keep_per_episode_custom_metrics,

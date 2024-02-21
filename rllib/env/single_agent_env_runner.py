@@ -544,34 +544,6 @@ class SingleAgentEnvRunner(EnvRunner):
 
         return samples
 
-    # TODO (sven): Remove the requirement for EnvRunners to have this
-    #  API. Instead Algorithm should compile episode metrics itself via its local
-    #  buffer.
-    def get_metrics(self) -> List[RolloutMetrics]:
-        # Compute per-episode metrics (only on already completed episodes).
-        metrics = []
-        for eps in self._done_episodes_for_metrics:
-            assert eps.is_done
-            episode_length = len(eps)
-            episode_reward = eps.get_return()
-            # Don't forget about the already returned chunks of this episode.
-            if eps.id_ in self._ongoing_episodes_for_metrics:
-                for eps2 in self._ongoing_episodes_for_metrics[eps.id_]:
-                    episode_length += len(eps2)
-                    episode_reward += eps2.get_return()
-                del self._ongoing_episodes_for_metrics[eps.id_]
-
-            metrics.append(
-                RolloutMetrics(
-                    episode_length=episode_length,
-                    episode_reward=episode_reward,
-                )
-            )
-
-        self._done_episodes_for_metrics.clear()
-
-        return metrics
-
     # TODO (sven): Remove the requirement for EnvRunners/RolloutWorkers to have this
     #  API. Replace by proper state overriding via `EnvRunner.set_state()`
     def set_weights(self, weights, global_vars=None, weights_seq_no: int = 0):
