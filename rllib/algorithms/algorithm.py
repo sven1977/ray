@@ -3380,7 +3380,7 @@ class Algorithm(Trainable, AlgorithmBase):
         # Calculate how many (if any) of older, historical episodes we have to add to
         # `episodes_this_iter` in order to reach the required smoothing window.
         missing = self.config.metrics_num_episodes_for_smoothing - len(
-            episodes_for_metrics
+            metrics_this_iter
         )
         # We have to add some older episodes to reach the smoothing window size.
         metrics_this_iter_plus_smoothing = metrics_this_iter
