@@ -427,7 +427,7 @@ class PPO(Algorithm):
                     lambda w: w.sample(), local_worker=False
                 )
             episodes = tree.flatten(episodes)
-            self.record_episodes_for_env_runner_results(episodes)
+            self.stash_episodes_for_metrics(episodes)
             # TODO (sven): single- vs multi-agent.
             self._counters[NUM_AGENT_STEPS_SAMPLED] += sum(len(e) for e in episodes)
             self._counters[NUM_ENV_STEPS_SAMPLED] += sum(len(e) for e in episodes)

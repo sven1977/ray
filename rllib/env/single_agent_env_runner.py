@@ -11,7 +11,6 @@ from ray.rllib.core.rl_module.rl_module import RLModule, SingleAgentRLModuleSpec
 from ray.rllib.env.env_runner import EnvRunner
 from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 from ray.rllib.env.utils import _gym_env_creator
-from ray.rllib.evaluation.metrics import RolloutMetrics
 from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID, SampleBatch
 from ray.rllib.utils.annotations import ExperimentalAPI, override
 from ray.rllib.utils.framework import try_import_tf
@@ -117,8 +116,7 @@ class SingleAgentEnvRunner(EnvRunner):
             None for _ in range(self.num_envs)
         ]
 
-        self._done_episodes_for_metrics: List[SingleAgentEpisode] = []
-        self._ongoing_episodes_for_metrics: DefaultDict[List] = defaultdict(list)
+        #self._ongoing_episodes_for_metrics: DefaultDict[List] = defaultdict(list)
         self._weights_seq_no: int = 0
 
     @override(EnvRunner)
@@ -367,7 +365,7 @@ class SingleAgentEnvRunner(EnvRunner):
 
         # Return done episodes ...
         # TODO (simon): Check, how much memory this attribute uses.
-        self._done_episodes_for_metrics.extend(done_episodes_to_return)
+        #self._done_episodes_for_metrics.extend(done_episodes_to_return)
         # ... and all ongoing episode chunks.
 
         # Also, make sure we start new episode chunks (continuing the ongoing episodes
@@ -384,7 +382,7 @@ class SingleAgentEnvRunner(EnvRunner):
             if eps.t == 0:
                 continue
             eps.validate()
-            self._ongoing_episodes_for_metrics[eps.id_].append(eps)
+            #self._ongoing_episodes_for_metrics[eps.id_].append(eps)
             # Return finalized (numpy'ized) Episodes.
             ongoing_episodes_to_return.append(eps.finalize())
 
@@ -537,7 +535,7 @@ class SingleAgentEnvRunner(EnvRunner):
                         "on_episode_step", env_index, episodes
                     )
 
-        self._done_episodes_for_metrics.extend(done_episodes_to_return)
+        #self._done_episodes_for_metrics.extend(done_episodes_to_return)
 
         # Initialized episodes have to be removed as they lack `extra_model_outputs`.
         samples = [episode for episode in done_episodes_to_return if episode.t > 0]

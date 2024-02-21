@@ -2012,7 +2012,7 @@ class Algorithm(Trainable, AlgorithmBase):
             return actions
 
     @PublicAPI
-    def record_episodes_for_env_runner_results(
+    def stash_episodes_for_metrics(
         self,
         episodes: List[EpisodeType],
     ) -> None:
@@ -2020,27 +2020,50 @@ class Algorithm(Trainable, AlgorithmBase):
 
         This should be called from within `self.training_steps()` by any algorithm
         that would like to store all sampled episodes or episode chunks (single-
-        or multi-agent), which were returned from an `EnvRunner.sample()` method within
-        `self.training_step()` and which should be used for the to-be-compiled
-        iteration results.
+        or multi-agent), which were returned from an `EnvRunner.sample()` method call
+        inside `self.training_step()` and which should be used for the to-be-compiled
+        iteration results/metrics.
 
         The compiled metrics based on these episodes and episode chunks will be
-        available under the `env_runner_results` key in the per-iteration ResultDict.
+        available under the `env_runner_results` key in the ResultDict object returned
+        from `Algorithm.train()`.
 
         Flow of information:
 
-        def training_step(self, ...):
-            ...
-            episodes = (
-                self.workers.foreach_worker(lambda env_runner: env_runner.sample())
-            )
-            self.record_episodes_for_env_runner_results(episodes)
-            ...
-            return results
+        .. testcode::
+            :skipif: True
 
-        The Algorithm object will then take `results`, compile the
+            # Any Algorithm that uses env-sampled data, should do this in its
+            # `training_step()` method:
+
+            def training_step(self, ...):
+                ...
+                episodes = (
+                    self.workers.foreach_worker(lambda env_runner: env_runner.sample())
+                )
+                self.stash_episodes_for_metrics(episodes)
+                ...
+                return results
+
+        The Algorithm object will then take `results`, compile the metrics from the
+        stashed episodes and add these compiled statistics to the `results` dict under
+        a new key: "env_runner_results".
+
+        Args:
+            episodes: The list of episodes (Single- or MultiAgentEpisode) to be stashed
+                away for processing at the end of the iteration. Episodes in this list
+                are not required to be complete. However, only completed episodes will
+                be processed at the end of the iteration, while incomplete ones will be
+                stored for later in time (when they have been completed themselves).
         """
-        TODO: continue docstring
+        for episode in episodes:
+            already_stored = self._metrics_episode_buffer.get(episode.id_)
+            # Concat new chunk to already stashed chunk.
+            if already_stored:
+                self._metrics_episode_buffer[episode.id_].concat_episode(episode)
+            # Create a new entry in buffer.
+            else:
+                self._metrics_episode_buffer[episode.id_] = episode
 
     @PublicAPI
     def get_policy(self, policy_id: PolicyID = DEFAULT_POLICY_ID) -> Policy:
