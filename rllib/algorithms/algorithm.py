@@ -912,11 +912,10 @@ class Algorithm(Trainable, AlgorithmBase):
         """Evaluates current policy under `evaluation_config` settings.
 
         Args:
-            parallel_train_future: In case, we are training and avaluating in parallel,
+            parallel_train_future: In case, we are training and evaluating in parallel,
                 this arg carries the currently running ThreadPoolExecutor object that
-                runs the training iteration. Use `parallel_train_future.done()` to
-                check, whether the parallel training job has completed and
-                `parallel_train_future.result()` to get its return values.
+                runs the training iteration. Uses `parallel_train_future.done()` to
+                check, whether the parallel training job has completed.
 
         Returns:
             A ResultDict only containing the evaluation results from the current
@@ -3305,9 +3304,9 @@ class TrainIterCtx:
         self.init_env_steps_trained = self.algo._counters[NUM_ENV_STEPS_TRAINED]
         self.init_agent_steps_sampled = self.algo._counters[NUM_AGENT_STEPS_SAMPLED]
         self.init_agent_steps_trained = self.algo._counters[NUM_AGENT_STEPS_TRAINED]
-        self.failure_tolerance = self.algo.config[
-            "num_consecutive_worker_failures_tolerance"
-        ]
+        self.failure_tolerance = (
+            self.algo.config.num_consecutive_worker_failures_tolerance
+        )
         return self
 
     def __exit__(self, *args):

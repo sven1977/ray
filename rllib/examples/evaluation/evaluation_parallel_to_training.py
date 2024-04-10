@@ -45,6 +45,22 @@ parser.add_argument(
 
 
 class AssertEvalCallback(DefaultCallbacks):
+    #TEST
+    def on_episode_step(
+        self,
+        *,
+        episode,
+        worker,
+        base_env=None,
+        policies=None,
+        env_index: int,
+        **kwargs,
+    ) -> None:
+        if "test_data" not in episode.hist_data:
+            episode.hist_data["test_data"] = []
+        episode.hist_data["test_data"].append("some_crap")
+    #END TEST
+
     def on_train_result(self, *, algorithm, result, **kwargs):
         # Make sure we always run exactly the given evaluation duration,
         # no matter what the other settings are (such as
@@ -165,6 +181,9 @@ if __name__ == "__main__":
             num_gpus_per_learner_worker=int(args.num_gpus != 0),
             num_cpus_for_local_worker=1,
         )
+        .reporting(#TEST
+            min_time_s_per_iteration=60,
+        )#END TEST
     )
 
     # Add a simple multi-agent setup.
