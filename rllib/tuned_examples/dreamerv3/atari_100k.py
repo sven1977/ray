@@ -9,7 +9,10 @@ https://arxiv.org/pdf/2010.02193.pdf
 """
 
 # Run with:
-# python run_regression_tests.py --dir [this file] --env ALE/[gym ID e.g. Pong-v5]
+# python [this script name].py --env ALE/[gym ID e.g. Pong-v5]
+
+# To see all available options:
+# python [this script name].py --help
 
 from ray.rllib.algorithms.dreamerv3.dreamerv3 import DreamerV3Config
 
@@ -45,7 +48,7 @@ config = (
         # If we use >1 GPU and increase the batch size accordingly, we should also
         # increase the number of envs per worker.
         num_envs_per_env_runner=(num_gpus or 1),
-        remote_worker_envs=True,
+        remote_worker_envs=False,
     )
     .reporting(
         metrics_num_episodes_for_smoothing=(num_gpus or 1),
