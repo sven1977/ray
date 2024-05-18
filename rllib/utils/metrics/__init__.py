@@ -1,4 +1,3 @@
-# Algorithm ResultDict keys.
 # TODO (sven): Change the actual strings into more fitting ones (e.g. `sampler_results`
 #  -> `env_runners` and `learner_stats` -> `learners`).
 EVALUATION_RESULTS = "evaluation_results"
