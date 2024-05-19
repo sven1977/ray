@@ -40,6 +40,7 @@ class TestDreamerV3(unittest.TestCase):
         # Build a DreamerV3Config object.
         config = (
             dreamerv3.DreamerV3Config()
+            .framework(eager_tracing=False)#TODO
             .training(
                 # Keep things simple. Especially the long dream rollouts seem
                 # to take an enormous amount of time (initially).
@@ -50,10 +51,10 @@ class TestDreamerV3(unittest.TestCase):
                 symlog_obs=True,
                 use_float16=False,
             )
-            .resources(
-                num_learner_workers=2,  # Try with 2 Learners.
-                num_cpus_per_learner_worker=1,
-                num_gpus_per_learner_worker=0,
+            .learners(
+                num_learners=0,#TODO 2  # Try with 2 Learners.
+                num_cpus_per_learner=1,
+                num_gpus_per_learner=0,
             )
         )
 
