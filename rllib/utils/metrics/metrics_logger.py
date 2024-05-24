@@ -181,20 +181,6 @@ class MetricsLogger:
         else:
             self.stats[key].push(value)
 
-    #def log_pit_value(self, key, value) -> None:
-    #    """Logs a "point-in-time" value; shortcut for self.log_value(..., window=1).
-
-    #    A point-in-time value is one that should NOT be reduced or smoothed over some
-    #    window or using EMA. Instead, it's a single value that stands for itself and
-    #    was recorded at a certain point in time. Use this method for example to log
-    #    loss values (which should probably not be smoothed over, normally).
-
-    #    Args:
-    #        key: The key (or nested key-tuple) to log the `value` under.
-    #        value: The value to log as a point-in-time value.
-    #    """
-    #    self.log_value(key, value, window=1)
-
     def log_dict(
         self,
         stats_dict,
@@ -655,6 +641,19 @@ class MetricsLogger:
                 clear_on_reduce=clear_on_reduce,
             )
 
+    def delete(self, *key: Tuple[str], key_error: bool = True) -> None:
+        """Deletes th egiven `key` from this metrics logger's stats.
+
+        Args:
+            key: The key or key sequence (for nested location within self.stats),
+                to delete from this MetricsLogger's stats.
+            key_error: Whether to throw a KeyError if `key` cannot be found in `self`.
+
+        Raises:
+            KeyError: If `key` cannot be found in `self` AND `key_error` is True.
+        """
+        self._del_key(key, key_error)
+
     def reduce(
         self,
         key: Optional[Union[str, Tuple[str]]] = None,
@@ -800,3 +799,43 @@ class MetricsLogger:
             (torch and torch.is_tensor(value)) or (tf and tf.is_tensor(value))
         ):
             self._tensor_keys.add(key)
+
+    def _key_in_stats(self, flat_key, stats=None):
+        flat_key = force_tuple(tree.flatten(flat_key))
+        _dict = stats if stats is not None else self.stats
+        for key in flat_key:
+            if key not in _dict:
+                return False
+            _dict = _dict[key]
+        return True
+
+    def _get_key(self, flat_key, stats=None):
+        flat_key = force_tuple(tree.flatten(flat_key))
+        _dict = stats if stats is not None else self.stats
+        for key in flat_key:
+            _dict = _dict[key]
+        return _dict
+
+    def _set_key(self, flat_key, stats):
+        flat_key = force_tuple(tree.flatten(flat_key))
+        _dict = self.stats
+        for i, key in enumerate(flat_key):
+            if i == len(flat_key) - 1:
+                _dict[key] = stats
+                return
+            if key not in _dict:
+                _dict[key] = {}
+            _dict = _dict[key]
+
+    def _del_key(self, flat_key, key_error=False):
+        flat_key = force_tuple(tree.flatten(flat_key))
+        _dict = self.stats
+        try:
+            for i, key in enumerate(flat_key):
+                if i == len(flat_key) - 1:
+                    del _dict[key]
+                    return
+                _dict = _dict[key]
+        except KeyError as e:
+            if key_error:
+                raise e
