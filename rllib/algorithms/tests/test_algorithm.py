@@ -287,7 +287,7 @@ class TestAlgorithm(unittest.TestCase):
             .reporting(min_sample_timesteps_per_iteration=100)
             .callbacks(callbacks_class=AssertEvalCallback)
         )
-        for _ in framework_iterator(config, frameworks=("torch", "tf")):
+        for _ in framework_iterator(config, frameworks=("tf", "torch")):
             algo = config.build()
             # Should always see latest available eval results.
             r0 = algo.train()
@@ -313,7 +313,7 @@ class TestAlgorithm(unittest.TestCase):
             .callbacks(callbacks_class=AssertEvalCallback)
         )
 
-        for _ in framework_iterator(frameworks=("torch", "tf")):
+        for _ in framework_iterator(frameworks=("tf", "torch")):
             # Setup algorithm w/o evaluation worker set and still call
             # evaluate() -> Expect error.
             algo_wo_env_on_local_worker = config.build()
@@ -331,7 +331,8 @@ class TestAlgorithm(unittest.TestCase):
             config.create_env_on_local_worker = True
             algo_w_env_on_local_worker = config.build()
             results = algo_w_env_on_local_worker.evaluate()
-            assert "episode_reward_mean" in results
+            assert "evaluation" in results
+            assert "episode_reward_mean" in results["evaluation"]
             algo_w_env_on_local_worker.stop()
             config.create_env_on_local_worker = False
 

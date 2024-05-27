@@ -65,7 +65,7 @@ if __name__ == "__main__":
     )
 
     stop_config = {
-        "num_env_steps_sampled_lifetime": args.stop_timesteps,
+        "timesteps_total": args.stop_timesteps,
         "training_iteration": args.stop_iters,
     }
 

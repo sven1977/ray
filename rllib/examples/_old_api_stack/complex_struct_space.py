@@ -47,7 +47,7 @@ if __name__ == "__main__":
     )
 
     stop = {
-        "num_env_steps_sampled_lifetime": 1,
+        "timesteps_total": 1,
     }
 
     tuner = tune.Tuner(

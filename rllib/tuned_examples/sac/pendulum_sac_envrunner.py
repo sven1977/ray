@@ -31,9 +31,6 @@ config = (
         target_network_update_freq=1,
         replay_buffer_config={
             "type": "PrioritizedEpisodeReplayBuffer",
-            "capacity": 100000,
-            "alpha": 1.0,
-            "beta": 0.0,
         },
         num_steps_sampled_before_learning_starts=256,
     )
@@ -44,6 +41,6 @@ config = (
 )
 
 stop = {
-    "num_env_steps_sampled_lifetime": 20000,
-    "env_runner_results/episode_return_mean": -250.0,
+    "sampler_results/episode_reward_mean": -250,
+    "timesteps_total": 20000,
 }
