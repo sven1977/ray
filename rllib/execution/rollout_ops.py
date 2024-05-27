@@ -123,8 +123,8 @@ def synchronous_parallel_sample(
                 break
 
             if _return_metrics:
-                stats_dicts = [s[1] for s in sampled_data]
                 sampled_data = [s[0] for s in sampled_data]
+                stats_dicts = [s[1] for s in sampled_data]
 
         # Update our counters for the stopping criterion of the while loop.
         if _return_metrics:

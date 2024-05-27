@@ -16,6 +16,7 @@ from ray.rllib.env.env_context import EnvContext
 from ray.rllib.env.env_runner import EnvRunner
 from ray.rllib.env.single_agent_episode import SingleAgentEpisode
 from ray.rllib.env.utils import _gym_env_creator
+from ray.rllib.evaluation.metrics import RolloutMetrics
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_tf
 from ray.rllib.utils.metrics import (
@@ -59,6 +60,13 @@ class SingleAgentEnvRunner(EnvRunner):
         self.num_envs: int = 0
         self.make_env()
 
+        # Global counter for environment steps from all workers. This is
+        # needed for schedulers used by `RLModule`s.
+        self.global_num_env_steps_sampled = 0
+        # Stores the value of `self.global_num_env_steps_sampled` at end of last
+        # `self.get_metrics()` call (so we can compute the env/agent-step delta).
+        self._last_global_num_env_steps_sampled = 0
+
         # Create the env-to-module connector pipeline.
         self._env_to_module = self.config.build_env_to_module_connector(self.env)
         # Cached env-to-module results taken at the end of a `_sample_timesteps()`
@@ -92,13 +100,13 @@ class SingleAgentEnvRunner(EnvRunner):
         except NotImplementedError:
             self.module = None
 
-        # Create the two connector pipelines: env-to-module and module-to-env.
-        self._module_to_env = self.config.build_module_to_env_connector(self.env)
-
         # Create a MetricsLogger object for logging custom stats.
         self.metrics = MetricsLogger()
         # Initialize lifetime counts.
         self.metrics.log_value(NUM_ENV_STEPS_SAMPLED_LIFETIME, 0, reduce="sum")
+
+        # Create the two connector pipelines: env-to-module and module-to-env.
+        self._module_to_env = self.config.build_module_to_env_connector(self.env)
 
         # This should be the default.
         self._needs_initial_reset: bool = True
@@ -346,13 +354,14 @@ class SingleAgentEnvRunner(EnvRunner):
                             rl_module=self.module,
                             shared_data=self._shared_data,
                         )
-                    # Make the `on_episode_step` and `on_episode_end` callbacks (before
-                    # finalizing the episode object).
+                    # Make the `on_episode_step` callback (before finalizing the
+                    # episode object).
                     self._make_on_episode_callback("on_episode_step", env_index)
-                    self._make_on_episode_callback("on_episode_end", env_index)
-
-                    # Then finalize (numpy'ize) the episode.
                     done_episodes_to_return.append(self._episodes[env_index].finalize())
+
+                    # Make the `on_episode_end` callback (after having finalized the
+                    # episode object).
+                    self._make_on_episode_callback("on_episode_end", env_index)
 
                     # Create a new episode object with already the reset data in it.
                     self._episodes[env_index] = SingleAgentEpisode(
@@ -515,17 +524,16 @@ class SingleAgentEnvRunner(EnvRunner):
                         truncated=truncateds[env_index],
                         extra_model_outputs=extra_model_output,
                     )
-                    # Make `on_episode_step` and `on_episode_end` callbacks before
-                    # finalizing the episode.
+                    # Make `on_episode_step` callback before finalizing the episode.
                     self._make_on_episode_callback(
                         "on_episode_step", env_index, episodes
                     )
+                    done_episodes_to_return.append(episodes[env_index].finalize())
+
+                    # Make `on_episode_end` callback after finalizing the episode.
                     self._make_on_episode_callback(
                         "on_episode_end", env_index, episodes
                     )
-
-                    # Finalize (numpy'ize) the episode.
-                    done_episodes_to_return.append(episodes[env_index].finalize())
 
                     # Also early-out if we reach the number of episodes within this
                     # for-loop.

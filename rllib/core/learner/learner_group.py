@@ -454,10 +454,7 @@ class LearnerGroup:
                     self._worker_manager.foreach_actor(partials)
                 )
 
-        # TODO (sven): Deprecate `reduce_fn` and replace by a) a MetricsLogger on
-        #  each Learner worker producing the worker's result dict, then b) reducing
-        #  over n Learners' results dict on the Algorithm side (using the Algorithm's
-        #  MetricsLogger).
+        # TODO (sven): Move reduce_fn to the training_step
         if reduce_fn is None:
             return results
         elif not async_update:
