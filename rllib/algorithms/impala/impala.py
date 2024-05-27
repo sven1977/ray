@@ -1231,7 +1231,6 @@ class Impala(Algorithm):
         """
         return {}
 
-    @override(Algorithm)
     def _compile_iteration_results(self, *args, **kwargs):
         result = super()._compile_iteration_results(*args, **kwargs)
         if not self.config._enable_new_api_stack:
