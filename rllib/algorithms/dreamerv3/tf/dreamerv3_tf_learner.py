@@ -160,8 +160,11 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                 gradient_tape.gradient(
                     # Take individual loss term from the registered metrics for
                     # the main module.
-                    self.metrics.peek(
-                        DEFAULT_MODULE_ID, component.upper() + "_L_total"
+                    (
+                        self._metrics[DEFAULT_MODULE_ID][component.upper() + "_L_total"] if component == "world_model" else
+                        self.metrics.peek(
+                            DEFAULT_MODULE_ID, component.upper() + "_L_total"
+                        )
                     ),
                     self.filter_param_dict_for_optimizer(
                         self._params, self.get_optimizer(optimizer_name=component)
@@ -213,9 +216,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         # over T axis!).
         L_world_model_total = tf.reduce_mean(L_world_model_total_B_T)
 
-        # Log world model loss stats.
-        self.metrics.log_dict(
-            {
+        # Register world model loss stats.
+        self.register_metrics(
+            module_id=module_id,
+            metrics_dict={
                 "WORLD_MODEL_learned_initial_h": (
                     self.module[module_id].world_model.initial_h
                 ),
@@ -235,8 +239,6 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                 # Total loss.
                 "WORLD_MODEL_L_total": L_world_model_total,
             },
-            key=module_id,
-            window=1,  # <- single items (should not be mean/ema-reduced over time).
         )
         if config.report_individual_batch_item_stats:
             self.register_metrics(
