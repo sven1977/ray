@@ -419,7 +419,7 @@ class Stats:
         # Do non-EMA reduction (possibly using a window).
         else:
             values = (
-                self.values if self._window is None or self._window == float("inf") else self._values[-self._window:]
+                self.values if self._window is None or self._window == float("inf") else self.values[-self._window:]
             )
             # Use the numpy/torch "nan"-prefix to ignore NaN's in our value lists.
             if torch and torch.is_tensor(values[0]):
