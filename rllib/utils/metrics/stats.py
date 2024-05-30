@@ -5,6 +5,11 @@ from typing import Any, Callable, Dict, Optional, Tuple
 import numpy as np
 
 from ray.rllib.utils import force_list
+from ray.rllib.utils.framework import try_import_tf, try_import_torch
+from ray.rllib.utils.numpy import convert_to_numpy
+
+_, tf, _ = try_import_tf()
+torch, _ = try_import_torch()
 
 
 class Stats:
@@ -413,14 +418,25 @@ class Stats:
             return mean_value, [mean_value]
         # Do non-EMA reduction (possibly using a window).
         else:
-            # Use the numpy "nan"-prefix to ignore NaN's in our value lists.
-            reduce_meth = getattr(np, "nan" + self._reduce_method)
             values = (
-                self.values if self._window is None else self.values[-self._window :]
+                self.values if self._window is None or self._window == float("inf") else self._values[-self._window:]
             )
-            reduced = reduce_meth(values)
+            # Use the numpy/torch "nan"-prefix to ignore NaN's in our value lists.
+            if torch and torch.is_tensor(values[0]):
+                reduce_meth = getattr(torch, "nan" + self._reduce_method)
+                reduce_in = torch.stack(values)
+                if self._reduce_method == "mean":
+                    reduce_in = reduce_in.float()
+                reduced = reduce_meth(reduce_in)
+            elif tf and tf.is_tensor(values[0]):
+                reduce_meth = getattr(tf, "reduce_" + self._reduce_method)
+                reduced = reduce_meth(values)
+            else:
+                reduce_meth = getattr(np, "nan" + self._reduce_method)
+                reduced = reduce_meth(values)
+
             # Convert from numpy to primitive python types.
-            if reduced.shape == ():
+            if reduced.shape == () and isinstance(values[0], (int, float)):
                 if reduced.dtype in [np.int32, np.int64, np.int8, np.int16]:
                     reduced = int(reduced)
                 else:
@@ -428,7 +444,7 @@ class Stats:
 
             # For window=None (infinite window) and reduce != mean, we don't have to
             # keep any values, except the last (reduced) one.
-            if self._window is None and self._reduce_method != "mean":
+            if self._window in [None, float("inf")] and self._reduce_method != "mean":
                 new_values = [reduced]
             # In all other cases, keep the values that were also used for the reduce
             # operation.

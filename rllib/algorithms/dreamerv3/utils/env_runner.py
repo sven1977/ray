@@ -532,7 +532,7 @@ class DreamerV3EnvRunner(EnvRunner):
             len(self._done_episodes_for_metrics),
             reduce="sum",
             # Reset internal data on `reduce()` call below (not a lifetime count).
-            clear_on_reduce=True,
+            reset_on_reduce=True,
         )
 
         # Now that we have logged everything, clear cache of done episodes.
@@ -563,19 +563,19 @@ class DreamerV3EnvRunner(EnvRunner):
     def _increase_sampled_metrics(self, num_steps):
         # Per sample cycle stats.
         self.metrics.log_value(
-            NUM_ENV_STEPS_SAMPLED, num_steps, reduce="sum", clear_on_reduce=True
+            NUM_ENV_STEPS_SAMPLED, num_steps, reduce="sum", reset_on_reduce=True
         )
         self.metrics.log_value(
             (NUM_AGENT_STEPS_SAMPLED, DEFAULT_AGENT_ID),
             num_steps,
             reduce="sum",
-            clear_on_reduce=True,
+            reset_on_reduce=True,
         )
         self.metrics.log_value(
             (NUM_MODULE_STEPS_SAMPLED, DEFAULT_MODULE_ID),
             num_steps,
             reduce="sum",
-            clear_on_reduce=True,
+            reset_on_reduce=True,
         )
         # Lifetime stats.
         self.metrics.log_value(NUM_ENV_STEPS_SAMPLED_LIFETIME, num_steps, reduce="sum")

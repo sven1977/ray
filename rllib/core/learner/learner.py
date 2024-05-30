@@ -1395,7 +1395,7 @@ class Learner:
                     },
                 },
                 reduce="sum",
-                clear_on_reduce=True,
+                reset_on_reduce=True,
             )
 
         if minibatch_size and self._learner_connector is not None:
@@ -1799,10 +1799,10 @@ class Learner:
             (ALL_MODULES, NUM_ENV_STEPS_TRAINED),
             env_steps,
             reduce="sum",
-            clear_on_reduce=True,
+            reset_on_reduce=True,
         )
         # Log per-module steps trained (plus all modules) and per-agent steps trained.
-        self.metrics.log_dict(dict(log_dict), reduce="sum", clear_on_reduce=True)
+        self.metrics.log_dict(dict(log_dict), reduce="sum", reset_on_reduce=True)
 
     @Deprecated(
         new="self.metrics.[log_value|log_dict|log_time](key=..., value=..., "
