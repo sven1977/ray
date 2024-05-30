@@ -189,14 +189,6 @@ class LearnerGroup:
             self._update_request_tags = Counter()
             self._additional_update_request_tags = Counter()
 
-        # A special MetricsLogger object (not exposed to the user) for reducing
-        # the n results dicts returned by our n Learner workers in case we are on
-        # the old or hybrid API stack.
-        self._metrics_logger_old_and_hybrid_stack: Optional[MetricsLogger] = None
-        if not self.config.enable_env_runner_and_connector_v2:
-            self._metrics_logger_old_and_hybrid_stack = MetricsLogger()
-
-    # TODO (sven): Replace this with call to `self.metrics.peek()`?
     def get_stats(self) -> Dict[str, Any]:
         """Returns the current stats for the input queue for this learner group."""
         return {
@@ -496,19 +488,7 @@ class LearnerGroup:
         # the old behavior of returning an already reduced dict (as if we had a
         # reduce_fn).
         if not self.config.enable_env_runner_and_connector_v2:
-            # If we are doing an ansync update, we operate on a list (different async
-            # requests that now have results ready) of lists (n Learner workers) here.
-            if async_update:
-                results = tree.flatten_up_to(
-                    [[None] * len(r) for r in results], results
-                )
-            self._metrics_logger_old_and_hybrid_stack.log_n_dicts(results)
-            results = self._metrics_logger_old_and_hybrid_stack.reduce(
-                # We are returning to a client (Algorithm) that does NOT make any
-                # use of MetricsLogger (or Stats) -> Convert all values to non-Stats
-                # primitives.
-                return_stats_obj=False
-            )
+            assert False
 
         return results
 
@@ -603,10 +583,7 @@ class LearnerGroup:
         # the existing behavior of returning an already reduced dict (as if we had a
         # reduce_fn).
         if not self.config.enable_env_runner_and_connector_v2:
-            self._metrics_logger_old_and_hybrid_stack.log_n_dicts(results)
-            results = self._metrics_logger_old_and_hybrid_stack.reduce(
-                return_stats_obj=False
-            )
+            assert False
 
         return results
 
@@ -658,7 +635,7 @@ class LearnerGroup:
             not self.config.enable_env_runner_and_connector_v2
             and module_id in self._metrics_logger_old_and_hybrid_stack.stats
         ):
-            del self._metrics_logger_old_and_hybrid_stack.stats[module_id]
+            assert False
 
     def get_weights(
         self, module_ids: Optional[Set[str]] = None, inference_only: bool = False

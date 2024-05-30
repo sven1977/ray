@@ -20,6 +20,7 @@ num_gpus = 1
 config = (
     DreamerV3Config()
     .environment(
+        env="ALE/Pong-v5",
         # [2]: "We follow the evaluation protocol of Machado et al. (2018) with 200M
         # environment steps, action repeat of 4, a time limit of 108,000 steps per
         # episode that correspond to 30 minutes of game play, no access to life

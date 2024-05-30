@@ -151,6 +151,10 @@ class DreamerV3Config(AlgorithmConfig):
         self.env_runner_cls = DreamerV3EnvRunner
         self.num_env_runners = 0
         self.rollout_fragment_length = 1
+        # Since we are using a gymnasium-based EnvRunner, we can utilitze its
+        # vectorization capabilities w/o suffering performance losses (as we would
+        # with RLlib's `RemoteVectorEnv`).
+        self.remote_worker_envs = False
         # Dreamer only runs on the new API stack.
         self.enable_rl_module_and_learner = True
         self.enable_env_runner_and_connector_v2 = True

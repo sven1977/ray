@@ -1090,20 +1090,22 @@ class Learner:
         Returns:
             A dictionary of results from the update
         """
+        results_all_modules = {}
         module_ids = (
             module_ids_to_update
             if module_ids_to_update is not None
             else self.module.keys()
         )
         for module_id in module_ids:
-            self.additional_update_for_module(
+            module_results = self.additional_update_for_module(
                 module_id=module_id,
                 config=self.config.get_config_for_module(module_id),
                 timestep=timestep,
                 **kwargs,
             )
+            results_all_modules[module_id] = module_results
 
-        return self.metrics.reduce()
+        return results_all_modules
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     def additional_update_for_module(
@@ -1128,7 +1130,32 @@ class Learner:
         Returns:
             A dictionary of results from the update
         """
-        pass
+        if hps is not None:
+            deprecation_warning(
+                old="Learner.additional_update_for_module(.., hps=..)",
+                help="Deprecated argument. Use `config` (AlgorithmConfig) instead.",
+                error=True,
+            )
+
+        results = {}
+
+        # Only cover the optimizer mapped to this particular module.
+        for optimizer_name, optimizer in self.get_optimizers_for_module(module_id):
+            # Only update this optimizer's lr, if a scheduler has been registered
+            # along with it.
+            if optimizer in self._optimizer_lr_schedules:
+                new_lr = self._optimizer_lr_schedules[optimizer].update(
+                    timestep=timestep
+                )
+                self._set_optimizer_lr(optimizer, lr=new_lr)
+                # Make sure our returned results differentiate by optimizer name
+                # (if not the default name).
+                stats_name = LEARNER_RESULTS_CURR_LR_KEY
+                if optimizer_name != DEFAULT_OPTIMIZER:
+                    stats_name += "_" + optimizer_name
+                results.update({stats_name: new_lr})
+
+        return results
 
     def update_from_batch(
         self,
@@ -1789,27 +1816,3 @@ class Learner:
         )
         # Log per-module steps trained (plus all modules) and per-agent steps trained.
         self.metrics.log_dict(dict(log_dict), reduce="sum", reset_on_reduce=True)
-
-    @Deprecated(
-        new="self.metrics.[log_value|log_dict|log_time](key=..., value=..., "
-        "reduce=[mean|min|max|sum], window=..., ema_coeff=...)",
-        help="Use the new ray.rllib.utils.metrics.metrics_logger::MetricsLogger API "
-        "for logging your custom values and time-reducing (or parallel-reducing) them.",
-        error=True,
-    )
-    def register_metric(self, *args, **kwargs):
-        pass
-
-    @Deprecated(
-        new="self.metrics.[log_value|log_dict|log_time](key=..., value=..., "
-        "reduce=[mean|min|max|sum], window=..., ema_coeff=...)",
-        help="Use the new ray.rllib.utils.metrics.metrics_logger::MetricsLogger API "
-        "for logging your custom values and time-reducing (or parallel-reducing) them.",
-        error=True,
-    )
-    def register_metrics(self, *args, **kwargs):
-        pass
-
-    @Deprecated(error=True)
-    def compile_results(self, *args, **kwargs):
-        pass
