@@ -3,6 +3,8 @@
 D. Hafner, J. Pasukonis, J. Ba, T. Lillicrap
 https://arxiv.org/pdf/2301.04104v1.pdf
 """
+from typing import Optional
+
 from ray.rllib.algorithms.dreamerv3.tf.models.components.mlp import MLP
 from ray.rllib.algorithms.dreamerv3.tf.models.components.reward_predictor_layer import (
     RewardPredictorLayer,
@@ -31,7 +33,7 @@ class CriticNetwork(tf.keras.Model):
     def __init__(
         self,
         *,
-        model_size: str = "XS",
+        model_size: Optional[str] = "XS",
         num_buckets: int = 255,
         lower_bound: float = -20.0,
         upper_bound: float = 20.0,

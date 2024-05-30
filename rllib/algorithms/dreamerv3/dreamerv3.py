@@ -655,47 +655,7 @@ class DreamerV3(Algorithm):
 
                 sub_iter += 1
                 self.metrics.log_value(NUM_GRAD_UPDATES_LIFETIME, 1, reduce="sum")
-
-        # Log videos showing how the decoder produces observation predictions
-        # from the posterior states.
-        # Only every n iterations and only for the first sampled batch row
-        # (videos are `config.batch_length_T` frames long).
-        #report_predicted_vs_sampled_obs(
-        #    # TODO (sven): DreamerV3 is single-agent only.
-        #    metrics=self.metrics,
-        #    sample=sample,
-        #    batch_size_B=self.config.batch_size_B,
-        #    batch_length_T=self.config.batch_length_T,
-        #    symlog_obs=do_symlog_obs(
-        #        env_runner.env.single_observation_space,
-        #        self.config.symlog_obs,
-        #    ),
-        #    do_report=(
-        #        self.config.report_images_and_videos
-        #        and self.training_iteration % 100 == 0
-        #    )
-        #)
-
-        # Log videos showing some of the dreamed trajectories and compare them with the
-        # actual trajectories from the train batch.
-        # Only every n iterations and only for the first sampled batch row AND first ts.
-        # (videos are `config.horizon_H` frames long originating from the observation
-        # at B=0 and T=0 in the train batch).
-        #report_dreamed_eval_trajectory_vs_samples(
-        #    metrics=self.metrics,
-        #    sample=sample,
-        #    burn_in_T=0,
-        #    dreamed_T=self.config.horizon_H + 1,
-        #    dreamer_model=self.workers.local_worker().module.dreamer_model,
-        #    symlog_obs=do_symlog_obs(
-        #        env_runner.env.single_observation_space,
-        #        self.config.symlog_obs,
-        #    ),
-        #    do_report=(
-        #        self.config.report_dream_data
-        #        and self.training_iteration % 100 == 0
-        #    )
-        #)
+                self._counters[NUM_GRAD_UPDATES_LIFETIME] += 1
 
         # Update weights - after learning on the LearnerGroup - on all EnvRunner
         # workers.
@@ -704,6 +664,7 @@ class DreamerV3(Algorithm):
             # (local) Learner.
             if not self.config.share_module_between_env_runner_and_learner:
                 self.metrics.log_value(NUM_SYNCH_WORKER_WEIGHTS, 1, reduce="sum")
+                self._counters[NUM_SYNCH_WORKER_WEIGHTS] += 1
                 self.workers.sync_weights(
                     from_worker_or_learner_group=self.learner_group,
                     inference_only=True,
@@ -726,7 +687,7 @@ class DreamerV3(Algorithm):
 
     @property
     def training_ratio(self) -> float:
-        """Returns the actual training ratio of this Algorithm (not the configured one).
+        """Returns the actual training ratio of this Algorithm.
 
         The training ratio is copmuted by dividing the total number of steps
         trained thus far (replayed from the buffer) over the total number of actual
