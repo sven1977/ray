@@ -290,10 +290,11 @@ class Learner:
         # and return the resulting (reduced) dict.
         self.metrics = MetricsLogger()
 
-    # TODO (sven): Do we really need this API? It seems like LearnerGroup constructs
-    #  all Learner workers and then immediately builds them any ways? Seems to make
-    #  thing more complicated. Unless there is a reason related to Train worker group
-    #  setup.
+        # Registered metrics (one sub-dict per module ID) to be returned from
+        # `Learner.update()`. These metrics will be "compiled" automatically into
+        # the final results dict in the `self.compile_update_results()` method.
+        self._metrics = defaultdict(dict)
+
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     def build(self) -> None:
         """Builds the Learner.
@@ -579,10 +580,10 @@ class Learner:
                 grad_clip_by=config.grad_clip_by,
             )
             if config.grad_clip_by == "global_norm":
-                self.metrics.log_value(
-                    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
-                    value=global_norm,
-                    window=1,
+                self.register_metric(
+                    module_id,
+                    f"gradients_{optimizer_name}_global_norm",
+                    global_norm,
                 )
             postprocessed_grads.update(grad_dict_to_clip)
 
@@ -1347,6 +1348,10 @@ class Learner:
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         self._check_is_built()
 
+        if num_iters < 1:
+            # We must do at least one pass on the batch for training.
+            raise ValueError("`num_iters` must be >= 1")
+
         # Call the learner connector.
         if self._learner_connector is not None and episodes is not None:
             batch = self._learner_connector(
@@ -1378,25 +1383,6 @@ class Learner:
         for module_id in list(batch.policy_batches.keys()):
             if not self.should_module_be_updated(module_id, batch):
                 del batch.policy_batches[module_id]
-
-        # Log all timesteps (env, agent, modules) based on given episodes.
-        if self._learner_connector is not None and episodes is not None:
-            self._log_steps_trained_metrics(episodes, batch)
-        # TODO (sven): Possibly remove this if-else block entirely. We might be in a
-        #  world soon where we always learn from episodes, never from an incoming batch.
-        else:
-            self.metrics.log_dict(
-                {
-                    (ALL_MODULES, NUM_ENV_STEPS_TRAINED): batch.env_steps(),
-                    (ALL_MODULES, NUM_MODULE_STEPS_TRAINED): batch.agent_steps(),
-                    **{
-                        (mid, NUM_MODULE_STEPS_TRAINED): len(b)
-                        for mid, b in batch.policy_batches.items()
-                    },
-                },
-                reduce="sum",
-                reset_on_reduce=True,
-            )
 
         if minibatch_size and self._learner_connector is not None:
             batch_iter = partial(

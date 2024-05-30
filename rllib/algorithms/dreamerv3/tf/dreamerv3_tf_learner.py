@@ -128,21 +128,17 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             module_gradients_dict.update(grads_sub_dict)
 
             # DreamerV3 stats have the format: [WORLD_MODEL|ACTOR|CRITIC]_[stats name].
-            self.metrics.log_dict(
-                {
-                    optimizer_name.upper() + "_gradients_global_norm": global_norm,
-                    optimizer_name.upper()
-                    + "_gradients_maxabs_after_clipping": (
-                        tf.reduce_max(
-                            [
-                                tf.reduce_max(tf.math.abs(g))
-                                for g in grads_sub_dict.values()
-                            ]
-                        )
-                    ),
-                },
-                key=module_id,
-                window=1,  # <- single items (should not be mean/ema-reduced over time).
+            self.register_metric(
+                module_id,
+                optimizer_name.upper() + "_gradients_global_norm",
+                global_norm,
+            )
+            self.register_metric(
+                module_id,
+                optimizer_name.upper() + "_gradients_maxabs_after_clipping",
+                tf.reduce_max(
+                    [tf.reduce_max(tf.math.abs(g)) for g in grads_sub_dict.values()]
+                ),
             )
 
         return module_gradients_dict
@@ -243,9 +239,9 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             window=1,  # <- single items (should not be mean/ema-reduced over time).
         )
         if config.report_individual_batch_item_stats:
-            # Log important world-model loss stats.
-            self.metrics.log_dict(
-                {
+            self.register_metrics(
+                module_id=module_id,
+                metrics_dict={
                     "WORLD_MODEL_L_decoder_B_T": prediction_losses["L_decoder_B_T"],
                     "WORLD_MODEL_L_reward_B_T": prediction_losses["L_reward_B_T"],
                     "WORLD_MODEL_L_continue_B_T": prediction_losses["L_continue_B_T"],
@@ -256,8 +252,6 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                     "WORLD_MODEL_L_representation_B_T": L_rep_B_T,
                     "WORLD_MODEL_L_total_B_T": L_world_model_total_B_T,
                 },
-                key=module_id,
-                window=1,  # <- single items (should not be mean/ema-reduced over time).
             )
 
         # Dream trajectories starting in all internal states (h + z_posterior) that were
@@ -278,17 +272,16 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             # `rewards_dreamed_t0_to_H_BxT` into `rewards_dreamed_t0_to_H_Bx1`.
             # This will reduce the amount of data to be transferred and reported
             # by the factor of `batch_length_T`.
-            self.metrics.log_dict(
+            self.register_metrics(
+                module_id,
                 {
                     # Replace 'T' with '1'.
-                    f"DREAM_DATA_{key[:-1]}1": (
-                        value[:, config.batch_size_B_per_learner]
-                    )
+                    "DREAM_DATA_"
+                    + key[:-1]
+                    + "1": (value[:, config.batch_size_B_per_learner])
                     for key, value in dream_data.items()
                     if key.endswith("H_BxT")
                 },
-                key=module_id,
-                window=1,  # <- single items (should not be mean/ema-reduced over time).
             )
 
         value_targets_t0_to_Hm1_BxT = self._compute_value_targets(
@@ -303,10 +296,8 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             continues_t0_to_H_BxT=dream_data["continues_dreamed_t0_to_H_BxT"],
             value_predictions_t0_to_H_BxT=dream_data["values_dreamed_t0_to_H_BxT"],
         )
-        self.metrics.log_value(
-            key=(module_id, "VALUE_TARGETS_H_BxT"),
-            value=value_targets_t0_to_Hm1_BxT,
-            window=1,  # <- single items (should not be mean/ema-reduced over time).
+        self.register_metric(
+            module_id, "VALUE_TARGETS_H_BxT", value_targets_t0_to_Hm1_BxT
         )
 
         CRITIC_L_total = self._compute_critic_loss(
@@ -620,8 +611,9 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             window=1,  # <- single items (should not be mean/ema-reduced over time).
         )
         if config.report_individual_batch_item_stats:
-            self.metrics.log_dict(
-                {
+            self.register_metrics(
+                module_id,
+                metrics_dict={
                     "ACTOR_L_total_H_BxT": L_actor_H_B,
                     "ACTOR_logp_actions_dreamed_H_BxT": (
                         logp_actions_dreamed_t0_to_Hm1_B
@@ -634,8 +626,6 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                     "ACTOR_L_neglogp_reinforce_term_H_BxT": L_actor_reinforce_term_H_B,
                     "ACTOR_L_neg_entropy_term_H_BxT": L_actor_action_entropy_term_H_B,
                 },
-                key=module_id,
-                window=1,  # <- single items (should not be mean/ema-reduced over time).
             )
 
         return L_actor
@@ -751,9 +741,9 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             window=1,  # <- single items (should not be mean/ema-reduced over time).
         )
         if config.report_individual_batch_item_stats:
-            # Log important critic loss stats.
-            self.metrics.log_dict(
-                {
+            self.register_metrics(
+                module_id=module_id,
+                metrics_dict={
                     # Symlog'd value targets. Critic learns to predict symlog'd values.
                     "VALUE_TARGETS_symlog_H_BxT": value_symlog_targets_t0_to_Hm1_B,
                     # Critic loss terms.
@@ -763,8 +753,6 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                         ema_regularization_loss_H_B
                     ),
                 },
-                key=module_id,
-                window=1,  # <- single items (should not be mean/ema-reduced over time).
             )
 
         return L_critic
