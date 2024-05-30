@@ -113,7 +113,6 @@ class DreamerModel(tf.keras.Model):
         actions,
         is_first,
         start_is_terminated_BxT,
-        gamma,
     ):
         """Main call method for building this model in order to generate its variables.
 
