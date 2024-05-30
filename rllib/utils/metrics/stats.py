@@ -154,7 +154,7 @@ class Stats:
                 Must be None if `ema_coeff` is not None.
                 If `window` is None (and `ema_coeff` is None), reduction must not be
                 "mean".
-                TODO (sven): Allow window=float("inf"), iff clear_on_reduce=True.
+                TODO (sven): Allow window=float("inf"), iff reset_on_reduce=True.
                 This would enable cases where we want to accumulate n data points (w/o
                 limitation, then average over these, then reset the data pool on reduce,
                 e.g. for evaluation env_runner stats, which should NOT use any window,
@@ -165,7 +165,7 @@ class Stats:
                 `reduce` must be "mean".
                 The reduction formula for EMA performed by Stats is:
                 EMA(t1) = (1.0 - ema_coeff) * EMA(t0) + ema_coeff * new_value
-            clear_on_reduce: If True, the Stats object will reset its entire values list
+            reset_on_reduce: If True, the Stats object will reset its entire values list
                 to an empty one after `self.reduce()` is called. However, it will then
                 return from the `self.reduce()` call a new Stats object with the
                 properly reduced (not completely emptied) new values. Setting this
@@ -272,7 +272,7 @@ class Stats:
         """
         # Reduce everything to a single (init) value.
         self.values = self._reduced_values()[1]
-        # `clear_on_reduce` -> Return an empty new Stats object with the same option as
+        # `reset_on_reduce` -> Return an empty new Stats object with the same option as
         # `self`.
         if self._clear_on_reduce:
             return Stats.similar_to(self)
@@ -374,9 +374,13 @@ class Stats:
             check(stats.values, [1, 2])
 
         Args:
-            others: One or more other Stats objects that need to be parallely merged
-                into `self, meaning with equal weighting as the existing values in
-                `self`.
+            others: One or more other Stats objects that need to be merged into `self.
+            shuffle: Whether to shuffle the merged internal values list after the
+                merging (extending). Set to True, if `self` and `*others` are all equal
+                components in a parallel setup (each of their values should
+                matter equally and without any time-axis bias). Set to False, if
+                `*others` is only one component AND its values should be given priority
+                (because they are newer).
         """
         # Make sure `others` have same reduction settings.
         assert all(self._reduce_method == o._reduce_method for o in others)

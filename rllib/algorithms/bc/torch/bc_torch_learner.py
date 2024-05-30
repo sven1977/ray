@@ -57,12 +57,7 @@ class BCTorchLearner(TorchLearner):
 
         policy_loss = -possibly_masked_mean(log_probs)
 
-        # Log important loss stats.
-        self.metrics.log_dict(
-            {POLICY_LOSS_KEY: policy_loss},
-            key=module_id,
-            window=1,  # <- single items (should not be mean/ema-reduced over time).
-        )
+        self.register_metrics(module_id, {POLICY_LOSS_KEY: policy_loss})
 
         # Return the total loss which is for BC simply the policy loss.
         return policy_loss

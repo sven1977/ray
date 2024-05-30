@@ -112,7 +112,7 @@ def add_rllib_example_script_args(
     parser.add_argument(
         "--num-env-runners",
         type=int,
-        default=0,
+        default=2,
         help="The number of (remote) EnvRunners to use for the experiment.",
     )
     parser.add_argument(
@@ -1348,22 +1348,44 @@ def run_rllib_example_script_experiment(
     ray.init(num_cpus=args.num_cpus or None, local_mode=args.local_mode)
 
     # Define one or more stopping criteria.
-    if stop is None:
+    if not stop:
         stop = {
             f"{ENV_RUNNER_RESULTS}/episode_return_mean": args.stop_reward,
             f"{NUM_ENV_STEPS_SAMPLED_LIFETIME}": args.stop_timesteps,
             "training_iteration": args.stop_iters,
         }
 
+    # Enhance the `base_config`, based on provided `args`.
+    config = (
+        # Set the framework.
+        base_config.framework(args.framework)
+        # Enable the new API stack?
+        .api_stack(
+            enable_rl_module_and_learner=args.enable_new_api_stack,
+            enable_env_runner_and_connector_v2=args.enable_new_api_stack,
+        )
+        # Define EnvRunner/RolloutWorker scaling and behavior.
+        .env_runners(num_env_runners=args.num_env_runners)
+        # Define compute resources used.
+        .resources(
+            # Old stack.
+            num_gpus=0 if args.enable_new_api_stack else args.num_gpus,
+            # New stack.
+            num_learner_workers=args.num_gpus,
+            num_gpus_per_learner_worker=1 if torch.cuda.is_available() else 0,
+            num_cpus_for_local_worker=1,
+        )
+    )
+
     # Run the experiment w/o Tune (directly operate on the RLlib Algorithm object).
     if args.no_tune:
         algo = config.build()
-        for _ in range(stop.get(TRAINING_ITERATION, args.stop_iters)):
+        for _ in range(args.stop_iters):
             results = algo.train()
-            print(f"R={results[ENV_RUNNER_RESULTS][EPISODE_RETURN_MEAN]}", end="")
+            print(f"R={results[ENV_RUNNER_RESULTS]['episode_return_mean']}", end="")
             if EVALUATION_RESULTS in results:
                 Reval = results[EVALUATION_RESULTS][ENV_RUNNER_RESULTS][
-                    EPISODE_RETURN_MEAN
+                    "episode_return_mean"
                 ]
                 print(f" R(eval)={Reval}", end="")
             print()
@@ -1405,10 +1427,10 @@ def run_rllib_example_script_experiment(
         progress_reporter = CLIReporter(
             metric_columns={
                 **{
-                    TRAINING_ITERATION: "iter",
+                    "training_iteration": "iter",
                     "time_total_s": "total time (s)",
-                    NUM_ENV_STEPS_SAMPLED_LIFETIME: "ts",
-                    f"{ENV_RUNNER_RESULTS}/{EPISODE_RETURN_MEAN}": "combined return",
+                    "num_env_steps_sampled_lifetime": "ts",
+                    f"{ENV_RUNNER_RESULTS}/episode_return_mean": "combined return",
                 },
                 **{
                     (
@@ -1442,25 +1464,16 @@ def run_rllib_example_script_experiment(
 
     # If run as a test, check whether we reached the specified success criteria.
     if args.as_test:
-        # Success metric not provided, try extracting it from `stop`.
         if success_metric is None:
-            for try_it in [
-                f"{EVALUATION_RESULTS}/{ENV_RUNNER_RESULTS}/episode_return_mean",
-                f"{ENV_RUNNER_RESULTS}/episode_return_mean",
-            ]:
-                if try_it in stop:
-                    success_metric = {try_it: stop[try_it]}
-                    break
-            if success_metric is None:
-                success_metric = {
-                    f"{ENV_RUNNER_RESULTS}/episode_return_mean": args.stop_reward,
-                }
+            success_metric = {
+                f"{ENV_RUNNER_RESULTS}/episode_return_mean": args.stop_reward,
+            }
         # TODO (sven): Make this work for more than one metric (AND-logic?).
         metric = next(iter(success_metric.keys()))
         check_learning_achieved(
             tune_results=results,
-            metric=metric,
             min_value=success_metric[metric],
+            metric=metric,
         )
     ray.shutdown()
     return results
@@ -1576,22 +1589,21 @@ def check_reproducibilty(
     from ray.rllib.policy.sample_batch import DEFAULT_POLICY_ID
     from ray.rllib.utils.metrics.learner_info import LEARNER_INFO
 
-    stop_dict = {TRAINING_ITERATION: training_iteration}
+    stop_dict = {
+        "training_iteration": training_iteration,
+    }
     # use 0 and 2 workers (for more that 4 workers we have to make sure the instance
     # type in ci build has enough resources)
     for num_workers in [0, 2]:
         algo_config = (
-            algo_config.debugging(seed=42).env_runners(
-                num_env_runners=num_workers, num_envs_per_env_runner=2
-            )
-            # new API
-            .learners(
-                num_gpus_per_learner=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
-            )
-            # old API
+            algo_config.debugging(seed=42)
             .resources(
+                # old API
                 num_gpus=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
+                # new API
+                num_gpus_per_learner_worker=int(os.environ.get("RLLIB_NUM_GPUS", "0")),
             )
+            .env_runners(num_env_runners=num_workers, num_envs_per_env_runner=2)
         )
 
         for fw in framework_iterator(algo_config, **fw_kwargs):
@@ -1617,10 +1629,7 @@ def check_reproducibilty(
             results2 = results2.get_best_result().metrics
 
             # Test rollout behavior.
-            check(
-                results1[ENV_RUNNER_RESULTS]["hist_stats"],
-                results2[ENV_RUNNER_RESULTS]["hist_stats"],
-            )
+            check(results1["hist_stats"], results2["hist_stats"])
             # As well as training behavior (minibatch sequence during SGD
             # iterations).
             # As well as training behavior (minibatch sequence during SGD

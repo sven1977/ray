@@ -9,10 +9,7 @@ https://arxiv.org/pdf/2010.02193.pdf
 """
 
 # Run with:
-# python [this script name].py --env ALE/[gym ID e.g. Pong-v5]
-
-# To see all available options:
-# python [this script name].py --help
+# python run_regression_tests.py --dir [this file] --env ALE/[gym ID e.g. Pong-v5]
 
 from ray.rllib.algorithms.dreamerv3.dreamerv3 import DreamerV3Config
 

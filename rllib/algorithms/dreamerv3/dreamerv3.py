@@ -10,9 +10,11 @@ https://arxiv.org/pdf/2010.02193.pdf
 
 import gc
 import logging
-from typing import Any, Dict, Optional, Union
+import tree  # pip install dm_tree
+from typing import Any, Dict, List, Optional, Union
 
 import gymnasium as gym
+import numpy as np
 
 from ray.rllib.algorithms.algorithm import Algorithm
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig, NotProvided
@@ -508,6 +510,8 @@ class DreamerV3(Algorithm):
 
     @override(Algorithm)
     def training_step(self) -> ResultDict:
+        results = {}
+
         env_runner = self.workers.local_worker()
 
         # Push enough samples into buffer initially before we start training.
@@ -520,7 +524,7 @@ class DreamerV3(Algorithm):
 
         # Have we sampled yet in this `training_step()` call?
         have_sampled = False
-        with self.metrics.log_time((TIMERS, SAMPLE_TIMER)):
+        with self._timers[SAMPLE_TIMER]:
             # Continue sampling from the actual environment (and add collected samples
             # to our replay buffer) as long as we:
             while (
@@ -595,14 +599,14 @@ class DreamerV3(Algorithm):
                 )
 
         # Summarize environment interaction and buffer data.
-        report_sampling_and_replay_buffer(
-            metrics=self.metrics, replay_buffer=self.replay_buffer
-        )
+        #report_sampling_and_replay_buffer(
+        #    metrics=self.metrics, replay_buffer=self.replay_buffer
+        #)
 
         # Continue sampling batch_size_B x batch_length_T sized batches from the buffer
-        # and using these to update our models (`LearnerGroup.update_from_batch()`)
-        # until the computed `training_ratio` is larger than the configured one, meaning
-        # we should go back and collect more samples again from the actual environment.
+        # and using these to update our models (`LearnerGroup.update()`) until the
+        # computed `training_ratio` is larger than the configured one, meaning we should
+        # go back and collect more samples again from the actual environment.
         # However, when calculating the `training_ratio` here, we use only the
         # trained steps in this very `training_step()` call over the most recent sample
         # amount (`env_steps_last_regular_sample`), not the global values. This is to
@@ -613,7 +617,7 @@ class DreamerV3(Algorithm):
             replayed_steps_this_iter / env_steps_last_regular_sample
         ) < self.config.training_ratio:
             # Time individual batch updates.
-            with self.metrics.log_time((TIMERS, LEARN_ON_BATCH_TIMER)):
+            with self._timers[LEARN_ON_BATCH_TIMER]:
                 logger.info(f"\tSub-iteration {self.training_iteration}/{sub_iter})")
 
                 # Draw a new sample from the replay buffer.
@@ -656,46 +660,46 @@ class DreamerV3(Algorithm):
         # from the posterior states.
         # Only every n iterations and only for the first sampled batch row
         # (videos are `config.batch_length_T` frames long).
-        report_predicted_vs_sampled_obs(
-            # TODO (sven): DreamerV3 is single-agent only.
-            metrics=self.metrics,
-            sample=sample,
-            batch_size_B=self.config.batch_size_B,
-            batch_length_T=self.config.batch_length_T,
-            symlog_obs=do_symlog_obs(
-                env_runner.env.single_observation_space,
-                self.config.symlog_obs,
-            ),
-            do_report=(
-                self.config.report_images_and_videos
-                and self.training_iteration % 100 == 0
-            )
-        )
+        #report_predicted_vs_sampled_obs(
+        #    # TODO (sven): DreamerV3 is single-agent only.
+        #    metrics=self.metrics,
+        #    sample=sample,
+        #    batch_size_B=self.config.batch_size_B,
+        #    batch_length_T=self.config.batch_length_T,
+        #    symlog_obs=do_symlog_obs(
+        #        env_runner.env.single_observation_space,
+        #        self.config.symlog_obs,
+        #    ),
+        #    do_report=(
+        #        self.config.report_images_and_videos
+        #        and self.training_iteration % 100 == 0
+        #    )
+        #)
 
         # Log videos showing some of the dreamed trajectories and compare them with the
         # actual trajectories from the train batch.
         # Only every n iterations and only for the first sampled batch row AND first ts.
         # (videos are `config.horizon_H` frames long originating from the observation
         # at B=0 and T=0 in the train batch).
-        report_dreamed_eval_trajectory_vs_samples(
-            metrics=self.metrics,
-            sample=sample,
-            burn_in_T=0,
-            dreamed_T=self.config.horizon_H + 1,
-            dreamer_model=self.workers.local_worker().module.dreamer_model,
-            symlog_obs=do_symlog_obs(
-                env_runner.env.single_observation_space,
-                self.config.symlog_obs,
-            ),
-            do_report=(
-                self.config.report_dream_data
-                and self.training_iteration % 100 == 0
-            )
-        )
+        #report_dreamed_eval_trajectory_vs_samples(
+        #    metrics=self.metrics,
+        #    sample=sample,
+        #    burn_in_T=0,
+        #    dreamed_T=self.config.horizon_H + 1,
+        #    dreamer_model=self.workers.local_worker().module.dreamer_model,
+        #    symlog_obs=do_symlog_obs(
+        #        env_runner.env.single_observation_space,
+        #        self.config.symlog_obs,
+        #    ),
+        #    do_report=(
+        #        self.config.report_dream_data
+        #        and self.training_iteration % 100 == 0
+        #    )
+        #)
 
         # Update weights - after learning on the LearnerGroup - on all EnvRunner
         # workers.
-        with self.metrics.log_time((TIMERS, SYNCH_WORKER_WEIGHTS_TIMER)):
+        with self._timers[SYNCH_WORKER_WEIGHTS_TIMER]:
             # Only necessary if RLModule is not shared between (local) EnvRunner and
             # (local) Learner.
             if not self.config.share_module_between_env_runner_and_learner:
@@ -710,7 +714,7 @@ class DreamerV3(Algorithm):
         if self.config.gc_frequency_train_steps and (
             self.training_iteration % self.config.gc_frequency_train_steps == 0
         ):
-            with self.metrics.log_time((TIMERS, GARBAGE_COLLECTION_TIMER)):
+            with self._timers[GARBAGE_COLLECTION_TIMER]:
                 gc.collect()
 
         # Add train results and the actual training ratio to stats. The latter should

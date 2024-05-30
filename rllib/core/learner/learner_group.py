@@ -240,6 +240,13 @@ class LearnerGroup:
                 sent asynchronously. If True, will return NOT the results from the
                 update on the given data, but all results from prior asynchronous update
                 requests that have not been returned thus far.
+            reduce_fn: An optional callable to reduce the results from a list of the
+                Learner actors into a single result. This can be any arbitrary function
+                that takes a list of dictionaries and returns a single dictionary. For
+                example, you can either take an average (default) or concatenate the
+                results (for example for metrics) or be more selective about you want to
+                report back to the algorithm's training_step. If None is passed, the
+                results will not get reduced.
             minibatch_size: The minibatch size to use for the update.
             num_iters: The number of complete passes over all the sub-batches in the
                 input multi-agent batch.
@@ -300,6 +307,13 @@ class LearnerGroup:
             minibatch_size: The minibatch size to use for the update.
             num_iters: The number of complete passes over all the sub-batches in the
                 input multi-agent batch.
+            reduce_fn: An optional callable to reduce the results from a list of the
+                Learner actors into a single result. This can be any arbitrary function
+                that takes a list of dictionaries and returns a single dictionary. For
+                example, you can either take an average (default) or concatenate the
+                results (for example for metrics) or be more selective about you want to
+                report back to the algorithm's training_step. If None is passed, the
+                results will not get reduced.
 
         Returns:
             If async_update is False, a dictionary with the reduced results of the
@@ -466,11 +480,11 @@ class LearnerGroup:
                     else:
                         self._ts_dropped += factor * sum(len(e) for e in episodes)
                 # NOTE: There is a strong assumption here that the requests launched to
-                # learner workers will return at the same time, since they have a
-                # barrier inside for gradient aggregation. Therefore, results should be
-                # a list of lists where each inner list should be the length of the
-                # number of learner workers, if results from an non-blocking update are
-                # ready.
+                # learner workers will return at the same time, since they are have a
+                # barrier inside of themselves for gradient aggregation. Therefore
+                # results should be a list of lists where each inner list should be the
+                # length of the number of learner workers, if results from an
+                # non-blocking update are ready.
                 results = self._get_async_results(results)
 
             else:
@@ -557,12 +571,14 @@ class LearnerGroup:
         For example, this could be used to do a polyak averaging update
         of a target network in off policy algorithms like SAC or DQN.
 
-        By default, this is a pass through that calls all Learner workers'
-        `additional_update(**kwargs)` method.
+        By default this is a pass through that calls `Learner.additional_update`
+
+        Args:
+            reduce_fn: See `update()` documentation for more details.
+            \*\*kwargs: Keyword arguments to pass to each Learner.
 
         Returns:
-            A list of dictionaries of results returned by the
-            `Learner.additional_update()` calls.
+            A list of dictionaries of results from the updates from each worker.
         """
         if reduce_fn != DEPRECATED_VALUE:
             deprecation_warning(

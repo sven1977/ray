@@ -18,6 +18,7 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.learner.learner import ParamDict
 from ray.rllib.core.learner.tf.tf_learner import TfLearner
 from ray.rllib.utils.annotations import override
+from ray.rllib.utils.deprecation import deprecation_warning
 from ray.rllib.utils.framework import try_import_tf, try_import_tfp
 from ray.rllib.utils.tf_utils import symlog, two_hot, clip_gradients
 from ray.rllib.utils.typing import ModuleID, TensorType
@@ -39,7 +40,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
 
     @override(TfLearner)
     def configure_optimizers_for_module(
-        self, module_id: ModuleID, config: DreamerV3Config = None
+        self, module_id: ModuleID, config: DreamerV3Config = None, hps=None
     ):
         """Create the 3 optimizers for Dreamer learning: world_model, actor, critic.
 
@@ -47,6 +48,12 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
         - albeit probably not that important - are used by the author's own
         implementation.
         """
+        if hps is not None:
+            deprecation_warning(
+                old="Learner.configure_optimizers_for_module(.., hps=..)",
+                help="Deprecated argument. Use `config` (AlgorithmConfig) instead.",
+                error=True,
+            )
 
         dreamerv3_module = self._module[module_id]
 
@@ -273,10 +280,10 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
                 "h": fwd_out["h_states_BxT"],
                 "z": fwd_out["z_posterior_states_BxT"],
             },
-            start_is_terminated=tf.reshape(batch["is_terminated"], [-1]),  # -> BxT
+            start_is_terminated=tf.reshape(batch["is_terminated"], [-1]),  # ->BxT
         )
         if config.report_dream_data:
-            # To reduce this massive amount of data a little, slice out a T=1 piece
+            # To reduce this massive mount of data a little, slice out a T=1 piece
             # from each stats that has the shape (H, BxT), meaning convert e.g.
             # `rewards_dreamed_t0_to_H_BxT` into `rewards_dreamed_t0_to_H_Bx1`.
             # This will reduce the amount of data to be transferred and reported
@@ -736,7 +743,7 @@ class DreamerV3TfLearner(DreamerV3Learner, TfLearner):
             :-1
         ]
 
-        # Reduce over both H- (time) axis and B-axis (mean).
+        # Reduce over H- (time) axis (sum) and then B-axis (mean).
         L_critic = tf.reduce_mean(L_critic_H_B)
 
         # Log important critic loss stats.

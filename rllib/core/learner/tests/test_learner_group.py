@@ -1,10 +1,9 @@
 import gymnasium as gym
 import itertools
 import numpy as np
+from typing import Any, Dict, List
 import tempfile
 import unittest
-
-import tree  # pip install dm_tree
 
 import ray
 from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
@@ -83,7 +82,6 @@ class RemoteTrainingHelper:
         batch = reader.next()
         batch = batch.as_multi_agent()
         learner_update = local_learner.update_from_batch(batch=batch)
-        learner_update = tree.map_structure(lambda s: s.peek(), learner_update)
         learner_group_update = learner_group.update_from_batch(batch=batch)
         check(learner_update, learner_group_update)
 
@@ -113,9 +111,6 @@ class RemoteTrainingHelper:
 
         check(local_learner.get_state(), learner_group.get_state()["learner_state"])
         local_learner_results = local_learner.update_from_batch(batch=ma_batch)
-        local_learner_results = tree.map_structure(
-            lambda s: s.peek(), local_learner_results
-        )
         learner_group_results = learner_group.update_from_batch(batch=ma_batch)
 
         check(local_learner_results, learner_group_results)
@@ -191,7 +186,9 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
             min_loss = float("inf")
             for iter_i in range(1000):
                 batch = reader.next()
-                results = learner_group.update_from_batch(batch=batch.as_multi_agent())
+                results = learner_group.update_from_batch(
+                    batch=batch.as_multi_agent(), reduce_fn=None
+                )
 
                 loss = np.mean(
                     [res[ALL_MODULES][Learner.TOTAL_LOSS_KEY] for res in results]
@@ -231,7 +228,9 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
             batch = reader.next()
 
             # update once with the default policy
-            results = learner_group.update_from_batch(batch.as_multi_agent())
+            results = learner_group.update_from_batch(
+                batch=batch.as_multi_agent(), reduce_fn=None
+            )
             module_ids_before_add = {DEFAULT_MODULE_ID}
             new_module_id = "test_module"
 
@@ -245,46 +244,51 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
                 batch=MultiAgentBatch(
                     {new_module_id: batch, DEFAULT_MODULE_ID: batch}, batch.count
                 ),
+                reduce_fn=None,
             )
 
-            self._check_multi_worker_weights(learner_group, results)
+            self._check_multi_worker_weights(results)
 
             # check that module ids are updated to include the new module
             module_ids_after_add = {DEFAULT_MODULE_ID, new_module_id}
-            # remove the total_loss key since its not a module key
-            self.assertEqual(set(results.keys()) - {ALL_MODULES}, module_ids_after_add)
+            for result in results:
+                # remove the total_loss key since its not a module key
+                self.assertEqual(
+                    set(result.keys()) - {ALL_MODULES}, module_ids_after_add
+                )
 
             # remove the test_module
             learner_group.remove_module(module_id=new_module_id)
 
             # run training without the test_module
-            results = learner_group.update_from_batch(batch.as_multi_agent())
+            results = learner_group.update_from_batch(
+                batch=batch.as_multi_agent(), reduce_fn=None
+            )
 
-            self._check_multi_worker_weights(learner_group, results)
+            self._check_multi_worker_weights(results)
 
             # check that module ids are updated after remove operation to not
             # include the new module
-            # remove the total_loss key since its not a module key
-            self.assertEqual(set(results.keys()) - {ALL_MODULES}, module_ids_before_add)
+            for result in results:
+                # remove the total_loss key since its not a module key
+                self.assertEqual(
+                    set(result.keys()) - {ALL_MODULES}, module_ids_before_add
+                )
 
             # make sure the learner_group resources are freed up so that we don't
             # autoscale
             learner_group.shutdown()
             del learner_group
 
-    def _check_multi_worker_weights(self, learner_group, results):
-        # Check that module weights are updated across workers and synchronized.
-        # for i in range(1, len(results)):
-        for module_id, mod_results in results.items():
-            if module_id == ALL_MODULES:
-                continue
-            # Compare the reported mean weights (merged across all Learner workers,
-            # which all should have the same weights after updating) with the actual
-            # current mean weights.
-            reported_mean_weights = mod_results["mean_weight"]
-            parameters = learner_group.get_weights(module_ids=[module_id])[module_id]
-            actual_mean_weights = np.mean([w.mean() for w in parameters.values()])
-            check(reported_mean_weights, actual_mean_weights, rtol=0.02)
+    def _check_multi_worker_weights(self, results: List[Dict[str, Any]]):
+        # check that module weights are updated across workers and synchronized
+        for i in range(1, len(results)):
+            for module_id in results[i].keys():
+                if module_id == ALL_MODULES:
+                    continue
+                current_weights = results[i][module_id]["mean_weight"]
+                prev_weights = results[i - 1][module_id]["mean_weight"]
+                self.assertEqual(current_weights, prev_weights)
 
 
 class TestLearnerGroupCheckpointRestore(unittest.TestCase):
@@ -461,7 +465,9 @@ class TestLearnerGroupSaveLoadState(unittest.TestCase):
             initial_learner_group_weights = initial_learner_group.get_weights()
 
             # do a single update
-            initial_learner_group.update_from_batch(batch.as_multi_agent())
+            initial_learner_group.update_from_batch(
+                batch=batch.as_multi_agent(), reduce_fn=None
+            )
 
             # checkpoint the learner state after 1 update for later comparison
             learner_after_1_update_checkpoint_dir = tempfile.TemporaryDirectory().name
@@ -476,7 +482,7 @@ class TestLearnerGroupSaveLoadState(unittest.TestCase):
 
             # do another update
             results_with_break = new_learner_group.update_from_batch(
-                batch=batch.as_multi_agent()
+                batch=batch.as_multi_agent(), reduce_fn=None
             )
             weights_after_1_update_with_break = new_learner_group.get_weights()
             new_learner_group.shutdown()
@@ -486,9 +492,9 @@ class TestLearnerGroupSaveLoadState(unittest.TestCase):
             learner_group = config.build_learner_group(env=env)
             learner_group.load_state(initial_learner_checkpoint_dir)
             check(learner_group.get_weights(), initial_learner_group_weights)
-            learner_group.update_from_batch(batch.as_multi_agent())
+            learner_group.update_from_batch(batch.as_multi_agent(), reduce_fn=None)
             results_without_break = learner_group.update_from_batch(
-                batch=batch.as_multi_agent()
+                batch=batch.as_multi_agent(), reduce_fn=None
             )
             weights_after_1_update_without_break = learner_group.get_weights()
             learner_group.shutdown()
@@ -531,11 +537,11 @@ class TestLearnerGroupAsyncUpdate(unittest.TestCase):
             timer_async = _Timer()
             with timer_sync:
                 learner_group.update_from_batch(
-                    batch=batch.as_multi_agent(), async_update=False
+                    batch=batch.as_multi_agent(), async_update=False, reduce_fn=None
                 )
             with timer_async:
                 result_async = learner_group.update_from_batch(
-                    batch=batch.as_multi_agent(), async_update=True
+                    batch=batch.as_multi_agent(), async_update=True, reduce_fn=None
                 )
             # ideally the the first async update will return nothing, and an easy
             # way to check that is if the time for an async update call is faster
@@ -547,7 +553,7 @@ class TestLearnerGroupAsyncUpdate(unittest.TestCase):
             while True:
                 batch = reader.next()
                 async_results = learner_group.update_from_batch(
-                    batch.as_multi_agent(), async_update=True
+                    batch.as_multi_agent(), async_update=True, reduce_fn=None
                 )
                 if not async_results:
                     continue
