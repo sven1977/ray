@@ -1,14 +1,10 @@
+import random
 import time
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 
 from ray.rllib.utils import force_list
-from ray.rllib.utils.framework import try_import_tf, try_import_torch
-from ray.rllib.utils.numpy import convert_to_numpy
-
-_, tf, _ = try_import_tf()
-torch, _ = try_import_torch()
 
 
 class Stats:
@@ -131,9 +127,9 @@ class Stats:
         self,
         init_value: Optional[Any] = None,
         reduce: Optional[str] = "mean",
-        window: Optional[Union[int, float]] = None,
+        window: Optional[int] = None,
         ema_coeff: Optional[float] = None,
-        clear_on_reduce: bool = False,
+        reset_on_reduce: bool = False,
         on_exit: Optional[Callable] = None,
     ):
         """Initializes a Stats instance.
@@ -174,23 +170,15 @@ class Stats:
                 is no `window` provided.
         """
         # Thus far, we only support mean, max, min, and sum.
-        if reduce not in [None, "mean", "min", "max", "sum"]:
-            raise ValueError("`reduce` must be one of `mean|min|max|sum` or None!")
+        assert reduce in [None, "mean", "min", "max", "sum"]
         # One or both window and ema_coeff must be None.
-        if window is not None and ema_coeff is not None:
-            raise ValueError("Only one of `window` or `ema_coeff` can be specified!")
-        # If `ema_coeff` is provided, `reduce` must be "mean".
-        if ema_coeff is not None and reduce != "mean":
-            raise ValueError(
-                "`ema_coeff` arg only allowed (not None) when `reduce=mean`!"
-            )
-        # If `window` is explicitly set to inf, `clear_on_reduce` must be True.
-        # Otherwise, we risk a memory leak.
-        if window == float("inf") and not clear_on_reduce:
-            raise ValueError(
-                "When using an infinite window (float('inf'), `clear_on_reduce` must "
-                "be set to True!"
-            )
+        assert (
+            window is None or ema_coeff is None
+        ), "Only one of `window` or `ema_coeff` can be specified!"
+        if ema_coeff is not None:
+            assert (
+                reduce == "mean"
+            ), "`ema_coeff` arg only allowed (not None) when `reduce=mean`!"
 
         # If reduce=mean AND window=ema_coeff=None, we use EMA by default with a coeff
         # of 0.01 (we do NOT support infinite window sizes for mean as that would mean
@@ -209,7 +197,7 @@ class Stats:
         self._start_time = None
 
         # Simply store ths flag for the user of this class.
-        self._clear_on_reduce = clear_on_reduce
+        self._reset_on_reduce = reset_on_reduce
 
         # Code to execute when exiting a with-context.
         self._on_exit = on_exit
@@ -274,104 +262,14 @@ class Stats:
         self.values = self._reduced_values()[1]
         # `reset_on_reduce` -> Return an empty new Stats object with the same option as
         # `self`.
-        if self._clear_on_reduce:
+        if self._reset_on_reduce:
             return Stats.similar_to(self)
         # No reset required upon `reduce()` -> Return `self`.
         else:
             return self
 
-    def merge_on_time_axis(self, other: "Stats") -> None:
-        # Make sure `others` have same reduction settings.
-        assert self._reduce_method == other._reduce_method
-        assert self._window == other._window
-        assert self._ema_coeff == other._ema_coeff
-
-        # Extend `self`'s values by `other`'s.
-        self.values.extend(other.values)
-
-        # Slice by window size, if provided.
-        if self._window not in [None, float("inf")]:
-            self.values = self.values[-self._window :]
-
-    def merge_in_parallel(self, *others: "Stats") -> None:
+    def merge(self, *others: "Stats", shuffle: bool = True) -> None:
         """Merges all internal values of `others` into `self`'s internal values list.
-
-        Thereby, the newly incoming values of `others` are treated equally with respect
-        to each other as well as with respect to the internal values of self.
-
-        Use this method to merge another Stats into this one that resulted from a
-        parallel run and metrics logging of `self` and n `others` (for example, n
-        Learner workers all returning a loss value).
-
-        The following examples demonstrate the parallel merging logic:
-
-        .. testcode::
-
-            from ray.rllib.utils.metrics.stats import Stats
-            from ray.rllib.utils.test_utils import check
-
-            # Parallel-merge two mean stats (win=3).
-            stats = Stats(reduce="mean", window=3)
-            stats1 = Stats(reduce="mean", window=3)
-            stats1.push(1)
-            stats1.push(2)
-            stats1.push(3)
-            stats2 = Stats(reduce="mean", window=3)
-            stats1.push(4)
-            stats1.push(5)
-            stats1.push(6)
-            stats.merge_in_parallel(stats1, stats2)
-            check(stats.values, [3.5, 3.5, 3.5])
-
-            # Parallel-merge two max stats (win=3).
-            stats = Stats(reduce="max", window=3)
-            stats1 = Stats(reduce="max", window=3)
-            stats1.push(1)
-            stats1.push(2)
-            stats1.push(3)
-            stats2 = Stats(reduce="max", window=3)
-            stats1.push(4)
-            stats1.push(5)
-            stats1.push(6)
-            stats.merge_in_parallel(stats1, stats2)
-            check(stats.values, [6])
-
-            # Parallel-merge two min stats (win=4).
-            stats = Stats(reduce="min", window=4)
-            stats1 = Stats(reduce="min", window=4)
-            stats1.push(1)
-            stats1.push(2)
-            stats1.push(1)
-            stats1.push(4)
-            stats2 = Stats(reduce="min", window=4)
-            stats1.push(5)
-            stats1.push(0.5)
-            stats1.push(7)
-            stats1.push(8)
-            stats.merge_in_parallel(stats1, stats2)
-            check(stats.values, [0.5])
-
-            # Parallel-merge two sum stats (no window).
-            stats = Stats(reduce="sum")
-            stats1 = Stats(reduce="sum")
-            stats1.push(1)
-            stats1.push(2)
-            stats1.push(3)
-            stats2 = Stats(reduce="sum")
-            stats1.push(4)
-            stats1.push(5)
-            stats1.push(6)
-            stats.merge_in_parallel(stats1, stats2)
-            check(stats.values, [21])
-
-            # Parallel-merge two "concat" stats (reduce=None; no win).
-            stats = Stats(reduce=None, window=float("inf"), clear_on_reduce=True)
-            stats1 = Stats(reduce=None, window=float("inf"), clear_on_reduce=True)
-            stats1.push(1)
-            stats2 = Stats(reduce=None, window=float("inf"), clear_on_reduce=True)
-            stats1.push(2)
-            stats.merge_in_parallel(stats1, stats2)
-            check(stats.values, [1, 2])
 
         Args:
             others: One or more other Stats objects that need to be merged into `self.
@@ -382,39 +280,37 @@ class Stats:
                 `*others` is only one component AND its values should be given priority
                 (because they are newer).
         """
-        # Make sure `others` have same reduction settings.
+        # Make sure `other` has same reduction settings.
         assert all(self._reduce_method == o._reduce_method for o in others)
         assert all(self._window == o._window for o in others)
         assert all(self._ema_coeff == o._ema_coeff for o in others)
-
-        # Extend `self`'s values by all `others`' values.
-        for o in others:
-            self.values.extend(o.values)
-
-        # Reduce over the entire values (no matter the window size!) first.
-        store_win = self._window
-        self._window = None
-        reduced_value, new_values = self._reduced_values()
-        self._window = store_win
-        # x-fold the reduced_value over the actual window size and use the resulting
-        # list as new self.values.
-        if self._reduce_method == "mean":
-            self.values = [reduced_value] * self._window
+        # No reduction, combine self's and other's values.
+        if self._reduce_method is None:
+            for o in others:
+                self.values.extend(o.values)
+        # Combine values, then maybe shuffle to not give the values of `self` OR `other`
+        # any specific weight (over the other).
+        elif self._ema_coeff is not None:
+            for o in others:
+                self.values.extend(o.values)
+            if shuffle:
+                random.shuffle(self.values)
+        # If we have to reduce by a window:
+        # Slice self's and other's values using window, combine them, then maybe shuffle
+        # values (to make sure none gets a specific weight over the other when it
+        # comes to the actual reduction step).
         else:
-            self.values = new_values
-
-    def numpy(self, value: Any = None) -> "Stats":
-        """Converts all of self's internal values to numpy (if a tensor)."""
-        if value is not None:
-            if self._reduce_method is None:
-                assert isinstance(value, list) and len(self.values) >= len(value)
-                self.values = convert_to_numpy(value)
+            # Slice, then merge.
+            if self._window is not None:
+                self.values = self.values[-self._window :]
+                for o in others:
+                    self.values += o.values[-self._window :]
+            # Merge all.
             else:
-                assert len(self.values) > 0
-                self.values = [convert_to_numpy(value)]
-        else:
-            self.values = convert_to_numpy(self.values)
-        return self
+                for o in others:
+                    self.values.extend(o.values)
+            if shuffle:
+                random.shuffle(self.values)
 
     def __len__(self) -> int:
         """Returns the length of the internal values list."""
@@ -460,19 +356,13 @@ class Stats:
     def __sub__(self, other):
         return float(self) - float(other)
 
-    def __mul__(self, other):
-        return float(self) * float(other)
-
-    def __format__(self, fmt):
-        return f"{float(self):{fmt}}"
-
     def get_state(self) -> Dict[str, Any]:
         return {
             "values": self.values,
             "reduce": self._reduce_method,
             "window": self._window,
             "ema_coeff": self._ema_coeff,
-            "clear_on_reduce": self._clear_on_reduce,
+            "reset_on_reduce": self._reset_on_reduce,
         }
 
     @staticmethod
@@ -482,7 +372,7 @@ class Stats:
             reduce=state["reduce"],
             window=state["window"],
             ema_coeff=state["ema_coeff"],
-            clear_on_reduce=state["clear_on_reduce"],
+            reset_on_reduce=state["reset_on_reduce"],
         )
 
     @staticmethod
@@ -492,7 +382,7 @@ class Stats:
             reduce=other._reduce_method,
             window=other._window,
             ema_coeff=other._ema_coeff,
-            clear_on_reduce=other._clear_on_reduce,
+            reset_on_reduce=other._reset_on_reduce,
         )
 
     def _reduced_values(self) -> Tuple[Any, Any]:
@@ -505,17 +395,17 @@ class Stats:
         # No reduction method. Return list as-is OR reduce list to len=window.
         if self._reduce_method is None:
             # No window -> return all internal values.
-            if self._window is None or self._window == float("inf"):
+            if self._window is None:
                 return self.values, self.values
             # Window -> return shortened internal values list.
             else:
                 return self.values[-self._window :], self.values[-self._window :]
-
-        # Special case: Internal values list is empty -> return NaN.
-        elif len(self.values) == 0:
-            return float("nan"), []
         # Do EMA (always a "mean" reduction).
         elif self._ema_coeff is not None:
+            # Special case: Internal values list is empty -> return NaN.
+            if len(self.values) == 0:
+                return float("nan"), []
+
             # Perform EMA reduction over all values in internal values list.
             mean_value = self.values[0]
             for v in self.values[1:]:
@@ -523,42 +413,22 @@ class Stats:
             return mean_value, [mean_value]
         # Do non-EMA reduction (possibly using a window).
         else:
+            # Use the numpy "nan"-prefix to ignore NaN's in our value lists.
+            reduce_meth = getattr(np, "nan" + self._reduce_method)
             values = (
-                self.values
-                if self._window is None or self._window == float("inf")
-                else self.values[-self._window :]
+                self.values if self._window is None else self.values[-self._window :]
             )
-            # Use the numpy/torch "nan"-prefix to ignore NaN's in our value lists.
-            if torch and torch.is_tensor(values[0]):
-                reduce_meth = getattr(torch, "nan" + self._reduce_method)
-                reduce_in = torch.stack(values)
-                if self._reduce_method == "mean":
-                    reduce_in = reduce_in.float()
-                reduced = reduce_meth(reduce_in)
-            elif tf and tf.is_tensor(values[0]):
-                reduce_meth = getattr(tf, "reduce_" + self._reduce_method)
-                reduced = reduce_meth(values)
-            else:
-                reduce_meth = getattr(np, "nan" + self._reduce_method)
-                reduced = reduce_meth(values)
-
-            # Convert from numpy to primitive python types, if original `values` are
-            # python types.
-            if reduced.shape == () and isinstance(values[0], (int, float)):
+            reduced = reduce_meth(values)
+            # Convert from numpy to primitive python types.
+            if reduced.shape == ():
                 if reduced.dtype in [np.int32, np.int64, np.int8, np.int16]:
                     reduced = int(reduced)
                 else:
                     reduced = float(reduced)
 
-            # For window=None|inf (infinite window) and reduce != mean, we don't have to
+            # For window=None (infinite window) and reduce != mean, we don't have to
             # keep any values, except the last (reduced) one.
-            if (
-                self._window is None or self._window == float("inf")
-            ) and self._reduce_method != "mean":
-                # TODO (sven): What if out values are torch tensors? In this case, we
-                #  would have to do reduction using `torch` above (not numpy) and only
-                #  then return the python primitive AND put the reduced new torch
-                #  tensor in `new_values`.
+            if self._window is None and self._reduce_method != "mean":
                 new_values = [reduced]
             # In all other cases, keep the values that were also used for the reduce
             # operation.
