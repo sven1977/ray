@@ -299,7 +299,7 @@ class MetricsLogger:
                 self.stats[extended_key].merge(stat_or_value, shuffle=False)
             else:
                 # Make a copy to not mess with the incoming stats objects.
-                self.stats[extended_key] = copy.deepcopy(stat_or_value)
+                self.stats[extended_key] = Stats.similar_to(stat_or_value, init_value=stat_or_value.values)
 
     def log_n_dicts(
         self,
