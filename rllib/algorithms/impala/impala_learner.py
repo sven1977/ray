@@ -113,7 +113,7 @@ class ImpalaLearner(Learner):
         # TODO (sven): IMPALA does NOT call additional update anymore from its
         #  `training_step()` method. Instead, we'll do this here (to avoid the extra
         #  metrics.reduce() call -> we should only call this once per update round).
-        self._before_update(ts)
+        self._before_update(timesteps)
 
         with self.metrics.log_time((ALL_MODULES, RAY_GET_EPISODES_TIMER)):
             # Resolve batch/episodes being ray object refs (instead of

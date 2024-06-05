@@ -657,6 +657,7 @@ class Impala(Algorithm):
                 episode_refs,
                 connector_states,
                 env_runner_metrics,
+                env_runner_indices_to_update,
             ) = self._sample_and_get_connector_states()
             # Reduce EnvRunner metrics over the n EnvRunners.
             self.metrics.merge_and_log_n_dicts(
@@ -716,7 +717,6 @@ class Impala(Algorithm):
             )
             rl_module_state = None
             last_good_learner_results = None
-            #learner_results = None
 
             for batch_ref_or_episode_list_ref in data_packages_for_learner_group:
                 if self.config.num_aggregation_workers:
@@ -725,7 +725,9 @@ class Impala(Algorithm):
                         async_update=do_async_updates,
                         return_state=True,
                         timesteps={
-                            NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0),
+                            NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(
+                                NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0
+                            ),
                         },
                     )
                 else:
@@ -734,7 +736,9 @@ class Impala(Algorithm):
                         async_update=do_async_updates,
                         return_state=True,
                         timesteps={
-                            NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0),
+                            NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(
+                                NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0
+                            ),
                         },
                     )
                 if not do_async_updates:
@@ -770,7 +774,6 @@ class Impala(Algorithm):
             NUM_TRAINING_STEP_CALLS_SINCE_LAST_SYNCH_WORKER_WEIGHTS, 1, reduce="sum"
         )
         if last_good_learner_results:
-        #if learner_results and len(learner_results[0]) > 0 and learner_results[0][0]:
             # Merge available EnvRunner states into local worker's EnvRunner state.
             # Broadcast merged EnvRunner state AND new model weights back to all remote
             # EnvRunners that - in this call - had returned samples.
@@ -787,6 +790,7 @@ class Impala(Algorithm):
                 with self.metrics.log_time((TIMERS, SYNCH_WORKER_WEIGHTS_TIMER)):
                     self.workers.sync_env_runner_states(
                         config=self.config,
+                        env_runner_indices_to_update=env_runner_indices_to_update,
                         env_steps_sampled=self.metrics.peek(
                             NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0
                         ),
@@ -810,6 +814,7 @@ class Impala(Algorithm):
             # main algo process, but to the Learner workers directly.
             return ray.put(_episodes), _connector_states, _metrics
 
+        env_runner_indices_to_update = set()
         episode_refs = []
         connector_states = []
         env_runner_metrics = []
@@ -824,14 +829,18 @@ class Impala(Algorithm):
                 timeout_seconds=self.config.timeout_s_sampler_manager,
                 return_obj_refs=False,
             )
-            # Get results from the n different async calls.
-            results = [r[1] for r in async_results]
+            # Get results from the n different async calls and store those EnvRunner
+            # indices we should update.
+            results = []
+            for r in async_results:
+                env_runner_indices_to_update.add(r[0])
+                results.append(r[1])
 
             for (episodes, states, metrics) in results:
                 episode_refs.append(episodes)
                 connector_states.append(states)
                 env_runner_metrics.append(metrics)
-        # Sample from the local EnvRunner worker.
+        # Sample from the local EnvRunner.
         else:
             episodes = self.workers.local_worker().sample()
             env_runner_metrics = [self.workers.local_worker().get_metrics()]
@@ -846,6 +855,7 @@ class Impala(Algorithm):
             episode_refs,
             connector_states,
             env_runner_metrics,
+            list(env_runner_indices_to_update),
         )
 
     def _pre_queue_episode_refs(
