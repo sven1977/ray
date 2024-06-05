@@ -1292,7 +1292,6 @@ class Impala(Algorithm):
         # There are batches on the queue -> Send them all to the learner group.
         batches = self.data_to_place_on_learner[:]
         self.data_to_place_on_learner.clear()
-
         # If there are no learner workers and learning is directly on the driver
         # Then we can't do async updates, so we need to block.
         async_update = self.config.num_learners > 0

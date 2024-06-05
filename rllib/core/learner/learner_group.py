@@ -482,7 +482,7 @@ class LearnerGroup:
                         _min_total_mini_batches=min_total_mini_batches,
                         **kwargs,
                     )
-                    for eps_shard in eps_shards
+                    for i, eps_shard in enumerate(eps_shards)
                 ]
 
             if async_update:
