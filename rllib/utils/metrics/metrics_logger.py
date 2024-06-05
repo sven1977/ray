@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import tree  # pip install dm_tree
 
@@ -168,12 +168,16 @@ class MetricsLogger:
         if not self._key_in_stats(key):
             self._set_key(
                 key,
-                Stats(
-                    value,
-                    reduce=reduce,
-                    window=window,
-                    ema_coeff=ema_coeff,
-                    clear_on_reduce=clear_on_reduce,
+                (
+                    Stats.similar_to(value, init_value=value.values)
+                    if isinstance(value, Stats)
+                    else Stats(
+                        value,
+                        reduce=reduce,
+                        window=window,
+                        ema_coeff=ema_coeff,
+                        clear_on_reduce=clear_on_reduce,
+                    )
                 ),
             )
         # If value itself is a stat, we merge it on time axis into `self`.
@@ -283,9 +287,9 @@ class MetricsLogger:
 
         tree.map_structure_with_path(_map, stats_dict)
 
-    def log_n_dicts(
+    def merge_and_log_n_dicts(
         self,
-        stats_dicts,
+        stats_dicts: List[Dict[str, Any]],
         *,
         key: Optional[Union[str, Tuple[str]]] = None,
         reduce: Optional[str] = "mean",
@@ -486,15 +490,20 @@ class MetricsLogger:
 
     def tensors_to_numpy(self, tensor_metrics):
         """Converts all previously logged and returned tensors back to numpy values."""
-        for key, value in tensor_metrics.items():
+        for key, values in tensor_metrics.items():
             assert self._key_in_stats(key)
-            self._get_key(key).numpy(value)
+            self._get_key(key).set_to_numpy_values(values)
 
     @property
     def tensor_mode(self):
         return self._tensor_mode
 
-    def peek(self, *key, default: Optional[Any] = None) -> Any:
+    def peek(
+        self,
+        key: Union[str, Tuple[str]],
+        *,
+        default: Optional[Any] = None,
+    ) -> Any:
         """Returns the (reduced) value(s) found under the given key or key sequence.
 
         If `key` only reaches to a nested dict deeper in `self`, that

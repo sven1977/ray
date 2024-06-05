@@ -412,28 +412,19 @@ class Stats:
         else:
             self.values = new_values
 
-    def numpy(self, value: Any = None) -> "Stats":
-        """Converts all of self's internal values to numpy (if a tensor).
+    def set_to_numpy_values(self, values) -> None:
+        """Converts `self.values` from tensors to actual numpy values.
 
         Args:
-            value: An optional non-tensor value to set the internal values list to.
-
-        Returns:
-            `self`.
+            values: The (numpy) values to set `self.values` to.
         """
-        # No actual (non-tensor) value provided -> Try converting all internal values to
-        # numpy. This will NOT succeed if any tensor in the internal values list is
-        # a in-graph/non-eager tensor (w/o numpy attribute).
-        if value is None:
-            self.values = convert_to_numpy(self.values)
-        # No reduce method
-        elif self._reduce_method is None:
-            assert isinstance(value, list) and len(self.values) >= len(value)
-            self.values = convert_to_numpy(value)
+        numpy_values = convert_to_numpy(values)
+        if self._reduce_method is None:
+            assert isinstance(values, list) and len(self.values) >= len(values)
+            self.values = numpy_values
         else:
             assert len(self.values) > 0
-            self.values = [convert_to_numpy(value)]
-        return self
+            self.values = [numpy_values]
 
     def __len__(self) -> int:
         """Returns the length of the internal values list."""
