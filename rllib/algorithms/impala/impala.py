@@ -659,7 +659,9 @@ class Impala(Algorithm):
                 env_runner_metrics,
             ) = self._sample_and_get_connector_states()
             # Reduce EnvRunner metrics over the n EnvRunners.
-            self.metrics.merge_and_log_n_dicts(env_runner_metrics, key=ENV_RUNNER_RESULTS)
+            self.metrics.merge_and_log_n_dicts(
+                env_runner_metrics, key=ENV_RUNNER_RESULTS
+            )
 
             # Log the average number of sample results (list of episodes) received.
             self.metrics.log_value(MEAN_NUM_EPISODE_LISTS_RECEIVED, len(episode_refs))
@@ -671,7 +673,9 @@ class Impala(Algorithm):
             )
             self.metrics.log_value(
                 "_mean_num_episode_ts_received_using_reduced_metrics",
-                self.metrics.peek((ENV_RUNNER_RESULTS, NUM_ENV_STEPS_SAMPLED), default=0),
+                self.metrics.peek(
+                    (ENV_RUNNER_RESULTS, NUM_ENV_STEPS_SAMPLED), default=0
+                ),
             )
 
         # Log lifetime counts for env- and agent steps.
