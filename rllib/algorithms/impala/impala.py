@@ -573,6 +573,8 @@ class Impala(Algorithm):
 
         # Queue of data to be sent to the Learner.
         self.data_to_place_on_learner = []
+        # The local mixin buffer (if required).
+        self.local_mixin_buffer = None
 
         # Create extra aggregation workers and assign each rollout worker to
         # one of them.
@@ -616,15 +618,16 @@ class Impala(Algorithm):
             self._aggregator_actor_manager = None
         else:
             # Create our local mixin buffer if the num of aggregation workers is 0.
-            self.local_mixin_buffer = MixInMultiAgentReplayBuffer(
-                capacity=(
-                    self.config.replay_buffer_num_slots
-                    if self.config.replay_buffer_num_slots > 0
-                    else 1
-                ),
-                replay_ratio=self.config.replay_ratio,
-                replay_mode=ReplayMode.LOCKSTEP,
-            )
+            if self.config.replay_proportion > 0.0:
+                self.local_mixin_buffer = MixInMultiAgentReplayBuffer(
+                    capacity=(
+                        self.config.replay_buffer_num_slots
+                        if self.config.replay_buffer_num_slots > 0
+                        else 1
+                    ),
+                    replay_ratio=self.config.replay_ratio,
+                    replay_mode=ReplayMode.LOCKSTEP,
+                )
             self._aggregator_actor_manager = None
 
         # This variable is used to keep track of the statistics from the most recent
@@ -747,7 +750,7 @@ class Impala(Algorithm):
             reduce="sum",
         )
         # self.metrics.log_value(NUM_MODULE_STEPS_TRAINED_LIFETIME, self.metrics.peek(
-        #    LEARNER_RESULTS, NUM_MODULE_STEPS_TRAINED
+        #    (LEARNER_RESULTS, NUM_MODULE_STEPS_TRAINED)
         # ), reduce="sum")
 
         # Figure out, whether we should sync/broadcast the (remote) EnvRunner states.
@@ -938,16 +941,16 @@ class Impala(Algorithm):
                     # from RolloutWorkers (n rollout workers map to m
                     # aggregation workers, where m < n) and always use 1 CPU
                     # each.
-                    "CPU": cf.num_cpus_for_local_worker + cf.num_aggregation_workers,
+                    "CPU": cf.num_cpus_for_main_process + cf.num_aggregation_workers,
                     "GPU": 0 if cf._fake_gpus else cf.num_gpus,
                 }
             ]
             + [
                 {
                     # EnvRunners.
-                    "CPU": cf.num_cpus_per_worker,
-                    "GPU": cf.num_gpus_per_worker,
-                    **cf.custom_resources_per_worker,
+                    "CPU": cf.num_cpus_per_env_runner,
+                    "GPU": cf.num_gpus_per_env_runner,
+                    **cf.custom_resources_per_env_runner,
                 }
                 for _ in range(cf.num_env_runners)
             ]
@@ -957,9 +960,9 @@ class Impala(Algorithm):
                         # Evaluation (remote) workers.
                         # Note: The local eval worker is located on the driver
                         # CPU or not even created iff >0 eval workers.
-                        "CPU": eval_config.num_cpus_per_worker,
-                        "GPU": eval_config.num_gpus_per_worker,
-                        **eval_config.custom_resources_per_worker,
+                        "CPU": eval_config.num_cpus_per_env_runner,
+                        "GPU": eval_config.num_gpus_per_env_runner,
+                        **eval_config.custom_resources_per_env_runner,
                     }
                     for _ in range(cf.evaluation_num_env_runners)
                 ]
@@ -967,8 +970,8 @@ class Impala(Algorithm):
                 else []
             )
         )
-        # TODO(avnishn): Remove this once we have a way to extend placement group
-        # factories.
+        # TODO (avnishn): Remove this once we have a way to extend placement group
+        #  factories.
         if cf._enable_new_api_stack:
             # Resources for the Algorithm.
             learner_bundles = cls._get_learner_bundles(cf)
@@ -1030,6 +1033,7 @@ class Impala(Algorithm):
         if self.config.enable_rl_module_and_learner:
             train_results = self._learn_on_processed_samples()
             module_ids_to_update = set(train_results.keys()) - {ALL_MODULES}
+            # TODO (sven): Move to Learner._after_gradient_based_update().
             additional_results = self.learner_group.additional_update(
                 module_ids_to_update=module_ids_to_update,
                 timestep=self._counters[
@@ -1214,8 +1218,11 @@ class Impala(Algorithm):
                 batch, ObjectRef
             ), "_process_experiences_directly can not handle ObjectRefs. "
             batch = batch.decompress_if_needed()
-            self.local_mixin_buffer.add(batch)
-            batch = self.local_mixin_buffer.replay(_ALL_POLICIES)
+            # Only make a pass through the buffer, if replay proportion is > 0.0 (and
+            # we actually have one).
+            if self.local_mixin_buffer:
+                self.local_mixin_buffer.add(batch)
+                batch = self.local_mixin_buffer.replay(_ALL_POLICIES)
             if batch:
                 processed_batches.append(batch)
 
@@ -1288,25 +1295,30 @@ class Impala(Algorithm):
 
         # If there are no learner workers and learning is directly on the driver
         # Then we can't do async updates, so we need to block.
-        async_update = self.config.num_learner_workers > 0
+        async_update = self.config.num_learners > 0
         results = []
         for batch in batches:
-            result = self.learner_group.update_from_batch(
+            results = self.learner_group.update_from_batch(
                 batch=batch,
+                timesteps={
+                    NUM_ENV_STEPS_SAMPLED_LIFETIME: (
+                        self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME)
+                    ),
+                },
                 async_update=async_update,
                 num_iters=self.config.num_sgd_iter,
                 minibatch_size=self.config.minibatch_size,
             )
             if not async_update:
-                results = [result]
+                results = [results]
 
-                for r in results:
-                    self._counters[NUM_ENV_STEPS_TRAINED] += r[ALL_MODULES].pop(
-                        NUM_ENV_STEPS_TRAINED
-                    )
-                    self._counters[NUM_AGENT_STEPS_TRAINED] += r[ALL_MODULES].pop(
-                        NUM_MODULE_STEPS_TRAINED
-                    )
+            for r in results:
+                self._counters[NUM_ENV_STEPS_TRAINED] += r[ALL_MODULES].pop(
+                    NUM_ENV_STEPS_TRAINED
+                )
+                self._counters[NUM_AGENT_STEPS_TRAINED] += r[ALL_MODULES].pop(
+                    NUM_MODULE_STEPS_TRAINED
+                )
 
         self._counters.update(self.learner_group.get_stats())
         # If there are results, reduce-mean over each individual value and return.
@@ -1590,6 +1602,7 @@ def make_learner_thread(local_worker, config):
             num_sgd_iter=config["num_sgd_iter"],
             learner_queue_size=config["learner_queue_size"],
             learner_queue_timeout=config["learner_queue_timeout"],
+            num_data_load_threads=config["num_gpu_loader_threads"],
         )
     else:
         learner_thread = LearnerThread(
