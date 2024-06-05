@@ -449,23 +449,39 @@ class Stats:
         assert all(self._window == o._window for o in others)
         assert all(self._ema_coeff == o._ema_coeff for o in others)
 
-        # Extend `self`'s values by all `others`' values.
-        for o in others:
-            self.values.extend(o.values)
+        win = self._window or float("inf")
 
-        # Reduce over the entire values (no matter the window size!) first.
-        store_win = self._window
-        self._window = None
-        reduced_value, new_values = self._reduced_values()
-        self._window = store_win
-        # x-fold the reduced_value over the actual window size and use the resulting
-        # list as new `self.values`. For EMA (window=None), repeat once.
-        if self._reduce_method == "mean":
-            self.values = [reduced_value] * (
-                self._window if self._window is not None else 1
-            )
-        else:
-            self.values = new_values
+        # Take turns stepping through `self` and `*others` values, thereby moving
+        # backwards from last index to beginning and will up the resulting values list.
+        # Stop as soon as we reach the window size.
+        new_values = []
+        tmp_values = []
+        # Loop from index=-1 backward to index=start until our new_values list has
+        # at least a len of `win`.
+        for i in range(1, max(map(len, [self, *others])) + 1):
+            # Per index, loop through all involved stats, including `self` and add
+            # to `tmp_values`.
+            for stats in [self, *others]:
+                if len(stats) < i:
+                    continue
+                tmp_values.append(stats.values[-i])
+
+            # Now reduce across `tmp_values` based on the reduce-settings of this Stats.
+            # TODO (sven) : explain why all this
+            if self._ema_coeff is not None:
+                new_values.extend([np.nanmean(tmp_values)] * len(tmp_values))
+            elif self._reduce_method in [None, "sum"]:
+                new_values.extend(tmp_values)
+            else:
+                new_values.extend(
+                    [self._reduced_values(values=tmp_values, window=float("inf"))[0]]
+                    * len(tmp_values)
+                )
+            tmp_values.clear()
+            if len(new_values) >= win:
+                break
+
+        self.values = list(reversed(new_values))
 
     def set_to_numpy_values(self, values) -> None:
         """Converts `self.values` from tensors to actual numpy values.
