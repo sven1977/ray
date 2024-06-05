@@ -715,7 +715,8 @@ class Impala(Algorithm):
                 value=len(data_packages_for_learner_group),
             )
             rl_module_state = None
-            learner_results = None
+            last_good_learner_results = None
+            #learner_results = None
 
             for batch_ref_or_episode_list_ref in data_packages_for_learner_group:
                 if self.config.num_aggregation_workers:
@@ -723,14 +724,18 @@ class Impala(Algorithm):
                         batch=batch_ref_or_episode_list_ref,
                         async_update=do_async_updates,
                         return_state=True,
-                        ts=self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0),
+                        timesteps={
+                            NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0),
+                        },
                     )
                 else:
                     learner_results = self.learner_group.update_from_episodes(
                         episodes=batch_ref_or_episode_list_ref,
                         async_update=do_async_updates,
                         return_state=True,
-                        ts=self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0),
+                        timesteps={
+                            NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME, default=0),
+                        },
                     )
                 if not do_async_updates:
                     learner_results = [learner_results]
@@ -743,6 +748,7 @@ class Impala(Algorithm):
                         stats_dicts=results_from_n_learners,
                         key=LEARNER_RESULTS,
                     )
+                    last_good_learner_results = results_from_n_learners
 
         # Update LearnerGroup's own stats.
         self.metrics.log_dict(self.learner_group.get_stats(), key=LEARNER_GROUP)
@@ -758,15 +764,16 @@ class Impala(Algorithm):
         # ), reduce="sum")
 
         # Figure out, whether we should sync/broadcast the (remote) EnvRunner states.
-        # Note: `learner_results` is a List of n (num async calls) of Lists of m
+        # Note: `learner_results` is a List of n (num async calls) Lists of m
         # (num Learner workers) ResultDicts each.
         self.metrics.log_value(
             NUM_TRAINING_STEP_CALLS_SINCE_LAST_SYNCH_WORKER_WEIGHTS, 1, reduce="sum"
         )
-        if learner_results and len(learner_results[0]) > 0 and learner_results[0][0]:
+        if last_good_learner_results:
+        #if learner_results and len(learner_results[0]) > 0 and learner_results[0][0]:
             # Merge available EnvRunner states into local worker's EnvRunner state.
             # Broadcast merged EnvRunner state AND new model weights back to all remote
-            # EnvRunners.
+            # EnvRunners that - in this call - had returned samples.
             if (
                 self.metrics.peek(
                     NUM_TRAINING_STEP_CALLS_SINCE_LAST_SYNCH_WORKER_WEIGHTS
@@ -787,7 +794,7 @@ class Impala(Algorithm):
                         rl_module_state=rl_module_state,
                     )
 
-        if env_runner_metrics or learner_results:
+        if env_runner_metrics or last_good_learner_results:
             return self.metrics.reduce()
         return {}
 
