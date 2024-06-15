@@ -361,6 +361,9 @@ class Channel(ChannelInterface):
             self._reader_ref,
         )
 
+    def __repr__(self) -> str:
+        return f"Channel(_reader_ref={self._reader_ref})"
+
     def _resize_channel_if_needed(self, serialized_value: str):
         # serialized_value.total_bytes *only* includes the size of the data. It does not
         # include the size of the metadata, so we must account for the size of the
@@ -416,14 +419,16 @@ class Channel(ChannelInterface):
             self._num_readers,
         )
 
-    def read(self) -> Any:
-        return self.begin_read()
-
     def begin_read(self) -> Any:
         self.ensure_registered_as_reader()
         ret = ray.get(self._reader_ref)
 
         if isinstance(ret, _ResizeChannel):
+            # The writer says we need to update the channel backing store (due to a
+            # resize).
+            self._worker.core_worker.experimental_channel_read_release(
+                [self._reader_ref]
+            )
             self._reader_ref = ret._reader_ref
             # We need to register the new reader_ref.
             self._reader_registered = False
@@ -543,10 +548,16 @@ class CompositeChannel(ChannelInterface):
             self._channels,
         )
 
+    def __str__(self) -> str:
+        return f"CompositeChannel(_channels={self._channels})"
+
     def write(self, value: Any):
         self.ensure_registered_as_writer()
         for channel in self._channels:
             channel.write(value)
+
+    def read(self) -> Any:
+        return self.begin_read()
 
     def begin_read(self) -> Any:
         self.ensure_registered_as_reader()
