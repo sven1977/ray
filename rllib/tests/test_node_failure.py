@@ -5,8 +5,9 @@ import unittest
 import ray
 from ray._private.test_utils import get_other_nodes
 from ray.cluster_utils import Cluster
+from ray.rllib.algorithms.appo import APPOConfig
+from ray.rllib.algorithms.ppo import PPOConfig
 from ray.util.state import list_actors
-from ray.rllib.algorithms.ppo import PPO, PPOConfig
 
 
 num_redis_shards = 5
@@ -25,12 +26,12 @@ assert (
 
 
 class NodeFailureTests(unittest.TestCase):
-    def setUp(self):
+    def start_cluster(self):
         # Simulate a cluster on one machine.
-        self.cluster = Cluster()
+        cluster = Cluster()
 
         for i in range(num_nodes):
-            self.cluster.add_node(
+            cluster.add_node(
                 redis_port=6379 if i == 0 else None,
                 num_redis_shards=num_redis_shards if i == 0 else None,
                 num_cpus=2,
@@ -39,56 +40,15 @@ class NodeFailureTests(unittest.TestCase):
                 redis_max_memory=redis_max_memory,
                 dashboard_host="0.0.0.0",
             )
-        self.cluster.wait_for_nodes()
-        ray.init(address=self.cluster.address)
+        cluster.wait_for_nodes()
+        ray.init(address=cluster.address)
+        return cluster
 
-    def tearDown(self):
+    def stop_cluster(self, cluster):
         ray.shutdown()
-        self.cluster.shutdown()
+        cluster.shutdown()
 
-    def test_continue_training_on_failure(self):
-        # We tolerate failing workers and pause training
-        config = (
-            PPOConfig()
-            .environment("CartPole-v1")
-            .env_runners(
-                num_env_runners=6,
-                validate_env_runners_after_construction=True,
-            )
-            .fault_tolerance(recreate_failed_env_runners=True)
-            .training(
-                train_batch_size=300,
-            )
-        )
-        ppo = PPO(config=config)
-
-        # One step with all nodes up, enough to satisfy resource requirements
-        ppo.train()
-
-        self.assertEqual(ppo.workers.num_healthy_remote_workers(), 6)
-        self.assertEqual(ppo.workers.num_remote_workers(), 6)
-
-        # Remove the first non-head node.
-        node_to_kill = get_other_nodes(self.cluster, exclude_head=True)[0]
-        self.cluster.remove_node(node_to_kill)
-
-        # step() should continue with 4 rollout workers.
-        ppo.train()
-
-        self.assertEqual(ppo.workers.num_healthy_remote_workers(), 4)
-        self.assertEqual(ppo.workers.num_remote_workers(), 6)
-
-        # node comes back immediately.
-        self.cluster.add_node(
-            redis_port=None,
-            num_redis_shards=None,
-            num_cpus=2,
-            num_gpus=0,
-            object_store_memory=object_store_memory,
-            redis_max_memory=redis_max_memory,
-            dashboard_host="0.0.0.0",
-        )
-
+    def wait_for_all_actors_to_be_back(self):
         # Now, let's wait for Ray to restart all the RolloutWorker actors.
         while True:
             states = [
@@ -101,14 +61,63 @@ class NodeFailureTests(unittest.TestCase):
             # Otherwise, wait a bit.
             time.sleep(1)
 
-        # This step should continue with 4 workers, but by the end
-        # of weight syncing, the 2 recovered rollout workers should
-        # be back.
-        ppo.train()
+    def test_node_failures(self):
+        """Tests, whether training resumes properly after a worker node failure."""
+        for config in [PPOConfig(), APPOConfig()]:
+            config = (
+                config
+                .environment("CartPole-v1")
+                .env_runners(
+                    num_env_runners=6,
+                    validate_env_runners_after_construction=True,
+                )
+                # Activate EnvRunner fault tolerance.
+                .fault_tolerance(recreate_failed_env_runners=True)
+                .training(train_batch_size=300)
+            )
+            print(f"Testing algo={config.algo_class}")
+            cluster = self.start_cluster()
+            algo = config.build()
 
-        # Workers should be back up, everything back to normal.
-        self.assertEqual(ppo.workers.num_healthy_remote_workers(), 6)
-        self.assertEqual(ppo.workers.num_remote_workers(), 6)
+            # One step with all nodes up, enough to satisfy resource requirements
+            print(algo.train())
+
+            self.assertEqual(algo.workers.num_healthy_remote_workers(), 6)
+            self.assertEqual(algo.workers.num_remote_workers(), 6)
+
+            # Remove the first non-head node.
+            node_to_kill = get_other_nodes(cluster, exclude_head=True)[0]
+            cluster.remove_node(node_to_kill)
+
+            # step() should continue with 4 rollout workers.
+            print(algo.train())
+
+            self.assertEqual(algo.workers.num_healthy_remote_workers(), 4)
+            self.assertEqual(algo.workers.num_remote_workers(), 6)
+
+            # Node comes back immediately.
+            cluster.add_node(
+                redis_port=None,
+                num_redis_shards=None,
+                num_cpus=2,
+                num_gpus=0,
+                object_store_memory=object_store_memory,
+                redis_max_memory=redis_max_memory,
+                dashboard_host="0.0.0.0",
+            )
+            self.wait_for_all_actors_to_be_back()
+
+            # This step should continue with 4 workers, but by the end
+            # of weight syncing, the 2 recovered rollout workers should
+            # be back.
+            print(algo.train())
+
+            # Workers should be back up, everything back to normal.
+            self.assertEqual(algo.workers.num_healthy_remote_workers(), 6)
+            self.assertEqual(algo.workers.num_remote_workers(), 6)
+
+            algo.stop()
+            self.stop_cluster(cluster)
 
 
 if __name__ == "__main__":
