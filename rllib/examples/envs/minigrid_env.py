@@ -156,7 +156,7 @@ if __name__ == "__main__":
             num_sgd_iter=6,
             train_batch_size_per_learner=2000,
             lr=0.0003,
-            vf_loss_coeff=10.0,
+            vf_loss_coeff=1.0,
             learner_config_dict={
                 # Intrinsic reward coefficient.
                 "intrinsic_reward_coeff": 0.01,
