@@ -25,19 +25,13 @@ from ray.tune.registry import register_env
 
 torch, nn = try_import_torch()
 
-# Register the Minigrid env we want to train on.
-register_env(
-    "mini_grid",
-
-    lambda cfg: ImgObsWrapper(
-        gym.make("MiniGrid-DoorKey-8x8-v0", render_mode="rgb_array")
-    ),
-)
-
 parser = add_rllib_example_script_args(
     default_reward=float("inf"), default_iters=50000, default_timesteps=10000000000
 )
-parser.set_defaults(enable_new_api_stack=True)
+parser.set_defaults(
+    enable_new_api_stack=True,
+    env="MiniGrid-DoorKey-8x8-v0",
+)
 
 
 class MiniGridCNNEncoder(nn.Module):
@@ -143,6 +137,15 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
 
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    # Register the Minigrid env we want to train on.
+    register_env(
+        "mini_grid",
+
+        lambda cfg: ImgObsWrapper(
+            gym.make(args.env, render_mode="rgb_array")
+        ),
+    )
 
     base_config = (
         PPOConfig()
