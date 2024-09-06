@@ -17,7 +17,6 @@ Therefore, if a state transition was unexpected, the agent becomes
 exploration in sparse rewards environments.
 
 For more details, see here:
-
 [1] Curiosity-driven Exploration by Self-supervised Prediction
 Pathak, Agrawal, Efros, and Darrell - UC Berkeley - ICML 2017.
 https://arxiv.org/pdf/1705.05363.pdf
@@ -218,17 +217,22 @@ if __name__ == "__main__":
                 "max_episode_steps": 22,
             },
         )
-        # Use our custom `curiosity` method to set up the PPO/ICM-Learner.
-        .curiosity(
-            # Intrinsic reward coefficient.
-            curiosity_eta=0.05,
-            # Forward loss weight (vs inverse dynamics loss, which will be `1. - beta`).
-            # curiosity_beta=0.2,
-        )
         .callbacks(MeasureMaxDistanceToStart)
         .env_runners(
             num_envs_per_env_runner=5 if args.algo == "PPO" else 1,
             env_to_module_connector=lambda env: FlattenObservations(),
+        )
+        .training(
+            learner_config_dict={
+                # Intrinsic reward coefficient.
+                "intrinsic_reward_coeff": 0.05,
+                # Forward loss weight (vs inverse dynamics loss). Total ICM loss is:
+                # L(total ICM) = (
+                #     `forward_loss_weight` * L(forward)
+                #     + (1.0 - `forward_loss_weight`) * L(inverse_dyn)
+                # )
+                "forward_loss_weight": 0.2,
+            }
         )
         .rl_module(
             rl_module_spec=MultiRLModuleSpec(

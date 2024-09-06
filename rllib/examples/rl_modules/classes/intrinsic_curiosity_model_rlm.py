@@ -2,7 +2,7 @@ from typing import Any, Dict, TYPE_CHECKING
 
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.torch import TorchRLModule
-from ray.rllib.examples.learners.classes.curiosity_torch_learner_utils import (  # noqa
+from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
     ICM_MODULE_ID,
 )
 from ray.rllib.models.torch.torch_distributions import TorchCategorical
@@ -99,21 +99,30 @@ class IntrinsicCuriosityModel(TorchRLModule):
 
         feature_dim = cfg.get("feature_dim", 288)
 
-        # Build the feature model (encoder of observations to feature space).
-        layers = []
-        dense_layers = cfg.get("feature_net_hiddens", (256, 256))
-        # `in_size` is the observation space (assume a simple Box(1D)).
-        in_size = self.config.observation_space.shape[0]
-        for out_size in dense_layers:
-            layers.append(nn.Linear(in_size, out_size))
-            if cfg.get("feature_net_activation") not in [None, "linear"]:
-                layers.append(
-                    get_activation_fn(cfg["feature_net_activation"], "torch")()
-                )
-            in_size = out_size
-        # Last feature layer of n nodes (feature dimension).
-        layers.append(nn.Linear(in_size, feature_dim))
-        self._feature_net = nn.Sequential(*layers)
+        # Build the feature model (encoder of observations to feature space) as
+        # a simple FCNet.
+        if not cfg.get("feature_net_nn_module_class"):
+            layers = []
+            dense_layers = cfg.get("feature_net_hiddens", (256, 256))
+            # `in_size` is the observation space (assume a simple Box(1D)).
+            in_size = self.config.observation_space.shape[0]
+            for out_size in dense_layers:
+                layers.append(nn.Linear(in_size, out_size))
+                if cfg.get("feature_net_activation") not in [None, "linear"]:
+                    layers.append(
+                        get_activation_fn(cfg["feature_net_activation"], "torch")()
+                    )
+                in_size = out_size
+            # Last feature layer of n nodes (feature dimension).
+            layers.append(nn.Linear(in_size, feature_dim))
+            self._feature_net = nn.Sequential(*layers)
+
+        # Feature net is provided as a nn.Module class. Call its constructor and 
+        # pass in the observation space and `feature_dim`.
+        else:
+            self._feature_net = cfg["feature_net_nn_module_class"](
+                self.config.observation_space, feature_dim
+            )
 
         # Build the inverse model (predicting the action between two observations).
         layers = []
@@ -226,8 +235,9 @@ class IntrinsicCuriosityModel(TorchRLModule):
 
         # Calculate the ICM loss.
         total_loss = (
-            1.0 - config.curiosity_beta
-        ) * inverse_loss + config.curiosity_beta * forward_loss
+            config.learner_config_dict["forward_loss_weight"] * forward_loss
+            + (1.0 - config.learner_config_dict["forward_loss_weight"]) * inverse_loss
+        )
 
         learner.metrics.log_dict(
             {
