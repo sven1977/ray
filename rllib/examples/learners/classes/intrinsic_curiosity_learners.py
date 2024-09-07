@@ -152,8 +152,8 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
         # Assert that the batch is ready.
         assert DEFAULT_MODULE_ID in batch and ICM_MODULE_ID not in batch
         assert (
-                Columns.OBS in batch[DEFAULT_MODULE_ID]
-                and Columns.NEXT_OBS in batch[DEFAULT_MODULE_ID]
+            Columns.OBS in batch[DEFAULT_MODULE_ID]
+            and Columns.NEXT_OBS in batch[DEFAULT_MODULE_ID]
         )
         # TODO (sven): We are performing two forward passes per update right now.
         #  Once here in the connector (w/o grad) to just get the intrinsic rewards

@@ -1,5 +1,5 @@
 import gymnasium as gym
-from minigrid.wrappers import ImgObsWrapper
+from minigrid.wrappers import FullyObsWrapper, ImgObsWrapper
 
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.core import Columns, DEFAULT_MODULE_ID
@@ -32,13 +32,21 @@ parser.set_defaults(
     enable_new_api_stack=True,
     env="MiniGrid-DoorKey-8x8-v0",
 )
+parser.add_argument(
+    "--one-hot-encoder",
+    action="store_true",
+    help="Whether to use a flattened one-hot observation encoder that one-hots all "
+    "input 'pixels' (11 object types, 6 colors, 3 states) and concatenates them into "
+    "a single 1D tensor. If not set, will use the default CNN encoder for the 7x7 "
+    "observation MiniGrid 'image'."
+)
 
 
 class MiniGridCNNEncoder(nn.Module):
     def __init__(self, observation_space, feature_dim):
         super().__init__()
 
-        n_input_channels = observation_space.shape[0]
+        n_input_channels = observation_space["image"].shape[0]
 
         self._cnn = nn.Sequential(
             nn.Conv2d(n_input_channels, 16, (2, 2)),
@@ -53,13 +61,56 @@ class MiniGridCNNEncoder(nn.Module):
         # Compute shape by doing one forward pass
         with torch.no_grad():
             n_flatten = self._cnn(torch.as_tensor(
-                observation_space.sample()[None]
+                observation_space["image"].sample()[None]
             ).float()).shape[1]
 
-        self._features = nn.Sequential(nn.Linear(n_flatten, feature_dim), nn.ReLU())
+        # +4: Add direction to feature vector as one-hot.
+        self._features = nn.Sequential(nn.Linear(n_flatten + 4, feature_dim), nn.ReLU())
 
     def forward(self, obs, **kwargs):
-        return self._features(self._cnn(obs.float()))
+        cnn_out = self._cnn(obs["image"].float())
+        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
+        return self._features(torch.concat([cnn_out, direction], -1))
+
+
+class MiniGridOneHotEncoder(nn.Module):
+    def __init__(self, observation_space, feature_dim):
+        super().__init__()
+
+        layers = []
+
+        # 8x8 fully obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
+        dim_in = (
+            observation_space["image"].shape[0]
+            * observation_space["image"].shape[1]
+        ) * (11 + 6 + 4)
+        for dim_out in [256, 256]:
+            layers.append(nn.Linear(dim_in, dim_out))
+            layers.append(nn.ReLU())
+            dim_in = dim_out
+
+        layers.append(nn.Linear(dim_in, feature_dim))
+        layers.append(nn.ReLU())
+
+        self._features = nn.Sequential(*layers)
+
+    def forward(self, obs, **kwargs):
+        image = obs["image"]
+        B = image.shape[0]
+        flat_image = image.reshape((-1, 3)).long()
+        # One-hot the last dim into 11, 6, 3 one-hot vectors, then flatten.
+        objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
+        colors = nn.functional.one_hot(flat_image[:, 1], num_classes=6).float()
+        # Use 4 classes here (instead of 3), b/c the agent position is the 4th class.
+        states = nn.functional.one_hot(flat_image[:, 2], num_classes=4).float()
+
+        flat_image_one_hot = torch.concat(
+            [objects, colors, states], -1
+        ).reshape((B, -1))
+        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
+        obs = torch.concat([flat_image_one_hot, direction], -1)
+
+        return self._features(obs)
 
 
 class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
@@ -70,7 +121,16 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
         feature_dim = cfg.get("feature_dim", 288)
 
         # Shared value- and policy encoder.
-        self._encoder = MiniGridCNNEncoder(self.config.observation_space, feature_dim)
+        # Encode a flat one-hot vector (flat concatenation of all "pixels").
+        if cfg.get("one_hot_encoder", False):
+            self._encoder = MiniGridOneHotEncoder(
+                self.config.observation_space, feature_dim
+            )
+        # Use a CNN encoder.
+        else:
+            self._encoder = MiniGridCNNEncoder(
+                self.config.observation_space, feature_dim
+            )
 
         # Policy head.
         self._policy_head = MLPHeadConfig(
@@ -138,13 +198,24 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
 if __name__ == "__main__":
     args = parser.parse_args()
 
+    class ImgDirectionWrapper(gym.ObservationWrapper):
+        def __init__(self, env):
+            super().__init__(env)
+            original_space = self.env.observation_space
+            self.observation_space = gym.spaces.Dict({
+                key: original_space[key] for key in original_space.spaces
+                if key != 'mission'
+            })
+
+        def observation(self, observation):
+            obs = observation.copy()
+            obs.pop("mission")
+            return obs
+
+
     # Register the Minigrid env we want to train on.
     register_env(
-        "mini_grid",
-
-        lambda cfg: ImgObsWrapper(
-            gym.make(args.env, render_mode="rgb_array")
-        ),
+        "mini_grid", lambda cfg: ImgDirectionWrapper(gym.make(args.env))
     )
 
     base_config = (
@@ -160,9 +231,10 @@ if __name__ == "__main__":
             train_batch_size_per_learner=2000,
             lr=0.0003,
             vf_loss_coeff=1.0,
+            entropy_coeff=0.01,
             learner_config_dict={
                 # Intrinsic reward coefficient.
-                "intrinsic_reward_coeff": 0.01,
+                "intrinsic_reward_coeff": 0.05,
                 # Forward loss weight (vs inverse dynamics loss). Total ICM loss is:
                 # L(total ICM) = (
                 #     `forward_loss_weight` * L(forward)
@@ -178,6 +250,8 @@ if __name__ == "__main__":
                     DEFAULT_MODULE_ID: RLModuleSpec(
                         module_class=MiniGridTorchRLModule,
                         model_config_dict={
+                            # Use the flat one-hot encoder (or the CNN encoder).
+                            "one_hot_encoder": args.one_hot_encoder,
                             # Size of the feature vector coming out of the CNN encoder.
                             # Note that this CNN encoder is a different network than
                             # the one used in the `IntrinsicCuriosityModel` below, so
@@ -203,7 +277,10 @@ if __name__ == "__main__":
                             # Provide the feature net (encoder) class here instead
                             # of using the default feature net (FCNet). An FCNet
                             # wouldn't work here b/c the observation space is an image.
-                            "feature_net_nn_module_class": MiniGridCNNEncoder,
+                            "feature_net_nn_module_class": (
+                                MiniGridOneHotEncoder if args.one_hot_encoder
+                                else MiniGridCNNEncoder
+                            ),
                             # Configure the other two networks: inverse- and forward
                             # nets. Both use the feature vector(s) coming out of the
                             # feature net their input.
@@ -217,7 +294,7 @@ if __name__ == "__main__":
             ),
             # Use a different learning rate for training the ICM.
             algorithm_config_overrides_per_module={
-                ICM_MODULE_ID: PPOConfig.overrides(lr=0.0001)
+                ICM_MODULE_ID: PPOConfig.overrides(lr=0.000025)
             },
         )
     )

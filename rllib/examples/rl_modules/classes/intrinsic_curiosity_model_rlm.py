@@ -1,5 +1,7 @@
 from typing import Any, Dict, TYPE_CHECKING
 
+import tree  # pip install dm_tree
+
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.torch import TorchRLModule
 from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
@@ -161,15 +163,12 @@ class IntrinsicCuriosityModel(TorchRLModule):
     def _forward_train(self, batch, **kwargs):
         # Push both observations through feature net to get feature vectors (phis).
         # We cat/batch them here for efficiency reasons (save one forward pass).
-        phis = self._feature_net(
-            torch.cat(
-                [
-                    batch[Columns.OBS],
-                    batch[Columns.NEXT_OBS],
-                ],
-                dim=0,
-            )
+        obs = tree.map_structure(
+            lambda obs, next_obs: torch.cat([obs, next_obs], dim=0),
+            batch[Columns.OBS],
+            batch[Columns.NEXT_OBS],
         )
+        phis = self._feature_net(obs)
         # Split again to yield 2 individual phi tensors.
         phi, next_phi = torch.chunk(phis, 2)
 
