@@ -164,10 +164,31 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
             # Perform ICM forward pass.
             fwd_out = rl_module[ICM_MODULE_ID].forward_train(batch[DEFAULT_MODULE_ID])
 
+        r_e = batch[DEFAULT_MODULE_ID][Columns.REWARDS]
+        r_i = fwd_out[Columns.INTRINSIC_REWARDS]
         # Add the intrinsic rewards to the main module's extrinsic rewards.
-        batch[DEFAULT_MODULE_ID][Columns.REWARDS] += (
-                self.intrinsic_reward_coeff * fwd_out[Columns.INTRINSIC_REWARDS]
-        )
+        if self.intrinsic_reward_coeff == "neg":
+            r_e += (r_i - r_i.max())
+            #min_reward = r_e.min()
+            #assert min_reward >= 0.0
+            #if r_e.max() == 0.0:
+            #    r_e += r_i
+            #else:#if min_reward > 0.0:
+            #    min_reward_learger_zero = r_e[r_e > 0.0].min()
+            #    r_i_max = r_i.max()
+            #    r_e += r_i * (min_reward_learger_zero / r_i_max)
+            #else:
+
+            #if min_reward_learger_zero == 0.0:
+            #    batch[DEFAULT_MODULE_ID][Columns.REWARDS] += (
+            #        fwd_out[Columns.INTRINSIC_REWARDS]
+            #    )
+            #else:
+            #    non_zero_values = r_e[r_e > 0.0]
+            #    batch[DEFAULT_MODULE_ID][Columns.REWARDS] +=
+        else:
+            r_e += self.intrinsic_reward_coeff * r_i
+        batch[DEFAULT_MODULE_ID][Columns.REWARDS] = r_e
 
         # Duplicate the batch such that the ICM also has data to learn on.
         batch[ICM_MODULE_ID] = batch[DEFAULT_MODULE_ID]

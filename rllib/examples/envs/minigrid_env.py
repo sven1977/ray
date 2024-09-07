@@ -230,11 +230,17 @@ if __name__ == "__main__":
             num_sgd_iter=6,
             train_batch_size_per_learner=2000,
             lr=0.0003,
-            vf_loss_coeff=1.0,
+            vf_loss_coeff=10.0,
             entropy_coeff=0.01,
             learner_config_dict={
                 # Intrinsic reward coefficient.
-                "intrinsic_reward_coeff": 0.05,
+                # Tune this parameter such that the term:
+                # `episode_len_mean * mean_intrinsic_reward * intrinsic_reward_coeff`
+                # remaing smaller (by ~10x) than the extrinsic reward for reaching the
+                # goal state. Otherwise, the agent will learn to "browse around" for
+                # lots of intrinsic rewards and only go to the goal - maybe - toward
+                # the end.
+                "intrinsic_reward_coeff": 0.02,
                 # Forward loss weight (vs inverse dynamics loss). Total ICM loss is:
                 # L(total ICM) = (
                 #     `forward_loss_weight` * L(forward)
