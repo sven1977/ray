@@ -1,4 +1,5 @@
 import gymnasium as gym
+from minigrid.wrappers import FullyObsWrapper
 import numpy as np
 
 from ray.rllib.algorithms.ppo import PPOConfig
@@ -74,23 +75,22 @@ class MiniGridCNNEncoder(nn.Module):
     def __init__(self, observation_space, feature_dim, lstm_cell_size=0):
         super().__init__()
 
-        n_input_channels = observation_space["image"].shape[0]
+        n_input_channels = observation_space["image"].shape[2]
 
         self._cnn = nn.Sequential(
             nn.Conv2d(n_input_channels, 16, (2, 2)),
             nn.ReLU(),
             nn.Conv2d(16, 32, (2, 2)),
             nn.ReLU(),
-            nn.Conv2d(32, 64, (1, 1)),
+            nn.Conv2d(32, 64, (2, 2)),
             nn.ReLU(),
             nn.Flatten(),
         )
 
         # Compute shape by doing one forward pass
         with torch.no_grad():
-            n_flatten = self._cnn(torch.as_tensor(
-                observation_space["image"].sample()[None]
-            ).float()).shape[1]
+            dummy_obs = torch.as_tensor(observation_space["image"].sample()[None])
+            n_flatten = self._cnn(dummy_obs.float().permute((0, 3, 1, 2))).shape[1]
 
         # +4: Add direction to feature vector as one-hot.
         self._lstm = None
@@ -107,7 +107,7 @@ class MiniGridCNNEncoder(nn.Module):
             )
 
     def forward(self, batch, **kwargs):
-        images = batch[Columns.OBS]["image"]
+        images = batch[Columns.OBS]["image"].float()
         direction = batch[Columns.OBS]["direction"]
         B = images.shape[0]
 
@@ -117,7 +117,10 @@ class MiniGridCNNEncoder(nn.Module):
             images = images.reshape([-1] + list(images.shape[2:]))
             direction = direction.reshape([-1] + list(direction.shape[2:]))
 
-        cnn_out = self._cnn(images.float())
+        # Make channels first.
+        images = images.permute((0, 3, 1, 2))
+
+        cnn_out = self._cnn(images)
         direction = nn.functional.one_hot(direction, num_classes=4).float()
         in_ = torch.concat([cnn_out, direction], -1)
 
@@ -136,7 +139,7 @@ class MiniGridCNNEncoder(nn.Module):
                 },
             }
         else:
-            return self._features(in_)
+            return {"features": self._features(in_)}
 
 
 #class MiniGridOneHotEncoder(nn.Module):
@@ -299,7 +302,7 @@ if __name__ == "__main__":
 
     # Register the Minigrid env we want to train on.
     register_env(
-        "mini_grid", lambda cfg: ImgDirectionWrapper(gym.make(args.env))
+        "mini_grid", lambda cfg: ImgDirectionWrapper(FullyObsWrapper(gym.make(args.env)))
     )
 
     base_config = (
@@ -343,7 +346,8 @@ if __name__ == "__main__":
                         model_config_dict={
                             # Use the flat one-hot encoder (or the CNN encoder).
                             "one_hot_encoder": args.one_hot_encoder,
-                            "lstm_cell_size": 256,
+                            # If cell size >0 -> use an LSTM.
+                            "lstm_cell_size": 0,
                             # Size of the feature vector coming out of the CNN encoder.
                             # Note that this CNN encoder is a different network than
                             # the one used in the `IntrinsicCuriosityModel` below, so

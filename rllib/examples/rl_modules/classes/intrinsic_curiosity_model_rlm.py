@@ -168,7 +168,8 @@ class IntrinsicCuriosityModel(TorchRLModule):
             batch[Columns.OBS],
             batch[Columns.NEXT_OBS],
         )
-        phis = self._feature_net(obs)
+        phis = self._feature_net({Columns.OBS: obs})
+        phis = phis["features"]
         # Split again to yield 2 individual phi tensors.
         phi, next_phi = torch.chunk(phis, 2)
 
