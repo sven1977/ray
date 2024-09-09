@@ -2,6 +2,7 @@ import gymnasium as gym
 from minigrid.wrappers import FullyObsWrapper
 import numpy as np
 
+from ray import tune
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core import Columns, DEFAULT_MODULE_ID
@@ -10,6 +11,7 @@ from ray.rllib.core.rl_module.apis import ValueFunctionAPI
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
+from ray.rllib.examples.envs.env_rendering_and_recording import EnvRenderCallback
 from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
     ICM_MODULE_ID,
     PPOTorchLearnerWithCuriosity
@@ -23,7 +25,6 @@ from ray.rllib.utils.test_utils import (
     add_rllib_example_script_args,
     run_rllib_example_script_experiment,
 )
-from ray.tune.registry import register_env
 
 torch, nn = try_import_torch()
 
@@ -52,23 +53,23 @@ class DistanceFromStartCallback(DefaultCallbacks):
         self._start_pos[env_index] = env.envs[env_index].agent_pos
         self._max_dist[env_index] = -1
 
-    def on_episode_step(self, *, metrics_logger, env, env_index, **kwargs):
+    def on_episode_step(self, *, metrics_logger, env, env_index, episode, **kwargs):
+        if episode.is_done:
+            metrics_logger.log_value(
+                "distance_to_start_max",
+                self._max_dist[env_index],
+                # reduce="mean",
+                # window=100,
+            )
         # Measure euclidian distance to start pos.
-        curr = env.envs[env_index].agent_pos
-        dist = (
-            (self._start_pos[env_index][0] - curr[0]) ** 2
-            + (self._start_pos[env_index][1] - curr[1]) ** 2
-        ) ** 0.5
-        if dist > self._max_dist[env_index]:
-            self._max_dist[env_index] = dist
-
-    def on_episode_end(self, *, metrics_logger, env, env_index, **kwargs):
-        metrics_logger.log_value(
-            "distance_to_start_max",
-            self._max_dist[env_index],
-            #reduce="mean",
-            #window=100,
-        )
+        else:
+            curr = env.envs[env_index].agent_pos
+            dist = (
+                (self._start_pos[env_index][0] - curr[0]) ** 2
+                + (self._start_pos[env_index][1] - curr[1]) ** 2
+            ) ** 0.5
+            if dist > self._max_dist[env_index]:
+                self._max_dist[env_index] = dist
 
 
 class MiniGridCNNEncoder(nn.Module):
@@ -78,11 +79,14 @@ class MiniGridCNNEncoder(nn.Module):
         n_input_channels = observation_space["image"].shape[2]
 
         self._cnn = nn.Sequential(
-            nn.Conv2d(n_input_channels, 16, (2, 2)),
+            nn.Conv2d(n_input_channels, 16, (4, 4), 2),
+            #nn.Conv2d(n_input_channels, 16, (2, 2), 1),
             nn.ReLU(),
-            nn.Conv2d(16, 32, (2, 2)),
+            nn.Conv2d(16, 32, (4, 4), 2),
+            #nn.Conv2d(16, 32, (2, 2), 1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, (2, 2)),
+            nn.Conv2d(32, 64, (4, 4), 2),
+            #nn.Conv2d(32, 64, (2, 2), 1),
             nn.ReLU(),
             nn.Flatten(),
         )
@@ -107,7 +111,7 @@ class MiniGridCNNEncoder(nn.Module):
             )
 
     def forward(self, batch, **kwargs):
-        images = batch[Columns.OBS]["image"].float()
+        images = batch[Columns.OBS]["image"].float() * 10.0
         direction = batch[Columns.OBS]["direction"]
         B = images.shape[0]
 
@@ -301,8 +305,8 @@ if __name__ == "__main__":
 
 
     # Register the Minigrid env we want to train on.
-    register_env(
-        "mini_grid", lambda cfg: ImgDirectionWrapper(FullyObsWrapper(gym.make(args.env)))
+    tune.register_env(
+        "mini_grid", lambda cfg: ImgDirectionWrapper(FullyObsWrapper(gym.make(args.env, render_mode="rgb_array")))
     )
 
     base_config = (
@@ -318,8 +322,8 @@ if __name__ == "__main__":
             num_sgd_iter=6,
             train_batch_size_per_learner=2000,
             lr=0.0003,
-            vf_loss_coeff=10.0,
-            entropy_coeff=0.005,
+            vf_loss_coeff=1.0,
+            entropy_coeff=0.01,
             learner_config_dict={
                 # Intrinsic reward coefficient.
                 # Tune this parameter such that the term:
@@ -328,7 +332,7 @@ if __name__ == "__main__":
                 # goal state. Otherwise, the agent will learn to "browse around" for
                 # lots of intrinsic rewards and only go to the goal - maybe - toward
                 # the end.
-                "intrinsic_reward_coeff": 0.1,
+                "intrinsic_reward_coeff": 0.2,
                 # Forward loss weight (vs inverse dynamics loss). Total ICM loss is:
                 # L(total ICM) = (
                 #     `forward_loss_weight` * L(forward)
@@ -390,9 +394,22 @@ if __name__ == "__main__":
             ),
             # Use a different learning rate for training the ICM.
             algorithm_config_overrides_per_module={
-                ICM_MODULE_ID: PPOConfig.overrides(lr=0.000025)
+                ICM_MODULE_ID: PPOConfig.overrides(lr=0.000001)
             },
         )
+        .evaluation(
+            evaluation_num_env_runners=1,
+            evaluation_duration=1,
+            evaluation_interval=10,
+            # evaluation_parallel_to_training=True,
+            evaluation_config=PPOConfig.overrides(
+                callbacks=EnvRenderCallback,
+                explore=True,
+            ),
+        )
+        # Switch off RLlib's logging to avoid having the large videos show up in any log
+        # files.
+        .debugging(logger_config={"type": tune.logger.NoopLogger})
     )
 
     run_rllib_example_script_experiment(base_config, args)
