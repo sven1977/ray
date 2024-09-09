@@ -176,7 +176,7 @@ class MiniGridOneHotEncoder(nn.Module):
         objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
         colors = nn.functional.one_hot(flat_image[:, 1], num_classes=6).float()
         # Use 4 classes here (instead of 3), b/c the agent position is the 4th class.
-        states = nn.functional.one_hot(flat_image[:, 2], num_classes=4).float()
+        states = nn.functional.one_hot(flat_image[:, 2], num_classes=3).float()
 
         flat_image_one_hot = torch.concat(
             [objects, colors, states], -1
