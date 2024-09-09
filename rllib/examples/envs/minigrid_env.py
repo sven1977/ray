@@ -1,7 +1,8 @@
 import gymnasium as gym
-from minigrid.wrappers import FullyObsWrapper, ImgObsWrapper
+import numpy as np
 
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core import Columns, DEFAULT_MODULE_ID
 from ray.rllib.core.models.configs import MLPHeadConfig
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
@@ -42,8 +43,35 @@ parser.add_argument(
 )
 
 
+class DistanceFromStartCallback(DefaultCallbacks):
+    def on_episode_start(self, *, metrics_logger, env, env_index, **kwargs):
+        if not hasattr(self, "_start_pos"):
+            self._start_pos = [None] * env.num_envs
+            self._max_dist = [None] * env.num_envs
+        self._start_pos[env_index] = env.envs[env_index].agent_pos
+        self._max_dist[env_index] = -1
+
+    def on_episode_step(self, *, metrics_logger, env, env_index, **kwargs):
+        # Measure euclidian distance to start pos.
+        curr = env.envs[env_index].agent_pos
+        dist = (
+            (self._start_pos[env_index][0] - curr[0]) ** 2
+            + (self._start_pos[env_index][1] - curr[1]) ** 2
+        ) ** 0.5
+        if dist > self._max_dist[env_index]:
+            self._max_dist[env_index] = dist
+
+    def on_episode_end(self, *, metrics_logger, env, env_index, **kwargs):
+        metrics_logger.log_value(
+            "distance_to_start_max",
+            self._max_dist[env_index],
+            #reduce="mean",
+            #window=100,
+        )
+
+
 class MiniGridCNNEncoder(nn.Module):
-    def __init__(self, observation_space, feature_dim):
+    def __init__(self, observation_space, feature_dim, lstm_cell_size=0):
         super().__init__()
 
         n_input_channels = observation_space["image"].shape[0]
@@ -65,52 +93,90 @@ class MiniGridCNNEncoder(nn.Module):
             ).float()).shape[1]
 
         # +4: Add direction to feature vector as one-hot.
-        self._features = nn.Sequential(nn.Linear(n_flatten + 4, feature_dim), nn.ReLU())
+        self._lstm = None
+        if lstm_cell_size > 0:
+            self._lstm = nn.LSTM(n_flatten + 4, lstm_cell_size, batch_first=True)
+            self._features = nn.Sequential(
+                nn.Linear(lstm_cell_size, feature_dim),
+                nn.ReLU(),
+            )
+        else:
+            self._features = nn.Sequential(
+                nn.Linear(n_flatten + 4, feature_dim),
+                nn.ReLU(),
+            )
 
-    def forward(self, obs, **kwargs):
-        cnn_out = self._cnn(obs["image"].float())
-        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
-        return self._features(torch.concat([cnn_out, direction], -1))
+    def forward(self, batch, **kwargs):
+        images = batch[Columns.OBS]["image"]
+        direction = batch[Columns.OBS]["direction"]
+        B = images.shape[0]
+
+        # Fold time-ranks.
+        if self._lstm:
+            T = images.shape[1]
+            images = images.reshape([-1] + list(images.shape[2:]))
+            direction = direction.reshape([-1] + list(direction.shape[2:]))
+
+        cnn_out = self._cnn(images.float())
+        direction = nn.functional.one_hot(direction, num_classes=4).float()
+        in_ = torch.concat([cnn_out, direction], -1)
+
+        if self._lstm is not None:
+            state_in = batch[Columns.STATE_IN]
+            h, c = state_in["h"], state_in["c"]
+            # Unfold time rank.
+            in_ = in_.reshape([B, T, in_.shape[-1]])
+            # Unsqueeze the layer dim (we only have 1 LSTM layer).
+            in_, (h, c) = self._lstm(in_, (h.unsqueeze(0), c.unsqueeze(0)))
+            return {
+                "features": self._features(in_),
+                Columns.STATE_OUT: {
+                    "h": h.squeeze(0),
+                    "c": c.squeeze(0),
+                },
+            }
+        else:
+            return self._features(in_)
 
 
-class MiniGridOneHotEncoder(nn.Module):
-    def __init__(self, observation_space, feature_dim):
-        super().__init__()
+#class MiniGridOneHotEncoder(nn.Module):
+#    def __init__(self, observation_space, feature_dim):
+#        super().__init__()
 
-        layers = []
+#        layers = []
 
-        # 8x8 fully obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
-        dim_in = (
-            observation_space["image"].shape[0]
-            * observation_space["image"].shape[1]
-        ) * (11 + 6 + 4)
-        for dim_out in [256, 256]:
-            layers.append(nn.Linear(dim_in, dim_out))
-            layers.append(nn.ReLU())
-            dim_in = dim_out
+#        # 8x8 fully obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
+#        dim_in = (
+#            observation_space["image"].shape[0]
+#            * observation_space["image"].shape[1]
+#        ) * (11 + 6 + 4)
+#        for dim_out in [256, 256]:
+#            layers.append(nn.Linear(dim_in, dim_out))
+#            layers.append(nn.ReLU())
+#            dim_in = dim_out
 
-        layers.append(nn.Linear(dim_in, feature_dim))
-        layers.append(nn.ReLU())
+#        layers.append(nn.Linear(dim_in, feature_dim))
+#        layers.append(nn.ReLU())
 
-        self._features = nn.Sequential(*layers)
+#        self._features = nn.Sequential(*layers)
 
-    def forward(self, obs, **kwargs):
-        image = obs["image"]
-        B = image.shape[0]
-        flat_image = image.reshape((-1, 3)).long()
-        # One-hot the last dim into 11, 6, 3 one-hot vectors, then flatten.
-        objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
-        colors = nn.functional.one_hot(flat_image[:, 1], num_classes=6).float()
-        # Use 4 classes here (instead of 3), b/c the agent position is the 4th class.
-        states = nn.functional.one_hot(flat_image[:, 2], num_classes=4).float()
-
-        flat_image_one_hot = torch.concat(
-            [objects, colors, states], -1
-        ).reshape((B, -1))
-        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
-        obs = torch.concat([flat_image_one_hot, direction], -1)
-
-        return self._features(obs)
+#    def forward(self, obs, **kwargs):
+#        image = obs["image"]
+#        B = image.shape[0]
+#        flat_image = image.reshape((-1, 3)).long()
+#        # One-hot the last dim into 11, 6, 3 one-hot vectors, then flatten.
+#        objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
+#        colors = nn.functional.one_hot(flat_image[:, 1], num_classes=6).float()
+#        # Use 4 classes here (instead of 3), b/c the agent position is the 4th class.
+#        states = nn.functional.one_hot(flat_image[:, 2], num_classes=4).float()
+#
+#        flat_image_one_hot = torch.concat(
+#            [objects, colors, states], -1
+#        ).reshape((B, -1))
+#        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
+#        obs = torch.concat([flat_image_one_hot, direction], -1)
+#
+#        return self._features(obs)
 
 
 class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
@@ -122,15 +188,15 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
 
         # Shared value- and policy encoder.
         # Encode a flat one-hot vector (flat concatenation of all "pixels").
-        if cfg.get("one_hot_encoder", False):
-            self._encoder = MiniGridOneHotEncoder(
-                self.config.observation_space, feature_dim
-            )
+        #if cfg.get("one_hot_encoder", False):
+        #    self._encoder = MiniGridOneHotEncoder(
+        #        self.config.observation_space, feature_dim
+        #    )
         # Use a CNN encoder.
-        else:
-            self._encoder = MiniGridCNNEncoder(
-                self.config.observation_space, feature_dim
-            )
+        #else:
+        self._encoder = MiniGridCNNEncoder(
+            self.config.observation_space, feature_dim, lstm_cell_size=cfg.get("lstm_cell_size", 0)
+        )
 
         # Policy head.
         self._policy_head = MLPHeadConfig(
@@ -152,11 +218,25 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
             output_layer_activation="linear",
         ).build(framework="torch")
 
+    def get_initial_state(self):
+        lstm_size = self.config.model_config_dict.get("lstm_cell_size", 0)
+        if lstm_size > 0:
+            return {
+                "h": np.zeros(shape=(lstm_size,), dtype=np.float32),
+                "c": np.zeros(shape=(lstm_size,), dtype=np.float32),
+            }
+        return {}
+
     def _forward_inference(self, batch, **kwargs):
         # Encoder forward pass.
-        encoder_outs = self._encoder(batch[Columns.OBS])
+        encoder_outs = self._encoder(batch)
+        features = encoder_outs.pop("features")
         # Policy head.
-        return {Columns.ACTION_DIST_INPUTS: self._policy_head(encoder_outs)}
+        ret = {
+            Columns.ACTION_DIST_INPUTS: self._policy_head(features)
+        }
+        ret.update(encoder_outs)
+        return ret
 
     def _forward_exploration(self, batch, **kwargs):
         return self._forward_inference(batch)
@@ -165,23 +245,27 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
         output = {}
 
         # Encoder forward pass.
-        encoder_outs = self._encoder(batch[Columns.OBS])
+        encoder_outs = self._encoder(batch)
+        features = encoder_outs.pop("features")
 
         # Value function forward pass.
-        vf_out = self._value_head(encoder_outs)
+        vf_out = self._value_head(features)
         # Squeeze out last dim (value function node).
         output[Columns.VF_PREDS] = vf_out.squeeze(-1)
 
         # Policy head.
-        action_logits = self._policy_head(encoder_outs)
+        action_logits = self._policy_head(features)
         output[Columns.ACTION_DIST_INPUTS] = action_logits
+
+        output.update(encoder_outs)
 
         return output
 
     def compute_values(self, batch):
-        encoder_outs = self._encoder(batch[Columns.OBS])
+        encoder_outs = self._encoder(batch)
+        features = encoder_outs.pop("features")
         # Value function forward pass.
-        vf_out = self._value_head(encoder_outs)
+        vf_out = self._value_head(features)
         # Squeeze out last dim (value function node).
         return vf_out.squeeze(-1)
 
@@ -221,6 +305,7 @@ if __name__ == "__main__":
     base_config = (
         PPOConfig()
         .environment("mini_grid")
+        .callbacks(DistanceFromStartCallback)
         .env_runners(
             num_envs_per_env_runner=5,
         )
@@ -231,7 +316,7 @@ if __name__ == "__main__":
             train_batch_size_per_learner=2000,
             lr=0.0003,
             vf_loss_coeff=10.0,
-            entropy_coeff=0.01,#
+            entropy_coeff=0.005,
             learner_config_dict={
                 # Intrinsic reward coefficient.
                 # Tune this parameter such that the term:
@@ -240,7 +325,7 @@ if __name__ == "__main__":
                 # goal state. Otherwise, the agent will learn to "browse around" for
                 # lots of intrinsic rewards and only go to the goal - maybe - toward
                 # the end.
-                "intrinsic_reward_coeff": 0.02,
+                "intrinsic_reward_coeff": 0.1,
                 # Forward loss weight (vs inverse dynamics loss). Total ICM loss is:
                 # L(total ICM) = (
                 #     `forward_loss_weight` * L(forward)
@@ -258,6 +343,7 @@ if __name__ == "__main__":
                         model_config_dict={
                             # Use the flat one-hot encoder (or the CNN encoder).
                             "one_hot_encoder": args.one_hot_encoder,
+                            "lstm_cell_size": 256,
                             # Size of the feature vector coming out of the CNN encoder.
                             # Note that this CNN encoder is a different network than
                             # the one used in the `IntrinsicCuriosityModel` below, so
@@ -283,10 +369,10 @@ if __name__ == "__main__":
                             # Provide the feature net (encoder) class here instead
                             # of using the default feature net (FCNet). An FCNet
                             # wouldn't work here b/c the observation space is an image.
-                            "feature_net_nn_module_class": (
-                                MiniGridOneHotEncoder if args.one_hot_encoder
-                                else MiniGridCNNEncoder
-                            ),
+                            "feature_net_nn_module_class": MiniGridCNNEncoder,
+                                #MiniGridOneHotEncoder if args.one_hot_encoder
+                                #else MiniGridCNNEncoder
+                            #),
                             # Configure the other two networks: inverse- and forward
                             # nets. Both use the feature vector(s) coming out of the
                             # feature net their input.
