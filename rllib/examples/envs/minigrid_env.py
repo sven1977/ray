@@ -156,7 +156,7 @@ class MiniGridOneHotEncoder(nn.Module):
         dim_in = (
             observation_space["image"].shape[0]
             * observation_space["image"].shape[1]
-        ) * (11 + 6 + 4) + 4
+        ) * (11 + 6 + 3) + 4
         for dim_out in [256, 256]:
             layers.append(nn.Linear(dim_in, dim_out))
             layers.append(nn.ReLU())
@@ -307,7 +307,7 @@ if __name__ == "__main__":
 
     # Register the Minigrid env we want to train on.
     tune.register_env(
-        "mini_grid", lambda cfg: ImgDirectionWrapper(FullyObsWrapper(gym.make(args.env, render_mode="rgb_array")))
+        "mini_grid", lambda cfg: ImgDirectionWrapper(gym.make(args.env, render_mode="rgb_array"))
     )
 
     base_config = (
