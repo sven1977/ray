@@ -146,44 +146,45 @@ class MiniGridCNNEncoder(nn.Module):
             return {"features": self._features(in_)}
 
 
-#class MiniGridOneHotEncoder(nn.Module):
-#    def __init__(self, observation_space, feature_dim):
-#        super().__init__()
+class MiniGridOneHotEncoder(nn.Module):
+    def __init__(self, observation_space, feature_dim):
+        super().__init__()
 
-#        layers = []
+        layers = []
 
-#        # 8x8 fully obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
-#        dim_in = (
-#            observation_space["image"].shape[0]
-#            * observation_space["image"].shape[1]
-#        ) * (11 + 6 + 4)
-#        for dim_out in [256, 256]:
-#            layers.append(nn.Linear(dim_in, dim_out))
-#            layers.append(nn.ReLU())
-#            dim_in = dim_out
+        # nxn fully obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
+        dim_in = (
+            observation_space["image"].shape[0]
+            * observation_space["image"].shape[1]
+        ) * (11 + 6 + 4) + 4
+        for dim_out in [256, 256]:
+            layers.append(nn.Linear(dim_in, dim_out))
+            layers.append(nn.ReLU())
+            dim_in = dim_out
 
-#        layers.append(nn.Linear(dim_in, feature_dim))
-#        layers.append(nn.ReLU())
+        layers.append(nn.Linear(dim_in, feature_dim))
+        layers.append(nn.ReLU())
 
-#        self._features = nn.Sequential(*layers)
+        self._features = nn.Sequential(*layers)
 
-#    def forward(self, obs, **kwargs):
-#        image = obs["image"]
-#        B = image.shape[0]
-#        flat_image = image.reshape((-1, 3)).long()
-#        # One-hot the last dim into 11, 6, 3 one-hot vectors, then flatten.
-#        objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
-#        colors = nn.functional.one_hot(flat_image[:, 1], num_classes=6).float()
-#        # Use 4 classes here (instead of 3), b/c the agent position is the 4th class.
-#        states = nn.functional.one_hot(flat_image[:, 2], num_classes=4).float()
-#
-#        flat_image_one_hot = torch.concat(
-#            [objects, colors, states], -1
-#        ).reshape((B, -1))
-#        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
-#        obs = torch.concat([flat_image_one_hot, direction], -1)
-#
-#        return self._features(obs)
+    def forward(self, batch, **kwargs):
+        obs = batch[Columns.OBS]
+        image = obs["image"]
+        B = image.shape[0]
+        flat_image = image.reshape((-1, 3)).long()
+        # One-hot the last dim into 11, 6, 3 one-hot vectors, then flatten.
+        objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
+        colors = nn.functional.one_hot(flat_image[:, 1], num_classes=6).float()
+        # Use 4 classes here (instead of 3), b/c the agent position is the 4th class.
+        states = nn.functional.one_hot(flat_image[:, 2], num_classes=4).float()
+
+        flat_image_one_hot = torch.concat(
+            [objects, colors, states], -1
+        ).reshape((B, -1))
+        direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
+        in_ = torch.concat([flat_image_one_hot, direction], -1)
+
+        return {"features": self._features(in_)}
 
 
 class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
@@ -195,15 +196,15 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
 
         # Shared value- and policy encoder.
         # Encode a flat one-hot vector (flat concatenation of all "pixels").
-        #if cfg.get("one_hot_encoder", False):
-        #    self._encoder = MiniGridOneHotEncoder(
-        #        self.config.observation_space, feature_dim
-        #    )
+        if cfg.get("one_hot_encoder", False):
+            self._encoder = MiniGridOneHotEncoder(
+                self.config.observation_space, feature_dim
+            )
         # Use a CNN encoder.
-        #else:
-        self._encoder = MiniGridCNNEncoder(
-            self.config.observation_space, feature_dim, lstm_cell_size=cfg.get("lstm_cell_size", 0)
-        )
+        else:
+            self._encoder = MiniGridCNNEncoder(
+                self.config.observation_space, feature_dim, lstm_cell_size=cfg.get("lstm_cell_size", 0)
+            )
 
         # Policy head.
         self._policy_head = MLPHeadConfig(
@@ -322,8 +323,8 @@ if __name__ == "__main__":
             num_sgd_iter=6,
             train_batch_size_per_learner=2000,
             lr=0.0003,
-            vf_loss_coeff=1.0,
-            entropy_coeff=0.01,
+            vf_loss_coeff=5.0,
+            entropy_coeff=0.05,
             learner_config_dict={
                 # Intrinsic reward coefficient.
                 # Tune this parameter such that the term:
@@ -377,10 +378,10 @@ if __name__ == "__main__":
                             # Provide the feature net (encoder) class here instead
                             # of using the default feature net (FCNet). An FCNet
                             # wouldn't work here b/c the observation space is an image.
-                            "feature_net_nn_module_class": MiniGridCNNEncoder,
-                                #MiniGridOneHotEncoder if args.one_hot_encoder
-                                #else MiniGridCNNEncoder
-                            #),
+                            "feature_net_nn_module_class": (
+                                MiniGridOneHotEncoder if args.one_hot_encoder
+                                else MiniGridCNNEncoder
+                            ),
                             # Configure the other two networks: inverse- and forward
                             # nets. Both use the feature vector(s) coming out of the
                             # feature net their input.
@@ -394,7 +395,7 @@ if __name__ == "__main__":
             ),
             # Use a different learning rate for training the ICM.
             algorithm_config_overrides_per_module={
-                ICM_MODULE_ID: PPOConfig.overrides(lr=0.000001)
+                ICM_MODULE_ID: PPOConfig.overrides(lr=0.0000001)
             },
         )
         .evaluation(
