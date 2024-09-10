@@ -216,7 +216,7 @@ class IntrinsicCuriosityModel(TorchRLModule):
         batch: Dict[str, Any],
         fwd_out: Dict[str, Any],
     ) -> Dict[str, Any]:
-        module = learner.module[module_id]
+        module = learner.module[module_id].unwrapped()
 
         # Forward net loss.
         forward_loss = torch.mean(fwd_out[Columns.INTRINSIC_REWARDS])

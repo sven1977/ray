@@ -28,10 +28,13 @@ class DQNTorchLearnerWithCuriosity(DQNRainbowTorchLearner):
         super().build()
         add_intrinsic_curiosity_connectors(self)
 
-    def compute_loss_for_module(self, **kwargs):
-        if module_id != ICM_MODULE_ID:
-            return super().compute_loss_for_module(**kwargs)
-        return self.module[module_id].compute_loss_for_module(learner=self, **kwargs)
+    #def compute_loss_for_module(self, **kwargs):
+    #    module_id = kwargs["module_id"]
+    #    if module_id != ICM_MODULE_ID:
+    #        return super().compute_loss_for_module(**kwargs)
+    #    return self.module[module_id].unwrapped().compute_loss_for_module(
+    #        learner=self, **kwargs
+    #    )
 
 
 class PPOTorchLearnerWithCuriosity(PPOTorchLearner):
@@ -39,11 +42,13 @@ class PPOTorchLearnerWithCuriosity(PPOTorchLearner):
         super().build()
         add_intrinsic_curiosity_connectors(self)
 
-    def compute_loss_for_module(self, **kwargs):
-        module_id = kwargs["module_id"]
-        if module_id != ICM_MODULE_ID:
-            return super().compute_loss_for_module(**kwargs)
-        return self.module[module_id].compute_loss_for_module(learner=self, **kwargs)
+    #def compute_loss_for_module(self, **kwargs):
+    #    module_id = kwargs["module_id"]
+    #    if module_id != ICM_MODULE_ID:
+    #        return super().compute_loss_for_module(**kwargs)
+    #    return self.module[module_id].unwrapped().compute_loss_for_module(
+    #        learner=self, **kwargs
+    #    )
 
 
 def add_intrinsic_curiosity_connectors(torch_learner: TorchLearner) -> None:
