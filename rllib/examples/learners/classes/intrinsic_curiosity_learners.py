@@ -166,6 +166,13 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
 
         r_e = batch[DEFAULT_MODULE_ID][Columns.REWARDS]
         r_i = fwd_out[Columns.INTRINSIC_REWARDS]
+
+        # TEST: filter out all intrinsic rewards for turn- and noop-actions.
+        actions = batch[DEFAULT_MODULE_ID][Columns.ACTIONS]
+        # Only valid actions are 2 (forward) and 5 (toggle).
+        r_i *= (torch.logical_or(actions == 2, actions == 5)).float()
+        # END: TEST
+
         # Add the intrinsic rewards to the main module's extrinsic rewards.
         if self.intrinsic_reward_coeff == "neg":
             r_e += (r_i - r_i.max())
