@@ -54,13 +54,9 @@ class DistanceFromStartCallback(DefaultCallbacks):
         self._max_dist[env_index] = -1
 
     def on_episode_step(self, *, metrics_logger, env, env_index, episode, **kwargs):
+        # If episode is done, log max distance in this episode.
         if episode.is_done:
-            metrics_logger.log_value(
-                "distance_to_start_max",
-                self._max_dist[env_index],
-                # reduce="mean",
-                # window=100,
-            )
+            metrics_logger.log_value("distance_to_start_max", self._max_dist[env_index])
         # Measure euclidian distance to start pos.
         else:
             curr = env.envs[env_index].agent_pos
@@ -152,7 +148,8 @@ class MiniGridOneHotEncoder(nn.Module):
 
         layers = []
 
-        # nxn fully obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
+        # nxn obs grid; 11=object types; 6=colors; 3=state types (+1 for agent).
+        # +4: agent's direction
         dim_in = (
             observation_space["image"].shape[0]
             * observation_space["image"].shape[1]
@@ -307,7 +304,8 @@ if __name__ == "__main__":
 
     # Register the Minigrid env we want to train on.
     tune.register_env(
-        "mini_grid", lambda cfg: ImgDirectionWrapper(gym.make(args.env, render_mode="rgb_array"))
+        "mini_grid",
+        lambda cfg: ImgDirectionWrapper(gym.make(args.env, render_mode="rgb_array")),
     )
 
     base_config = (
