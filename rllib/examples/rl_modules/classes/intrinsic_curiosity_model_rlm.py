@@ -3,6 +3,7 @@ from typing import Any, Dict, TYPE_CHECKING
 import tree  # pip install dm_tree
 
 from ray.rllib.core.columns import Columns
+from ray.rllib.core.rl_module.apis import SelfSupervisedLossAPI
 from ray.rllib.core.rl_module.torch import TorchRLModule
 from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
     ICM_MODULE_ID,
@@ -21,7 +22,7 @@ if TYPE_CHECKING:
 torch, nn = try_import_torch()
 
 
-class IntrinsicCuriosityModel(TorchRLModule):
+class IntrinsicCuriosityModel(TorchRLModule, SelfSupervisedLossAPI):
     """An intrinsic curiosity model (ICM) as TorchRLModule for better exploration.
 
     For more details, see:
@@ -207,8 +208,9 @@ class IntrinsicCuriosityModel(TorchRLModule):
     def get_train_action_dist_cls(self):
         return TorchCategorical
 
-    @staticmethod
-    def compute_loss_for_module(
+    @override(SelfSupervisedLossAPI)
+    def compute_self_supervised_loss(
+        self,
         *,
         learner: "TorchLearner",
         module_id: ModuleID,
