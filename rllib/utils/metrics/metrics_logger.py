@@ -55,7 +55,7 @@ class MetricsLogger:
 
     def __contains__(self, key: Union[str, Tuple[str, ...]]) -> bool:
         """Returns True, if `key` can be found in self.stats.
-        
+
         Args:
             key: The key to find in self.stats. This must be either a str (single,
                 top-level key) or a tuple of str (nested key).

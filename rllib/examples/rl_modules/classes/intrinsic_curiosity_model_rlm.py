@@ -5,9 +5,6 @@ import tree  # pip install dm_tree
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis import SelfSupervisedLossAPI
 from ray.rllib.core.rl_module.torch import TorchRLModule
-from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
-    ICM_MODULE_ID,
-)
 from ray.rllib.models.torch.torch_distributions import TorchCategorical
 from ray.rllib.models.utils import get_activation_fn
 from ray.rllib.utils.annotations import override

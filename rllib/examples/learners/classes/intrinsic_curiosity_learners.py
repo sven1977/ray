@@ -4,7 +4,7 @@ import gymnasium as gym
 import torch
 
 from ray.rllib.algorithms.dqn.torch.dqn_rainbow_torch_learner import (
-    DQNRainbowTorchLearner
+    DQNRainbowTorchLearner,
 )
 from ray.rllib.algorithms.ppo.torch.ppo_torch_learner import PPOTorchLearner
 from ray.rllib.connectors.common.add_observations_from_episodes_to_batch import (
@@ -28,27 +28,11 @@ class DQNTorchLearnerWithCuriosity(DQNRainbowTorchLearner):
         super().build()
         add_intrinsic_curiosity_connectors(self)
 
-    #def compute_loss_for_module(self, **kwargs):
-    #    module_id = kwargs["module_id"]
-    #    if module_id != ICM_MODULE_ID:
-    #        return super().compute_loss_for_module(**kwargs)
-    #    return self.module[module_id].unwrapped().compute_loss_for_module(
-    #        learner=self, **kwargs
-    #    )
-
 
 class PPOTorchLearnerWithCuriosity(PPOTorchLearner):
     def build(self) -> None:
         super().build()
         add_intrinsic_curiosity_connectors(self)
-
-    #def compute_loss_for_module(self, **kwargs):
-    #    module_id = kwargs["module_id"]
-    #    if module_id != ICM_MODULE_ID:
-    #        return super().compute_loss_for_module(**kwargs)
-    #    return self.module[module_id].unwrapped().compute_loss_for_module(
-    #        learner=self, **kwargs
-    #    )
 
 
 def add_intrinsic_curiosity_connectors(torch_learner: TorchLearner) -> None:
@@ -68,9 +52,9 @@ def add_intrinsic_curiosity_connectors(torch_learner: TorchLearner) -> None:
     # Assert, we are only training one policy (RLModule) and we have the ICM
     # in our MultiRLModule.
     assert (
-            len(torch_learner.module) == 2
-            and DEFAULT_MODULE_ID in torch_learner.module
-            and ICM_MODULE_ID in torch_learner.module
+        len(torch_learner.module) == 2
+        and DEFAULT_MODULE_ID in torch_learner.module
+        and ICM_MODULE_ID in torch_learner.module
     )
 
     # Make sure both curiosity loss settings are explicitly set in the
@@ -127,12 +111,12 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
     """
 
     def __init__(
-            self,
-            input_observation_space: Optional[gym.Space] = None,
-            input_action_space: Optional[gym.Space] = None,
-            *,
-            intrinsic_reward_coeff: float,
-            **kwargs,
+        self,
+        input_observation_space: Optional[gym.Space] = None,
+        input_action_space: Optional[gym.Space] = None,
+        *,
+        intrinsic_reward_coeff: float,
+        **kwargs,
     ):
         """Initializes a CountBasedCuriosity instance.
 
@@ -145,14 +129,14 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
         self.intrinsic_reward_coeff = intrinsic_reward_coeff
 
     def __call__(
-            self,
-            *,
-            rl_module: RLModule,
-            batch: Any,
-            episodes: List[EpisodeType],
-            explore: Optional[bool] = None,
-            shared_data: Optional[dict] = None,
-            **kwargs,
+        self,
+        *,
+        rl_module: RLModule,
+        batch: Any,
+        episodes: List[EpisodeType],
+        explore: Optional[bool] = None,
+        shared_data: Optional[dict] = None,
+        **kwargs,
     ) -> Any:
         # Assert that the batch is ready.
         assert DEFAULT_MODULE_ID in batch and ICM_MODULE_ID not in batch
@@ -169,38 +153,10 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
             # Perform ICM forward pass.
             fwd_out = rl_module[ICM_MODULE_ID].forward_train(batch[DEFAULT_MODULE_ID])
 
-        r_e = batch[DEFAULT_MODULE_ID][Columns.REWARDS]
-        r_i = fwd_out[Columns.INTRINSIC_REWARDS]
-
-        # TEST: filter out all intrinsic rewards for turn- and noop-actions.
-        actions = batch[DEFAULT_MODULE_ID][Columns.ACTIONS]
-        # Only valid actions are 2 (forward) and 5 (toggle).
-        r_i *= (torch.logical_or(actions == 2, actions == 5)).float()
-        # END: TEST
-
         # Add the intrinsic rewards to the main module's extrinsic rewards.
-        if self.intrinsic_reward_coeff == "neg":
-            r_e += (r_i - r_i.max())
-            #min_reward = r_e.min()
-            #assert min_reward >= 0.0
-            #if r_e.max() == 0.0:
-            #    r_e += r_i
-            #else:#if min_reward > 0.0:
-            #    min_reward_learger_zero = r_e[r_e > 0.0].min()
-            #    r_i_max = r_i.max()
-            #    r_e += r_i * (min_reward_learger_zero / r_i_max)
-            #else:
-
-            #if min_reward_learger_zero == 0.0:
-            #    batch[DEFAULT_MODULE_ID][Columns.REWARDS] += (
-            #        fwd_out[Columns.INTRINSIC_REWARDS]
-            #    )
-            #else:
-            #    non_zero_values = r_e[r_e > 0.0]
-            #    batch[DEFAULT_MODULE_ID][Columns.REWARDS] +=
-        else:
-            r_e += self.intrinsic_reward_coeff * r_i
-        batch[DEFAULT_MODULE_ID][Columns.REWARDS] = r_e
+        batch[DEFAULT_MODULE_ID][Columns.REWARDS] += (
+            self.intrinsic_reward_coeff * fwd_out[Columns.INTRINSIC_REWARDS]
+        )
 
         # Duplicate the batch such that the ICM also has data to learn on.
         batch[ICM_MODULE_ID] = batch[DEFAULT_MODULE_ID]

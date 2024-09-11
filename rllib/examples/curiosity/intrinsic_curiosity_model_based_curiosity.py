@@ -73,21 +73,21 @@ Policy NOT using curiosity:
 """
 from collections import defaultdict
 
+from ray import tune
+from ray.rllib.algorithms.algorithm_config import AlgorithmConfig
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.connectors.env_to_module import FlattenObservations
-from ray.rllib.examples.learners.classes.curiosity_dqn_torch_learner import (
-    DQNConfigWithCuriosity,
+from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
     DQNTorchLearnerWithCuriosity,
+    PPOTorchLearnerWithCuriosity,
 )
 from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-from ray.rllib.examples.learners.classes.curiosity_ppo_torch_learner import (
-    PPOConfigWithCuriosity,
-    PPOTorchLearnerWithCuriosity,
+from ray.rllib.examples.learners.classes.intrinsic_curiosity_learners import (
+    ICM_MODULE_ID,
 )
 from ray.rllib.examples.rl_modules.classes.intrinsic_curiosity_model_rlm import (
-    ICM_MODULE_ID,
     IntrinsicCuriosityModel,
 )
 from ray.rllib.utils.metrics import (
@@ -187,12 +187,9 @@ if __name__ == "__main__":
             "Curiosity example only implemented for either DQN or PPO! See the "
         )
 
-    config_class = (
-        PPOConfigWithCuriosity if args.algo == "PPO" else DQNConfigWithCuriosity
-    )
-
     base_config = (
-        config_class()
+        tune.registry.get_trainable_cls(args.algo)
+        .get_default_config()
         .environment(
             "FrozenLake-v1",
             env_config={
@@ -266,7 +263,7 @@ if __name__ == "__main__":
             ),
             # Use a different learning rate for training the ICM.
             algorithm_config_overrides_per_module={
-                ICM_MODULE_ID: config_class.overrides(lr=0.0005)
+                ICM_MODULE_ID: AlgorithmConfig.overrides(lr=0.0005)
             },
         )
     )
