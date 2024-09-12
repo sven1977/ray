@@ -321,7 +321,7 @@ if __name__ == "__main__":
             num_sgd_iter=6,
             train_batch_size_per_learner=2000,
             lr=0.0003,
-            vf_loss_coeff=5.0,
+            vf_loss_coeff=1.0,
             entropy_coeff=0.05,
             learner_config_dict={
                 # Intrinsic reward coefficient.
@@ -331,7 +331,7 @@ if __name__ == "__main__":
                 # goal state. Otherwise, the agent will learn to "browse around" for
                 # lots of intrinsic rewards and only go to the goal - maybe - toward
                 # the end.
-                "intrinsic_reward_coeff": 0.2,
+                "intrinsic_reward_coeff": 0.01,
                 # Forward loss weight (vs inverse dynamics loss). Total ICM loss is:
                 # L(total ICM) = (
                 #     `forward_loss_weight` * L(forward)
@@ -357,10 +357,10 @@ if __name__ == "__main__":
                             # you can use a different `feature_dim` value here.
                             "feature_dim": 256,
                             # Policy head.
-                            "fcnet_hiddens": [512],
+                            "fcnet_hiddens": [256, 256],
                             "fcnet_activation": "relu",
                             # Value head.
-                            "fcnet_hiddens_vf": [512],
+                            "fcnet_hiddens_vf": [256, 256],
                             "fcnet_activation_vf": "relu",
                         }
                     ),
@@ -393,7 +393,7 @@ if __name__ == "__main__":
             ),
             # Use a different learning rate for training the ICM.
             algorithm_config_overrides_per_module={
-                ICM_MODULE_ID: PPOConfig.overrides(lr=0.0000001)
+                ICM_MODULE_ID: PPOConfig.overrides(lr=[[0, 1e-5], [1000000, 1e-9]])
             },
         )
         .evaluation(

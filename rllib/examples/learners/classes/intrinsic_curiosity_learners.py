@@ -153,9 +153,18 @@ class IntrinsicCuriosityModelConnector(ConnectorV2):
             # Perform ICM forward pass.
             fwd_out = rl_module[ICM_MODULE_ID].forward_train(batch[DEFAULT_MODULE_ID])
 
+        r_e = batch[DEFAULT_MODULE_ID][Columns.REWARDS]
+        r_i = fwd_out[Columns.INTRINSIC_REWARDS]
+
+        # TEST: filter out all intrinsic rewards for turn- and noop-actions.
+        actions = batch[DEFAULT_MODULE_ID][Columns.ACTIONS]
+        # Only valid actions are 2 (forward) and 5 (toggle).
+        r_i *= (torch.logical_or(actions == 2, actions == 5)).float()
+        # END: TEST
+
         # Add the intrinsic rewards to the main module's extrinsic rewards.
         batch[DEFAULT_MODULE_ID][Columns.REWARDS] += (
-            self.intrinsic_reward_coeff * fwd_out[Columns.INTRINSIC_REWARDS]
+            self.intrinsic_reward_coeff * r_i
         )
 
         # Duplicate the batch such that the ICM also has data to learn on.
