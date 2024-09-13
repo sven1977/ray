@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     register_env(
         "env",
-        lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS7-v0", render_mode="rgb_array")),
+        lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS11-v0", render_mode="rgb_array")),
     )
 
     base_config = (
