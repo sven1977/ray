@@ -83,11 +83,11 @@ if __name__ == "__main__":
         )
         .training(
         #    learner_connector=lambda in_o, in_a: AddTransformerInputToBatchLearner(),
-            lr=0.00004,
+            lr=[[0, 0.00001], [90000, 0.00003], [150000, 0.0003]],
             sgd_minibatch_size=256,
             num_sgd_iter=6,
             vf_loss_coeff=0.02,
-            entropy_coeff=0.2,
+            entropy_coeff=0.1,
         )
         .rl_module(
             # Plug-in our custom RLModule class.
