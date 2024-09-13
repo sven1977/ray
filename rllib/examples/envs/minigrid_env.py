@@ -168,6 +168,9 @@ class MiniGridOneHotEncoder(nn.Module):
         obs = batch[Columns.OBS]
         image = obs["image"]
         B = image.shape[0]
+        T = None
+        if len(image.shape) == 5:
+            T = image.shape[1]
         flat_image = image.reshape((-1, 3)).long()
         # One-hot the last dim into 11, 6, 3 one-hot vectors, then flatten.
         objects = nn.functional.one_hot(flat_image[:, 0], num_classes=11).float()
@@ -177,7 +180,7 @@ class MiniGridOneHotEncoder(nn.Module):
 
         flat_image_one_hot = torch.concat(
             [objects, colors, states], -1
-        ).reshape((B, -1))
+        ).reshape((B, T, -1) if T else (B, -1))
         direction = nn.functional.one_hot(obs["direction"], num_classes=4).float()
         in_ = torch.concat([flat_image_one_hot, direction], -1)
 
@@ -284,23 +287,23 @@ class MiniGridTorchRLModule(TorchRLModule, ValueFunctionAPI):
         return TorchCategorical
 
 
+class ImgDirectionWrapper(gym.ObservationWrapper):
+    def __init__(self, env):
+        super().__init__(env)
+        original_space = self.env.observation_space
+        self.observation_space = gym.spaces.Dict({
+            key: original_space[key] for key in original_space.spaces
+            if key != 'mission'
+        })
+
+    def observation(self, observation):
+        obs = observation.copy()
+        obs.pop("mission")
+        return obs
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
-
-    class ImgDirectionWrapper(gym.ObservationWrapper):
-        def __init__(self, env):
-            super().__init__(env)
-            original_space = self.env.observation_space
-            self.observation_space = gym.spaces.Dict({
-                key: original_space[key] for key in original_space.spaces
-                if key != 'mission'
-            })
-
-        def observation(self, observation):
-            obs = observation.copy()
-            obs.pop("mission")
-            return obs
-
 
     # Register the Minigrid env we want to train on.
     tune.register_env(

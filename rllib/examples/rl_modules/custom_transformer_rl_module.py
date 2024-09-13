@@ -50,10 +50,10 @@ from ray.rllib.connectors.learner.add_transformer_input_to_batch import (
     AddTransformerInputToBatchLearner
 )
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-from ray.rllib.env.wrappers.atari_wrappers import wrap_atari_for_new_api_stack
 from ray.rllib.examples.rl_modules.classes.transformer_simple_rlm import (
     TransformerSimple
 )
+from ray.rllib.examples.envs.env_rendering_and_recording import EnvRenderCallback
 from ray.rllib.utils.test_utils import (
     add_rllib_example_script_args,
     run_rllib_example_script_experiment,
@@ -69,9 +69,11 @@ parser.set_defaults(
 if __name__ == "__main__":
     args = parser.parse_args()
 
+    from ray.rllib.examples.envs.minigrid_env import ImgDirectionWrapper
+
     register_env(
         "env",
-        lambda cfg: gym.make("CartPole-v1"),
+        lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS7-v0", render_mode="rgb_array")),
     )
 
     base_config = (
@@ -83,7 +85,7 @@ if __name__ == "__main__":
         )
         .training(
         #    learner_connector=lambda in_o, in_a: AddTransformerInputToBatchLearner(),
-            lr=[[0, 0.00005], [300000, 0.00015]],
+            lr=0.00015,#[[0, 0.00005], [300000, 0.00015]],
             sgd_minibatch_size=256,
             num_sgd_iter=6,
             vf_loss_coeff=0.1,
@@ -102,7 +104,7 @@ if __name__ == "__main__":
             model_config_dict={
                 # The maximum number of timesteps to feed into the attention net
                 # (this is for both inference and training batches).
-                "max_seq_len": 20,
+                "max_seq_len": 40,
                 # The number of transformer units within the model.
                 "attention_num_transformer_units": 1,
                 # The input and output size of each transformer unit.
@@ -113,6 +115,16 @@ if __name__ == "__main__":
                 # (2 layers with ReLU in between) following the self-attention
                 # sub-layer within a transformer unit.
                 "attention_position_wise_mlp_dim": 256,
+            },
+        )
+        .evaluation(
+            evaluation_num_env_runners=1,
+            evaluation_interval=10,
+            evaluation_duration=1,
+            evaluation_parallel_to_training=True,
+            evaluation_config={
+                "explore": True,
+                "callbacks": EnvRenderCallback,
             },
         )
     )

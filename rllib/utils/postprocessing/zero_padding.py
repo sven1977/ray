@@ -114,15 +114,16 @@ def split_and_zero_pad(
     item_list = deque(item_list)
     while len(item_list) > 0:
         item = item_list.popleft()
+        items = tree.flatten(item)
         # `item` is already a batched np.array: Split if necessary.
-        if isinstance(item, BatchedNdArray):
+        if isinstance(items[0], BatchedNdArray):
             t = max_seq_len - current_t
-            current_time_row.append(item[:t])
-            if len(item) <= t:
-                current_t += len(item)
+            current_time_row.append(tree.map_structure(lambda s: s[:t], item))
+            if len(items[0]) <= t:
+                current_t += len(items[0])
             else:
                 current_t += t
-                item_list.appendleft(item[t:])
+                item_list.appendleft(tree.map_structure(lambda s: s[t:], item))
         # `item` is a single item (no batch axis): Append and continue with next item.
         else:
             current_time_row.append(item)

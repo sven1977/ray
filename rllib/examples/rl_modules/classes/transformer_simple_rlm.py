@@ -60,9 +60,9 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         """
         super().setup()
 
-        assert len(self.config.observation_space.shape) == 1, (
-            "Only supports 1D observation spaces!"
-        )
+        #assert len(self.config.observation_space.shape) == 1, (
+        #    "Only supports 1D observation spaces!"
+        #)
 
         cfg = self.config.model_config_dict
         attention_dim = cfg.get("attention_dim", 256)
@@ -73,14 +73,25 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         )
         max_seq_len = cfg.get("max_seq_len", 100)
 
-        # Build the entire stack
         # Observations input layer mapping observation tensors to a unified 1D tensor
         # with shape=(attention_dim,). We call it embedding, b/c it takes the place of
         # an actual Embedding layer in a language model.
+        from ray.rllib.examples.envs.minigrid_env import MiniGridOneHotEncoder
+        #self._embedding = MiniGridOneHotEncoder(
+        #    self.config.observation_space, attention_dim
+        #)
         self._embedding = nn.Linear(
-            self.config.observation_space.shape[0], attention_dim
+            #TEST
+            (
+                self.config.observation_space["image"].shape[0]
+                * self.config.observation_space["image"].shape[1]
+                * self.config.observation_space["image"].shape[2]
+                + self.config.observation_space["direction"].n
+            ),
+            #END: TEST
+            attention_dim,
         )
-        torch.nn.init.xavier_uniform_(self._embedding.weight)
+        #torch.nn.init.xavier_uniform_(self._embedding.weight)
         # Positional encoding layer.
         self._positional_encoding = PositionalEncoding(
             d_model=attention_dim, max_len=max_seq_len,
@@ -144,20 +155,21 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
 
     def _compute_features(self, batch):
         obs = batch[Columns.OBS]
-        assert len(obs.shape) == 3, (
-            f"`obs` must have 3D shape (B, T, emb), but has shape {obs.shape}!"
-        )
-        #assert "causal_mask" in batch and len(batch["causal_mask"].shape) == 2
-        embeddings = self._embedding(obs)
+        #assert len(obs.shape) == 3, (
+        #    f"`obs` must have 3D shape (B, T, emb), but has shape {obs.shape}!"
+        #)
+        flat_img = obs["image"].reshape((obs["image"].shape[0], obs["image"].shape[1], -1)).float()
+        flat_dir = nn.functional.one_hot(obs["direction"], 4).float()
+        flat = torch.concat([flat_img, flat_dir], axis=-1)
+        embeddings = self._embedding(flat)
         embeddings *= math.sqrt(embeddings.size(-1))
         pos_encoded_embeddings = self._positional_encoding(embeddings)
         return self._transformer_decoder(
             pos_encoded_embeddings,
             pos_encoded_embeddings,
+            # Causal mask.
             tgt_mask=self._generate_causal_mask(embeddings.shape[1]),
-            # Causal mask (do not use for inference).
             tgt_is_causal=True,
-            #tgt_mask=batch["causal_mask"],
             # Zero padding mask.
             # Note that `torch.nn.TransformerDecoder(memory_key_padding_mask=..)`
             # expects the mask to have 0.0 for valid values (unmasked) and 1.0 for
