@@ -5,7 +5,6 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis.value_function_api import ValueFunctionAPI
 from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleConfig
 from ray.rllib.core.rl_module.torch import TorchRLModule
-from ray.rllib.models.torch.misc import normc_initializer
 from ray.rllib.models.torch.torch_distributions import TorchCategorical
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
@@ -99,11 +98,8 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         )
         # The action logits output layer.
         self._logits = nn.Linear(attention_dim, self.config.action_space.n)
-        normc_initializer(0.1)(self._logits.weight)
-        #torch.nn.init.xavier_uniform_(self._logits.weight)
         # The value function head.
         self._values = nn.Linear(attention_dim, 1)
-        normc_initializer(0.01)(self._values.weight)
 
     @override(TorchRLModule)
     def _forward_inference(self, batch, **kwargs):
