@@ -116,6 +116,9 @@ class GeneralAdvantageEstimation(ConnectorV2):
 
             # Remove all zero-padding again, if applicable, for the upcoming
             # GAE computations.
+            T = None
+            if len(module_vf_preds.shape) == 2:
+                T = module_vf_preds.shape[1]
             module_vf_preds = unpad_data_if_necessary(episode_lens, module_vf_preds)
             # Compute value targets.
             module_value_targets = compute_value_targets(
@@ -147,12 +150,12 @@ class GeneralAdvantageEstimation(ConnectorV2):
             )
 
             # Zero-pad the new computations, if necessary.
-            if Columns.SEQ_LENS in batch[module_id]:
+            if T is not None:
                 module_advantages = np.stack(
                     split_and_zero_pad_n_episodes(
                         module_advantages,
                         episode_lens=episode_lens,
-                        max_seq_len=module.config.model_config_dict["max_seq_len"],
+                        max_seq_len=T,
                     ),
                     axis=0,
                 )
@@ -160,7 +163,7 @@ class GeneralAdvantageEstimation(ConnectorV2):
                     split_and_zero_pad_n_episodes(
                         module_value_targets,
                         episode_lens=episode_lens,
-                        max_seq_len=module.config.model_config_dict["max_seq_len"],
+                        max_seq_len=T,
                     ),
                     axis=0,
                 )
