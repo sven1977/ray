@@ -6,6 +6,7 @@ from ray.rllib.connectors.common.add_states_from_episodes_to_batch import (
 )
 from ray.rllib.connectors.common.agent_to_module_mapping import AgentToModuleMapping
 from ray.rllib.connectors.common.batch_individual_items import BatchIndividualItems
+from ray.rllib.connectors.common.combine_masks import CombineMasks
 from ray.rllib.connectors.common.numpy_to_tensor import NumpyToTensor
 from ray.rllib.connectors.learner.add_columns_from_episodes_to_train_batch import (
     AddColumnsFromEpisodesToTrainBatch,
@@ -31,6 +32,7 @@ __all__ = [
     "AddStatesFromEpisodesToBatch",
     "AgentToModuleMapping",
     "BatchIndividualItems",
+    "CombineMasks",
     "GeneralAdvantageEstimation",
     "LearnerConnectorPipeline",
     "NumpyToTensor",

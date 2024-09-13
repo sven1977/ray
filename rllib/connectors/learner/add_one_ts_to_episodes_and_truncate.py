@@ -141,7 +141,7 @@ class AddOneTsToEpisodesAndTruncate(ConnectorV2):
             loss_mask = [True for _ in range(len_)] + [False]
             self.add_n_batch_items(
                 batch,
-                Columns.LOSS_MASK,
+                "extra_ts_at_end_of_episodes",
                 loss_mask,
                 len_ + 1,
                 sa_episode,
@@ -163,6 +163,8 @@ class AddOneTsToEpisodesAndTruncate(ConnectorV2):
         # Signal to following connector pieces that the loss-mask which masks out
         # invalid episode ts (for the extra added ts at the end) has already been
         # added to `data`.
-        shared_data["_added_loss_mask_for_valid_episode_ts"] = True
+        if "_masks" not in shared_data:
+            shared_data["_masks"] = set()
+        shared_data["_masks"].add("extra_ts_at_end_of_episodes")
 
         return batch

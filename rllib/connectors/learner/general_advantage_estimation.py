@@ -147,7 +147,7 @@ class GeneralAdvantageEstimation(ConnectorV2):
             )
 
             # Zero-pad the new computations, if necessary.
-            if module.is_stateful():
+            if Columns.SEQ_LENS in batch[module_id]:
                 module_advantages = np.stack(
                     split_and_zero_pad_n_episodes(
                         module_advantages,

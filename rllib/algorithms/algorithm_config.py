@@ -1044,9 +1044,12 @@ class AlgorithmConfig(_Config):
             AddStatesFromEpisodesToBatch,
             AgentToModuleMapping,
             BatchIndividualItems,
+            CombineMasks,
             LearnerConnectorPipeline,
             NumpyToTensor,
         )
+        #TEST
+        from ray.rllib.connectors.learner.add_transformer_input_to_batch import AddTransformerInputToBatchLearner
 
         custom_connectors = []
         # Create a learner connector pipeline (including RLlib's default
@@ -1087,7 +1090,8 @@ class AlgorithmConfig(_Config):
             # Append all other columns handling.
             pipeline.append(AddColumnsFromEpisodesToTrainBatch())
             # Append STATE_IN/STATE_OUT (and time-rank) handler.
-            pipeline.append(AddStatesFromEpisodesToBatch(as_learner_connector=True))
+            #pipeline.append(AddStatesFromEpisodesToBatch(as_learner_connector=True))
+            pipeline.append(AddTransformerInputToBatchLearner())
             # If multi-agent -> Map from AgentID-based data to ModuleID based data.
             if self.is_multi_agent():
                 pipeline.append(
@@ -1102,6 +1106,8 @@ class AlgorithmConfig(_Config):
                 )
             # Batch all data.
             pipeline.append(BatchIndividualItems(multi_agent=self.is_multi_agent()))
+            # Combine all registered loss masks (registered in `shared_data["_masks"]`).
+            pipeline.append(CombineMasks())
             # Convert to Tensors.
             pipeline.append(NumpyToTensor(as_learner_connector=True, device=device))
         return pipeline

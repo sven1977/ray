@@ -221,6 +221,9 @@ class AddStatesFromEpisodesToBatch(ConnectorV2):
         if not rl_module.is_stateful() or Columns.STATE_IN in batch:
             return batch
 
+        if "_masks" not in shared_data:
+            shared_data["_masks"] = set()
+
         # Make all inputs (other than STATE_IN) have an additional T-axis.
         # Since data has not been batched yet (we are still operating on lists in the
         # batch), we add this time axis as 0 (not 1). When we batch, the batch axis will
@@ -279,7 +282,6 @@ class AddStatesFromEpisodesToBatch(ConnectorV2):
 
                 # Multi-agent case: Extract correct single agent RLModule (to get the
                 # state for individually).
-                sa_module = rl_module
                 if sa_episode.module_id is not None:
                     sa_module = rl_module[sa_episode.module_id]
                 else:
@@ -339,14 +341,18 @@ class AddStatesFromEpisodesToBatch(ConnectorV2):
                     num_items=len(seq_lens),
                     single_agent_episode=sa_episode,
                 )
-                if not shared_data.get("_added_loss_mask_for_valid_episode_ts"):
-                    self.add_n_batch_items(
-                        batch=batch,
-                        column=Columns.LOSS_MASK,
-                        items_to_add=mask,
-                        num_items=len(mask),
-                        single_agent_episode=sa_episode,
-                    )
+                #TODO: This was a bug, correct?
+                # NOT doing the extra max_seq_len mask here should screw up the loss computations a little.
+                # the already existing mask is "smaller" only masking the extra timesteps at the end of each episode,
+                # but NOT the max_seq_len/zero-padded areas.
+                #if "valid_episode_ts" not in shared_data["_masks"]:
+                self.add_n_batch_items(
+                    batch=batch,
+                    column="zero_padding",
+                    items_to_add=mask,
+                    num_items=len(mask),
+                    single_agent_episode=sa_episode,
+                )
             else:
                 assert not sa_episode.is_finalized
 
@@ -373,6 +379,8 @@ class AddStatesFromEpisodesToBatch(ConnectorV2):
                     item_to_add=state,
                     single_agent_episode=sa_episode,
                 )
+
+        shared_data["_masks"].add("zero_padding")
 
         return batch
 
