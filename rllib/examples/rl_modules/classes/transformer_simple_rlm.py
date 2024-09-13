@@ -5,6 +5,7 @@ from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.apis.value_function_api import ValueFunctionAPI
 from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleConfig
 from ray.rllib.core.rl_module.torch import TorchRLModule
+from ray.rllib.models.torch.misc import normc_initializer
 from ray.rllib.models.torch.torch_distributions import TorchCategorical
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.framework import try_import_torch
@@ -68,6 +69,9 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         attention_dim = cfg.get("attention_dim", 256)
         attention_num_heads = cfg.get("attention_num_heads", 4)
         attention_num_transformer_units = cfg.get("attention_num_transformer_units", 1)
+        attention_position_wise_mlp_dim = cfg.get(
+            "attention_position_wise_mlp_dim", 2048
+        )
         max_seq_len = cfg.get("max_seq_len", 100)
 
         # Build the entire stack
@@ -77,20 +81,29 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         self._embedding = nn.Linear(
             self.config.observation_space.shape[0], attention_dim
         )
+        torch.nn.init.xavier_uniform_(self._embedding.weight)
         # Positional encoding layer.
         self._positional_encoding = PositionalEncoding(
             d_model=attention_dim, max_len=max_seq_len,
         )
         # The actual transformer block.
-        decoder_layer = nn.TransformerDecoderLayer(attention_dim, attention_num_heads)
+        decoder_layer = nn.TransformerDecoderLayer(
+            attention_dim,
+            attention_num_heads,
+            dim_feedforward=attention_position_wise_mlp_dim,
+            batch_first=True,
+        )
         self._transformer_decoder = nn.TransformerDecoder(
             decoder_layer,
             attention_num_transformer_units,
         )
         # The action logits output layer.
         self._logits = nn.Linear(attention_dim, self.config.action_space.n)
+        normc_initializer(0.1)(self._logits.weight)
+        #torch.nn.init.xavier_uniform_(self._logits.weight)
         # The value function head.
         self._values = nn.Linear(attention_dim, 1)
+        normc_initializer(0.01)(self._values.weight)
 
     @override(TorchRLModule)
     def _forward_inference(self, batch, **kwargs):
@@ -112,7 +125,7 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
     @override(TorchRLModule)
     def _forward_train(self, batch, **kwargs):
         # Compute the basic 1D feature tensor (inputs to policy- and value-heads).
-        features, logits = self._compute_features_and_logits(batch, is_training=True)
+        features, logits = self._compute_features_and_logits(batch)
         # Besides the action logits, we also have to return value predictions here
         # (to be used inside the loss function).
         values = self._values(features).squeeze(-1)
@@ -125,15 +138,15 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
     # by value-based methods like PPO or IMPALA.
     @override(ValueFunctionAPI)
     def compute_values(self, batch: Dict[str, Any]) -> TensorType:
-        features = self._compute_features(batch, is_training=True)
+        features = self._compute_features(batch)
         return self._values(features).squeeze(-1)
 
-    def _compute_features_and_logits(self, batch, is_training=False):
-        features = self._compute_features(batch, is_training=is_training)
+    def _compute_features_and_logits(self, batch):
+        features = self._compute_features(batch)
         logits = self._logits(features)
         return features, logits
 
-    def _compute_features(self, batch, is_training=False):
+    def _compute_features(self, batch):
         obs = batch[Columns.OBS]
         assert len(obs.shape) == 3, (
             f"`obs` must have 3D shape (B, T, emb), but has shape {obs.shape}!"
@@ -147,13 +160,13 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
             pos_encoded_embeddings,
             tgt_mask=self._generate_causal_mask(embeddings.shape[1]),
             # Causal mask (do not use for inference).
-            tgt_is_causal=True,#is_training,
+            tgt_is_causal=True,
             #tgt_mask=batch["causal_mask"],
             # Zero padding mask.
             # Note that `torch.nn.TransformerDecoder(memory_key_padding_mask=..)`
             # expects the mask to have 0.0 for valid values (unmasked) and 1.0 for
             # invalid/masked values. Hence, the need for the inversion operator (`~`).
-            memory_key_padding_mask=~(batch["transformer_zero_padding"].bool()).transpose(0, 1)
+            memory_key_padding_mask=~(batch["transformer_zero_padding"].bool()),# .transpose(0, 1)
         )
 
     # TODO (sven): In order for this RLModule to work with PPO, we must define
@@ -190,7 +203,7 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         # Create a triangular matrix with upper-right diagonal all -inf
         # (masked out/invalid) and the lower-left diagonal (including the main diagonal)
         # all 0.0 (masked in/valid).
-        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1).float()
+        mask = (torch.triu(torch.ones(sz, sz)) == 1).float()#transpose(0, 1)
         mask = mask.masked_fill(mask == 0, float("-inf"))
         mask = mask.masked_fill(mask == 1, float(0.0))
         return mask

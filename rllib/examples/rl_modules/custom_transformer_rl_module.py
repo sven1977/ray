@@ -83,11 +83,12 @@ if __name__ == "__main__":
         )
         .training(
         #    learner_connector=lambda in_o, in_a: AddTransformerInputToBatchLearner(),
-            lr=[[0, 0.00001], [90000, 0.00003], [150000, 0.0003]],
+            lr=0.00015,
             sgd_minibatch_size=256,
             num_sgd_iter=6,
-            vf_loss_coeff=0.02,
-            entropy_coeff=0.1,
+            vf_loss_coeff=0.1,
+            entropy_coeff=0.01,
+            #grad_clip=1.0,
         )
         .rl_module(
             # Plug-in our custom RLModule class.
@@ -101,13 +102,17 @@ if __name__ == "__main__":
             model_config_dict={
                 # The maximum number of timesteps to feed into the attention net
                 # (this is for both inference and training batches).
-                "max_seq_len": 20,
+                "max_seq_len": 50,
                 # The number of transformer units within the model.
                 "attention_num_transformer_units": 1,
                 # The input and output size of each transformer unit.
-                "attention_dim": 64,
+                "attention_dim": 128,
                 # The number of attention heads within a multi-head unit.
-                "attention_num_heads": 2,
+                "attention_num_heads": 1,
+                # The number of nodes in the position-wise MLP layers
+                # (2 layers with ReLU in between) following the self-attention
+                # sub-layer within a transformer unit.
+                "attention_position_wise_mlp_dim": 256,
             },
         )
     )
