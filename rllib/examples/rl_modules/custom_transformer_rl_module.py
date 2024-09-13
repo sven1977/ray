@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     register_env(
         "env",
-        lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS11-v0", render_mode="rgb_array")),
+        lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS13Random-v0", render_mode="rgb_array")),
     )
 
     base_config = (
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             sgd_minibatch_size=256,
             num_sgd_iter=6,
             vf_loss_coeff=1.0,
-            entropy_coeff=0.005,
+            entropy_coeff=0.01,
             #grad_clip=1.0,
         )
         .rl_module(
