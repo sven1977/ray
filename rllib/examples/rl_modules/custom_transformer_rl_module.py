@@ -54,6 +54,7 @@ from ray.rllib.examples.rl_modules.classes.transformer_simple_rlm import (
     TransformerSimple
 )
 from ray.rllib.examples.envs.env_rendering_and_recording import EnvRenderCallback
+from ray.rllib.examples.envs.classes.stateless_cartpole import StatelessCartPole
 from ray.rllib.utils.test_utils import (
     add_rllib_example_script_args,
     run_rllib_example_script_experiment,
@@ -71,10 +72,11 @@ if __name__ == "__main__":
 
     from ray.rllib.examples.envs.minigrid_env import ImgDirectionWrapper
 
-    register_env(
-        "env",
-        lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS13Random-v0", render_mode="rgb_array")),
-    )
+    #register_env(
+    #    "env",
+    #    lambda cfg: ImgDirectionWrapper(gym.make("MiniGrid-MemoryS7-v0", render_mode="rgb_array")),
+    #)
+    register_env("env", lambda cfg: StatelessCartPole())
 
     base_config = (
         get_trainable_cls(args.algo)
@@ -88,9 +90,9 @@ if __name__ == "__main__":
             lr=[[0, 0.00005], [200000, 0.0001]],
             sgd_minibatch_size=256,
             num_sgd_iter=6,
-            vf_loss_coeff=1.0,
-            entropy_coeff=0.01,
-            #grad_clip=1.0,
+            vf_loss_coeff=0.1,
+            entropy_coeff=0.1,
+            #grad_clip=1.00,
         )
         .rl_module(
             # Plug-in our custom RLModule class.
@@ -104,11 +106,11 @@ if __name__ == "__main__":
             model_config_dict={
                 # The maximum number of timesteps to feed into the attention net
                 # (this is for both inference and training batches).
-                "max_seq_len": 40,
+                "max_seq_len": 200,
                 # The number of transformer units within the model.
                 "attention_num_transformer_units": 1,
                 # The input and output size of each transformer unit.
-                "attention_dim": 128,
+                "attention_dim": 64,
                 # The number of attention heads within a multi-head unit.
                 "attention_num_heads": 1,
                 # The number of nodes in the position-wise MLP layers
@@ -117,16 +119,16 @@ if __name__ == "__main__":
                 "attention_position_wise_mlp_dim": 256,
             },
         )
-        .evaluation(
-            evaluation_num_env_runners=1,
-            evaluation_interval=10,
-            evaluation_duration=1,
-            evaluation_parallel_to_training=True,
-            evaluation_config={
-                "explore": True,
-                "callbacks": EnvRenderCallback,
-            },
-        )
+        #.evaluation(
+        #    evaluation_num_env_runners=1,
+        #    evaluation_interval=10,
+        #    evaluation_duration=1,
+        #    evaluation_parallel_to_training=True,
+        #    evaluation_config={
+        #        "explore": True,
+        #        "callbacks": EnvRenderCallback,
+        #    },
+        #)
     )
 
     run_rllib_example_script_experiment(base_config, args)

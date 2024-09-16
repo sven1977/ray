@@ -76,21 +76,22 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         # Observations input layer mapping observation tensors to a unified 1D tensor
         # with shape=(attention_dim,). We call it embedding, b/c it takes the place of
         # an actual Embedding layer in a language model.
-        from ray.rllib.examples.envs.minigrid_env import MiniGridOneHotEncoder
+        #from ray.rllib.examples.envs.minigrid_env import MiniGridOneHotEncoder
         #self._embedding = MiniGridOneHotEncoder(
         #    self.config.observation_space, attention_dim
         #)
-        self._embedding = nn.Linear(
-            #TEST
-            (
-                self.config.observation_space["image"].shape[0]
-                * self.config.observation_space["image"].shape[1]
-                * self.config.observation_space["image"].shape[2]
-                + self.config.observation_space["direction"].n
-            ),
-            #END: TEST
-            attention_dim,
-        )
+        self._embedding = nn.Linear(4, attention_dim) # stateless cartpole + 2 action inputs
+        #self._embedding = nn.Linear(
+        #    #TEST
+        #    (
+        #        self.config.observation_space["image"].shape[0]
+        #        * self.config.observation_space["image"].shape[1]
+        #        * self.config.observation_space["image"].shape[2]
+        #        + self.config.observation_space["direction"].n
+        #    ),
+        #    #END: TEST
+        #    attention_dim,
+        #)
         #torch.nn.init.xavier_uniform_(self._embedding.weight)
         # Positional encoding layer.
         self._positional_encoding = PositionalEncoding(
@@ -108,9 +109,17 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
             attention_num_transformer_units,
         )
         # The action logits output layer.
-        self._logits = nn.Linear(attention_dim, self.config.action_space.n)
+        self._logits = nn.Sequential(
+            nn.Linear(attention_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, self.config.action_space.n),
+        )
         # The value function head.
-        self._values = nn.Linear(attention_dim, 1)
+        self._values = nn.Sequential(
+            nn.Linear(attention_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, 1),#nn.Linear(256, self.config.action_space.n),
+        )
 
     @override(TorchRLModule)
     def _forward_inference(self, batch, **kwargs):
@@ -158,10 +167,11 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         #assert len(obs.shape) == 3, (
         #    f"`obs` must have 3D shape (B, T, emb), but has shape {obs.shape}!"
         #)
-        flat_img = obs["image"].reshape((obs["image"].shape[0], obs["image"].shape[1], -1)).float()
-        flat_dir = nn.functional.one_hot(obs["direction"], 4).float()
-        flat = torch.concat([flat_img, flat_dir], axis=-1)
-        embeddings = self._embedding(flat)
+        #flat_img = obs["image"].reshape((obs["image"].shape[0], obs["image"].shape[1], -1)).float()
+        #flat_dir = nn.functional.one_hot(obs["direction"], 4).float()
+        #flat = torch.concat([flat_img, flat_dir], axis=-1)
+        #embeddings = self._embedding(flat)
+        embeddings = self._embedding(obs)#stateless cartpole
         embeddings *= math.sqrt(embeddings.size(-1))
         pos_encoded_embeddings = self._positional_encoding(embeddings)
         return self._transformer_decoder(

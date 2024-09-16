@@ -7,6 +7,7 @@ from ray.rllib.connectors.connector_v2 import ConnectorV2
 from ray.rllib.core import Columns, DEFAULT_MODULE_ID
 from ray.rllib.core.rl_module.rl_module import RLModule
 from ray.rllib.utils.annotations import override
+from ray.rllib.utils.numpy import one_hot
 from ray.rllib.utils.postprocessing.zero_padding import (
     create_mask_and_seq_lens,
     split_and_zero_pad,
@@ -169,6 +170,13 @@ class _AddTransformerInputToBatch(ConnectorV2):
                 # Episode is not finalized yet and thus still operates on lists of items.
                 assert not sa_episode.is_finalized
 
+                #TEST
+                last_obs = sa_episode.get_observations(-1)
+                last_act = sa_episode.get_actions(-1, fill=0.0, one_hot_discrete=True)
+                last_obs = np.concatenate([last_obs, last_act], axis=-1)
+                sa_episode.set_observations(new_data=last_obs, at_indices=-1)
+                #END TEST
+
                 # If there are enough observations in the episode, use n latest ones.
                 if len(sa_episode) + 1 >= T:
                     slice_ = slice(-T, None)
@@ -203,9 +211,26 @@ class _AddTransformerInputToBatch(ConnectorV2):
                 )
             # Learner pipeline.
             else:
+                #def _add_act(obs_and_act, eps_id, agent_id, mod_id):
+                #    obs, act = obs_and_act
+                #    o_and_a = []
+                #    for o, a in zip(obs, act):
+                #        o_and_a.append(np.concatenate([o, one_hot(a, 2)], axis=-1))
+                #    return (
+                #        batch_fn(o_and_a),
+                #        act,
+                #    )
+        
                 # Also, create the loss mask (b/c of our now possibly zero-padded data)
                 # as well as the seq_lens array and add these to `data` as well.
                 mask, seq_lens = create_mask_and_seq_lens(len(sa_episode), T)
+                #TEST: concat with actions
+                #self.foreach_batch_item_change_in_place(
+                #    batch=batch,
+                #    column=[Columns.OBS, Columns.ACTIONS],
+                #    func=_add_act,
+                #)
+                #END TEST
                 self.add_n_batch_items(
                     batch=batch,
                     column="transformer_zero_padding",
