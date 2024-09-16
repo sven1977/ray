@@ -43,8 +43,9 @@ You should see the following output (during the experiment) in your console:
 """
 import gymnasium as gym
 
+from ray.rllib.connectors.env_to_module import MeanStdFilter
 from ray.rllib.connectors.env_to_module.add_transformer_input_to_batch import (
-    AddTransformerInputToBatchEnvToModule
+    AddTransformerInputToBatchEnvToModule,
 )
 from ray.rllib.connectors.learner.add_transformer_input_to_batch import (
     AddTransformerInputToBatchLearner
@@ -83,7 +84,10 @@ if __name__ == "__main__":
         .get_default_config()
         .environment("env")
         .env_runners(
-            env_to_module_connector=lambda env: AddTransformerInputToBatchEnvToModule(),
+            env_to_module_connector=lambda env: [
+                MeanStdFilter(),
+                AddTransformerInputToBatchEnvToModule(),
+            ],
         )
         .training(
         #    learner_connector=lambda in_o, in_a: AddTransformerInputToBatchLearner(),
@@ -92,7 +96,7 @@ if __name__ == "__main__":
             sgd_minibatch_size=512,
             num_sgd_iter=6,
             vf_loss_coeff=0.1,
-            entropy_coeff=0.01,
+            entropy_coeff=0.0,
             #grad_clip=1.0,
         )
         .rl_module(
@@ -107,17 +111,17 @@ if __name__ == "__main__":
             model_config_dict={
                 # The maximum number of timesteps to feed into the attention net
                 # (this is for both inference and training batches).
-                "max_seq_len": 200,
+                "max_seq_len": 10,
                 # The number of transformer units within the model.
                 "attention_num_transformer_units": 1,
                 # The input and output size of each transformer unit.
-                "attention_dim": 64,
+                "attention_dim": 32,
                 # The number of attention heads within a multi-head unit.
                 "attention_num_heads": 1,
                 # The number of nodes in the position-wise MLP layers
                 # (2 layers with ReLU in between) following the self-attention
                 # sub-layer within a transformer unit.
-                "attention_position_wise_mlp_dim": 64,
+                "attention_position_wise_mlp_dim": 32,
             },
         )
         #.evaluation(

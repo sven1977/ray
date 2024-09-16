@@ -110,15 +110,15 @@ class TransformerSimple(TorchRLModule, ValueFunctionAPI):
         )
         # The action logits output layer.
         self._logits = nn.Sequential(
-            nn.Linear(attention_dim, 256),
+            nn.Linear(attention_dim, 32),
             nn.ReLU(),
-            nn.Linear(256, self.config.action_space.n),
+            nn.Linear(32, self.config.action_space.n),
         )
         # The value function head.
         self._values = nn.Sequential(
-            nn.Linear(attention_dim, 256),
+            nn.Linear(attention_dim, 32),
             nn.ReLU(),
-            nn.Linear(256, 1),#nn.Linear(256, self.config.action_space.n),
+            nn.Linear(32, 1),#nn.Linear(256, self.config.action_space.n),
         )
 
     @override(TorchRLModule)
