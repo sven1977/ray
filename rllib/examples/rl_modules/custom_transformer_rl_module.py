@@ -87,12 +87,13 @@ if __name__ == "__main__":
         )
         .training(
         #    learner_connector=lambda in_o, in_a: AddTransformerInputToBatchLearner(),
-            lr=[[0, 0.00005], [200000, 0.0001]],
-            sgd_minibatch_size=256,
+            train_batch_size_per_learner=8000,
+            lr=0.0003,#[[0, 0.00005], [200000, 0.0001]],
+            sgd_minibatch_size=512,
             num_sgd_iter=6,
             vf_loss_coeff=0.1,
-            entropy_coeff=0.1,
-            #grad_clip=1.00,
+            entropy_coeff=0.01,
+            #grad_clip=1.0,
         )
         .rl_module(
             # Plug-in our custom RLModule class.
@@ -116,7 +117,7 @@ if __name__ == "__main__":
                 # The number of nodes in the position-wise MLP layers
                 # (2 layers with ReLU in between) following the self-attention
                 # sub-layer within a transformer unit.
-                "attention_position_wise_mlp_dim": 256,
+                "attention_position_wise_mlp_dim": 64,
             },
         )
         #.evaluation(
