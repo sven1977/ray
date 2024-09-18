@@ -65,7 +65,7 @@ class MiniGridCNNEncoder(nn.Module):
         )
 
     def forward(self, batch, **kwargs):
-        images = batch[Columns.OBS]["image"].float() * 10.0
+        images = batch[Columns.OBS]["image"].float() * 20.0
         direction = batch[Columns.OBS]["direction"]
 
         # Fold time-ranks.
@@ -240,16 +240,17 @@ if __name__ == "__main__":
         .training(
             # Plug in the correct Learner class.
             num_sgd_iter=6,
-            train_batch_size_per_learner=2000,
-            lr=0.0003,
+            train_batch_size_per_learner=4000,
+            lr=0.0002,
             vf_loss_coeff=1.0,
             entropy_coeff=0.05,
+            grad_clip=20.0,
         )
         .rl_module(
             rl_module_spec=RLModuleSpec(
                 module_class=MiniGridTorchRLModule,
                 model_config_dict={
-                    "max_seq_len": 20,
+                    "max_seq_len": 40,
                     # Use the flat one-hot encoder (or the CNN encoder).
                     #"one_hot_encoder": args.one_hot_encoder,
                     # If cell size >0 -> use an LSTM.
