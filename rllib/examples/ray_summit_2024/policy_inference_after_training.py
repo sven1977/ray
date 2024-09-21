@@ -5,7 +5,7 @@ import torch
 
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.rl_module import RLModule
-from ray.rllib.env.wrappers.atari_wrappers import wrap_atari_for_new_api_stack, wrap_deepmind
+from ray.rllib.env.wrappers.atari_wrappers import wrap_atari_for_new_api_stack
 from ray.rllib.utils.numpy import convert_to_numpy
 
 
@@ -21,7 +21,8 @@ env = wrap_atari_for_new_api_stack(
         full_action_space=False,
         repeat_action_probability=0.25,
         render_mode="human",
-    ), framestack=4
+    ),
+    framestack=4,
 )
 obs, info = env.reset()
 env.render()

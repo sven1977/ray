@@ -9,10 +9,8 @@ from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.torch.primitives import TorchCNN
 from ray.rllib.core.rl_module.apis.value_function_api import ValueFunctionAPI
-from ray.rllib.core.rl_module.rl_module import RLModule
 from ray.rllib.core.rl_module.torch import TorchRLModule
 from ray.rllib.env.wrappers.atari_wrappers import wrap_atari_for_new_api_stack
-from ray.rllib.models.torch.torch_distributions import TorchCategorical
 from ray.rllib.utils.annotations import override
 from ray.rllib.utils.test_utils import add_rllib_example_script_args
 
@@ -80,24 +78,6 @@ class MyAtariCNN(TorchRLModule, ValueFunctionAPI):
         # Values.
         return self._values(features).squeeze(-1)
 
-    # TODO (sven): In order for this RLModule to work with PPO, we must define
-    #  our own `get_..._action_dist_cls()` methods. This would become more obvious,
-    #  if we simply subclassed the `PPOTorchRLModule` directly here (which we didn't do
-    #  for simplicity and to keep some generality). We might even get rid of algo-
-    #  specific RLModule subclasses altogether in the future and replace them
-    #  by mere algo-specific APIs (w/o any actual implementations).
-    @override(RLModule)
-    def get_train_action_dist_cls(self):
-        return TorchCategorical
-
-    @override(RLModule)
-    def get_exploration_action_dist_cls(self):
-        return TorchCategorical
-
-    @override(RLModule)
-    def get_inference_action_dist_cls(self):
-        return TorchCategorical
-
 
 parser = add_rllib_example_script_args(
     default_reward=float("inf"),
@@ -138,15 +118,12 @@ config = (
         train_batch_size_per_learner=4000,  # 5000 on old yaml example
         minibatch_size=128,  # 500 on old yaml example
         num_epochs=10,
-
         lambda_=0.95,
         kl_coeff=0.5,
         clip_param=0.1,
         vf_clip_param=10.0,
         entropy_coeff=0.01,
-
         lr=0.00015 * args.num_gpus,
-
         grad_clip=100.0,
         grad_clip_by="global_norm",
     )
@@ -163,7 +140,7 @@ config = (
                 ],
                 "policy_fcnet_hiddens": 256,
                 "vf_fcnet_hiddens": 256,
-            }
+            },
         ),
     )
 )
