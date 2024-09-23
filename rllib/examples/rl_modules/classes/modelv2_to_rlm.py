@@ -108,10 +108,10 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
                 config,
             )
 
+        self._model_v2 = policy.model
+
         # Translate the action dist classes from the old API stack to the new.
         self.action_dist_class = self._translate_dist_class(policy.dist_class)
-
-        self._model_v2 = policy.model
 
         # Erase the torch policy from memory, so it can be garbage collected.
         del policy

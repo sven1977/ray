@@ -54,9 +54,6 @@ class SACRLModule(RLModule, InferenceOnlyAPI, TargetNetworkAPI):
 
     @override(RLModule)
     def setup(self):
-        # Get the SAC catalog.
-        # catalog: SACCatalog = self.config.get_catalog()
-
         # If a twin Q architecture should be used.
         self.twin_q = self.config.model_config_dict["twin_q"]
 
@@ -83,9 +80,6 @@ class SACRLModule(RLModule, InferenceOnlyAPI, TargetNetworkAPI):
             # If necessary build also a twin Q heads.
             if self.twin_q:
                 self.qf_twin = self.catalog.build_qf_head(framework=self.framework)
-
-        # Get the action distribution class.
-        # self.action_dist_cls = catalog.get_action_dist_cls(framework=self.framework)
 
     @override(TargetNetworkAPI)
     def make_target_networks(self):

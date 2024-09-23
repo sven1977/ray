@@ -408,6 +408,20 @@ class RLModule(Checkpointable, abc.ABC):
                 framework=self.framework
             )
 
+        # TODO (sven): Deprecate Catalog and replace with utility functions to create
+        #  primitive components based on obs- and action spaces.
+        self.catalog = None
+        try:
+            self.catalog = self.config.get_catalog()
+        except Exception:
+            pass
+
+        self.action_dist_cls = None
+        if self.catalog is not None:
+            self.action_dist_cls = self.catalog.get_action_dist_cls(
+                framework=self.framework
+            )
+
         # Make sure, `setup()` is only called once, no matter what. In some cases
         # of multiple inheritance (and with our __post_init__ functionality in place,
         # this might get called twice.
