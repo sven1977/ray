@@ -401,12 +401,6 @@ class RLModule(Checkpointable, abc.ABC):
 
     def __init__(self, config: RLModuleConfig):
         self.config = config
-        self.catalog = self.config.get_catalog()
-        self.action_dist_cls = None
-        if self.catalog:
-            self.action_dist_cls = self.catalog.get_action_dist_cls(
-                framework=self.framework
-            )
 
         # TODO (sven): Deprecate Catalog and replace with utility functions to create
         #  primitive components based on obs- and action spaces.
@@ -476,6 +470,7 @@ class RLModule(Checkpointable, abc.ABC):
             self.output_specs_inference()
         )
 
+    @OverrideToImplementCustomLogic
     def setup(self):
         """Sets up the components of the module.
 
