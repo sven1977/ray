@@ -11,7 +11,7 @@ from ray.util.annotations import DeveloperAPI
 
 
 @DeveloperAPI(stability="alpha")
-class BCRLModule(RLModule, abc.ABC):
+class DefaultBCRLModule(RLModule, abc.ABC):
     @override(RLModule)
     def setup(self):
         # __sphinx_doc_begin__
@@ -20,23 +20,8 @@ class BCRLModule(RLModule, abc.ABC):
         self.pi = self.catalog.build_pi_head(framework=self.framework)
 
     @override(RLModule)
-    def get_initial_state(self) -> Union[dict, List[TensorType]]:
-        if hasattr(self.encoder, "get_initial_state"):
-            return self.encoder.get_initial_state()
-        else:
-            return {}
-
-    @override(RLModule)
-    def output_specs_inference(self) -> SpecType:
-        return self.output_specs_exploration()
-
-    @override(RLModule)
-    def output_specs_exploration(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
-
-    @override(RLModule)
     def output_specs_train(self) -> SpecType:
-        return self.output_specs_exploration()
+        return [Columns.ACTION_DIST_INPUTS]
 
     @override(RLModule)
     def _forward_inference(self, batch: Dict, **kwargs) -> Dict[str, Any]:
@@ -60,12 +45,8 @@ class BCRLModule(RLModule, abc.ABC):
         forward methods.
         """
         output = {}
-
         # State encodings.
         encoder_outs = self.encoder(batch)
-        if Columns.STATE_OUT in encoder_outs:
-            output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
-
         # Actions.
         action_logits = self.pi(encoder_outs[ENCODER_OUT])
         output[Columns.ACTION_DIST_INPUTS] = action_logits
