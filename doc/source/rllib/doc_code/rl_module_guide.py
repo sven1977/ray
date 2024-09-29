@@ -5,13 +5,11 @@ from ray.rllib.core.models.specs.specs_base import TensorSpec
 
 
 # __enabling-rlmodules-in-configs-begin__
-import torch
-from pprint import pprint
-
 from ray.rllib.algorithms.ppo import PPOConfig
 
 config = (
     PPOConfig()
+    # Enable the new API stack (and with it, the RLModule API).
     .api_stack(
         enable_rl_module_and_learner=True,
         enable_env_runner_and_connector_v2=True,
@@ -19,63 +17,70 @@ config = (
     .framework("torch")
     .environment("CartPole-v1")
 )
+algo = config.build()
 
-algorithm = config.build()
-
-# run for 2 training steps
+# Run 2 training iterations.
 for _ in range(2):
-    result = algorithm.train()
-    pprint(result)
+    print(algo.train())
 # __enabling-rlmodules-in-configs-end__
 
 
-# __constructing-rlmodules-sa-begin__
+# __constructing-rlmodules-begin__
 import gymnasium as gym
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
 
+# Create an env object to know the spaces.
 env = gym.make("CartPole-v1")
 
+# Construct an RLModuleSpec.
 spec = RLModuleSpec(
     module_class=DiscreteBCTorchModule,
     observation_space=env.observation_space,
     action_space=env.action_space,
-    model_config_dict={"fcnet_hiddens": [64]},
+    # A custom dict that will be accessible inside your class as `self.model_config`.
+    model_config={"fcnet_hiddens": [64]},
 )
 
-module = spec.build()
-# __constructing-rlmodules-sa-end__
+# Construct the actual RLModule object with .build():
+rl_module = spec.build()
+# __constructing-rlmodules-end__
 
 
-# __constructing-rlmodules-ma-begin__
+# __constructing-multi-rlmodules-begin__
 import gymnasium as gym
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
 
+# Construct a MultiRLModuleSpec.
 spec = MultiRLModuleSpec(
     module_specs={
         "module_1": RLModuleSpec(
             module_class=DiscreteBCTorchModule,
             observation_space=gym.spaces.Box(low=-1, high=1, shape=(10,)),
             action_space=gym.spaces.Discrete(2),
-            model_config_dict={"fcnet_hiddens": [32]},
+            # A custom dict that will be accessible inside your class as
+            # `self.model_config`.
+            model_config={"fcnet_hiddens": [32]},
         ),
         "module_2": RLModuleSpec(
             module_class=DiscreteBCTorchModule,
             observation_space=gym.spaces.Box(low=-1, high=1, shape=(5,)),
             action_space=gym.spaces.Discrete(2),
-            model_config_dict={"fcnet_hiddens": [16]},
+            # A custom dict that will be accessible inside your class as
+            # `self.model_config`.
+            model_config={"fcnet_hiddens": [16]},
         ),
     },
 )
 
+# Construct the actual MultiRLModule object with .build():
 multi_rl_module = spec.build()
-# __constructing-rlmodules-ma-end__
+# __constructing-multi-rlmodules-end__
 
 
 # __pass-specs-to-configs-sa-begin__
-import gymnasium as gym
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
 from ray.rllib.core.testing.bc_algorithm import BCConfigTest
@@ -89,17 +94,17 @@ config = (
     )
     .environment("CartPole-v1")
     .rl_module(
-        model_config_dict={"fcnet_hiddens": [32, 32]},
+        model_config={"fcnet_hiddens": [32, 32]},
         rl_module_spec=RLModuleSpec(module_class=DiscreteBCTorchModule),
     )
 )
 
 algo = config.build()
+print(algo.get_module())
 # __pass-specs-to-configs-sa-end__
 
 
 # __pass-specs-to-configs-ma-begin__
-import gymnasium as gym
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
@@ -144,30 +149,23 @@ multi_rl_module = module.as_multi_rl_module()
 
 # __write-custom-sa-rlmodule-torch-begin__
 from typing import Any, Dict
-from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
-from ray.rllib.core.rl_module.rl_module import RLModuleConfig
 
-import torch
-import torch.nn as nn
+from ray.rllib.core import Columns
+from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 
 
 class DiscreteBCTorchModule(TorchRLModule):
-    def __init__(self, config: RLModuleConfig) -> None:
-        super().__init__(config)
-
     def setup(self):
-        input_dim = self.config.observation_space.shape[0]
-        hidden_dim = self.config.model_config_dict["fcnet_hiddens"][0]
-        output_dim = self.config.action_space.n
+        input_dim = self.observation_space.shape[0]
+        hidden_dim = self.model_config["fcnet_hiddens"][0]
+        output_dim = self.action_space.n
 
-        self.policy = nn.Sequential(
+        self._pi_head = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
         )
 
-        self.input_dim = input_dim
-
     def _forward_inference(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         with torch.no_grad():
             return self._forward_train(batch)
@@ -177,51 +175,11 @@ class DiscreteBCTorchModule(TorchRLModule):
             return self._forward_train(batch)
 
     def _forward_train(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        action_logits = self.policy(batch["obs"])
+        action_logits = self._pi_head(batch[Columns.OBS])
         return {"action_dist": torch.distributions.Categorical(logits=action_logits)}
 
 
 # __write-custom-sa-rlmodule-torch-end__
-
-
-# __write-custom-sa-rlmodule-tf-begin__
-from typing import Mapping, Any
-from ray.rllib.core.rl_module.tf.tf_rl_module import TfRLModule
-from ray.rllib.core.rl_module.rl_module import RLModuleConfig
-
-import tensorflow as tf
-
-
-class DiscreteBCTfModule(TfRLModule):
-    def __init__(self, config: RLModuleConfig) -> None:
-        super().__init__(config)
-
-    def setup(self):
-        input_dim = self.config.observation_space.shape[0]
-        hidden_dim = self.config.model_config_dict["fcnet_hiddens"][0]
-        output_dim = self.config.action_space.n
-
-        self.policy = tf.keras.Sequential(
-            [
-                tf.keras.layers.Dense(hidden_dim, activation="relu"),
-                tf.keras.layers.Dense(output_dim),
-            ]
-        )
-
-        self.input_dim = input_dim
-
-    def _forward_inference(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        return self._forward_train(batch)
-
-    def _forward_exploration(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        return self._forward_train(batch)
-
-    def _forward_train(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        action_logits = self.policy(batch["obs"])
-        return {"action_dist": tf.distributions.Categorical(logits=action_logits)}
-
-
-# __write-custom-sa-rlmodule-tf-end__
 
 
 # __extend-spec-checking-single-level-begin__
@@ -290,30 +248,38 @@ class DiscreteBCTorchModule(TorchRLModule):
 
 # __write-custom-multirlmodule-shared-enc-begin__
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleConfig, MultiRLModule
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 
 import torch
 import torch.nn as nn
 
 
-class BCTorchRLModuleWithSharedGlobalEncoder(TorchRLModule):
+class BCTorchRLModuleUsingSharedGlobalEncoder(TorchRLModule):
     """An RLModule with a shared encoder between agents for global observation."""
 
     def __init__(
         self,
-        encoder: nn.Module,
-        local_dim: int,
-        hidden_dim: int,
-        action_dim: int,
-        config=None,
+        *,
+        observation_space,
+        action_space,
+        model_config,
+        **kwargs,
     ) -> None:
-        super().__init__(config=config)
+        super().__init__(
+            observation_space=observation_space,
+            action_space=action_space,
+            model_config=model_config,
+            **kwargs,
+        )
 
-        self.encoder = encoder
-        self.policy_head = nn.Sequential(
-            nn.Linear(hidden_dim + local_dim, hidden_dim),
+        self._encoder = self.model_config["encoder"]
+        self._pi_head = nn.Sequential(
+            nn.Linear(
+                self.model_config["hidden_dim"] + self.model_config["local_dim"],
+                self.model_config["hidden_dim"],
+            ),
             nn.ReLU(),
-            nn.Linear(hidden_dim, action_dim),
+            nn.Linear(self.model_config["hidden_dim"], self.action_space.n),
         )
 
     def _forward_inference(self, batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -329,23 +295,17 @@ class BCTorchRLModuleWithSharedGlobalEncoder(TorchRLModule):
 
     def _common_forward(self, batch):
         obs = batch["obs"]
-        global_enc = self.encoder(obs["global"])
+        global_enc = self._encoder(obs["global"])
         policy_in = torch.cat([global_enc, obs["local"]], dim=-1)
-        action_logits = self.policy_head(policy_in)
+        logits = self._pi_head(policy_in)
 
-        return {"action_dist": torch.distributions.Categorical(logits=action_logits)}
+        return {Columns.ACTION_DIST_INPUTS: logits}
 
 
 class BCTorchMultiAgentModuleWithSharedEncoder(MultiRLModule):
-    def __init__(self, config: MultiRLModuleConfig) -> None:
-        super().__init__(config)
-
     def setup(self):
-
-        module_specs = self.config.modules
-        module_spec = next(iter(module_specs.values()))
-        global_dim = module_spec.observation_space["global"].shape[0]
-        hidden_dim = module_spec.model_config_dict["fcnet_hiddens"][0]
+        global_dim = self.rl_module_specs.observation_space["global"].shape[0]
+        hidden_dim = self.rl_module_specs.model_config["fcnet_hiddens"][0]
         shared_encoder = nn.Sequential(
             nn.Linear(global_dim, hidden_dim),
             nn.ReLU(),
@@ -353,7 +313,7 @@ class BCTorchMultiAgentModuleWithSharedEncoder(MultiRLModule):
         )
 
         rl_modules = {}
-        for module_id, module_spec in module_specs.items():
+        for module_id, module_spec in self.rl_module_specs.items():
             rl_modules[module_id] = BCTorchRLModuleWithSharedGlobalEncoder(
                 config=module_specs[module_id].get_rl_module_config(),
                 encoder=shared_encoder,
@@ -375,7 +335,7 @@ from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 
 spec = MultiRLModuleSpec(
     multi_rl_module_class=BCTorchMultiAgentModuleWithSharedEncoder,
-    module_specs={
+    rl_module_specs={
         "local_2d": RLModuleSpec(
             observation_space=gym.spaces.Dict(
                 {
@@ -384,7 +344,7 @@ spec = MultiRLModuleSpec(
                 }
             ),
             action_space=gym.spaces.Discrete(2),
-            model_config_dict={"fcnet_hiddens": [64]},
+            model_config={"fcnet_hiddens": [64]},
         ),
         "local_5d": RLModuleSpec(
             observation_space=gym.spaces.Dict(
@@ -394,7 +354,7 @@ spec = MultiRLModuleSpec(
                 }
             ),
             action_space=gym.spaces.Discrete(5),
-            model_config_dict={"fcnet_hiddens": [64]},
+            model_config={"fcnet_hiddens": [64]},
         ),
     },
 )

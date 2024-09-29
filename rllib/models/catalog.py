@@ -65,35 +65,11 @@ MODEL_DEFAULTS: ModelConfigDict = {
     "_disable_action_flattening": False,
 
     # === Built-in options ===
-    # FullyConnectedNetwork (tf and torch): rllib.models.tf|torch.fcnet.py
-    # These are used if no custom model is specified and the input space is 1D.
-    # Number of hidden layers to be used.
     "fcnet_hiddens": [256, 256],
-    # Activation function descriptor.
-    # Supported values are: "tanh", "relu", "swish" (or "silu", which is the same),
-    # "linear" (or None).
     "fcnet_activation": "tanh",
-    # Initializer function or class descriptor for encoder weigths.
-    # Supported values are the initializer names (str), classes or functions listed
-    # by the frameworks (`tf2``, `torch`). See
-    # https://pytorch.org/docs/stable/nn.init.html for `torch` and
-    # https://www.tensorflow.org/api_docs/python/tf/keras/initializers for `tf2`.
-    # Note, if `None`, the default initializer defined by `torch` or `tf2` is used.
     "fcnet_weights_initializer": None,
-    # Initializer configuration for encoder weights.
-    # This configuration is passed to the initializer defined in
-    # `fcnet_weights_initializer`.
     "fcnet_weights_initializer_config": None,
-    # Initializer function or class descriptor for encoder bias.
-    # Supported values are the initializer names (str), classes or functions listed
-    # by the frameworks (`tf2``, `torch`). See
-    # https://pytorch.org/docs/stable/nn.init.html for `torch` and
-    # https://www.tensorflow.org/api_docs/python/tf/keras/initializers for `tf2`.
-    # Note, if `None`, the default initializer defined by `torch` or `tf2` is used.
     "fcnet_bias_initializer": None,
-    # Initializer configuration for encoder bias.
-    # This configuration is passed to the initializer defined in
-    # `fcnet_bias_initializer`.
     "fcnet_bias_initializer_config": None,
 
     # VisionNetwork (tf and torch): rllib.models.tf|torch.visionnet.py

@@ -3,8 +3,8 @@ from typing import Any, Dict
 
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.specs.typing import SpecType
-from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleConfig
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule, MultiRLModuleConfig
+from ray.rllib.core.rl_module.rl_module import RLModule
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.rllib.core.rl_module.tf.tf_rl_module import TfRLModule
 from ray.rllib.models.tf.tf_distributions import TfCategorical
 from ray.rllib.utils.annotations import override
@@ -12,9 +12,6 @@ from ray.rllib.utils.typing import StateDict
 
 
 class DiscreteBCTFModule(TfRLModule):
-    def __init__(self, config: RLModuleConfig) -> None:
-        super().__init__(config)
-
     def setup(self):
         input_dim = self.config.observation_space.shape[0]
         hidden_dim = self.config.model_config_dict["fcnet_hiddens"][0]
@@ -121,9 +118,6 @@ class BCTfRLModuleWithSharedGlobalEncoder(TfRLModule):
 
 
 class BCTfMultiAgentModuleWithSharedEncoder(MultiRLModule):
-    def __init__(self, config: MultiRLModuleConfig) -> None:
-        super().__init__(config)
-
     def setup(self):
         # constructing the global encoder based on the observation_space of the first
         # module

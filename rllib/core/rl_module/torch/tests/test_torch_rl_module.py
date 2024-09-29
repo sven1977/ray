@@ -6,7 +6,6 @@ import gymnasium as gym
 import torch
 
 from ray.rllib.core.columns import Columns
-from ray.rllib.core.rl_module.rl_module import RLModuleConfig
 from ray.rllib.core.rl_module.torch import TorchRLModule
 from ray.rllib.core.rl_module.torch.torch_compile_config import TorchCompileConfig
 from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
@@ -19,11 +18,9 @@ class TestRLModule(unittest.TestCase):
 
         env = gym.make("CartPole-v1")
         module = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
 
         self.assertIsInstance(module, TorchRLModule)
@@ -33,11 +30,9 @@ class TestRLModule(unittest.TestCase):
         bsize = 1024
         env = gym.make("CartPole-v1")
         module = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
 
         obs_shape = env.observation_space.shape
@@ -66,11 +61,9 @@ class TestRLModule(unittest.TestCase):
 
         env = gym.make("CartPole-v1")
         module = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
 
         obs_shape = env.observation_space.shape
@@ -84,22 +77,18 @@ class TestRLModule(unittest.TestCase):
 
         env = gym.make("CartPole-v1")
         module = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
 
         state = module.get_state()
         self.assertIsInstance(state, dict)
 
         module2 = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
         state2 = module2.get_state()
         check(state, state2, false=True)
@@ -111,11 +100,9 @@ class TestRLModule(unittest.TestCase):
     def test_checkpointing(self):
         env = gym.make("CartPole-v1")
         module = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = "/tmp/rl_module_test"
@@ -142,11 +129,9 @@ class TestRLModuleGPU(unittest.TestCase):
         memory_before_create = get_memory_usage_cuda()
 
         torch_rl_module = DiscreteBCTorchModule(
-            config=RLModuleConfig(
-                env.observation_space,
-                env.action_space,
-                model_config_dict={"fcnet_hiddens": [32]},
-            )
+            observation_space=env.observation_space,
+            action_space=env.action_space,
+            model_config={"fcnet_hiddens": [32]},
         )
 
         torch_rl_module.cuda()

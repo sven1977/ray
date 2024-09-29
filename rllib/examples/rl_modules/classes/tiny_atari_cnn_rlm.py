@@ -28,13 +28,11 @@ class TinyAtariCNN(TorchRLModule, ValueFunctionAPI):
 
         import numpy as np
     import gymnasium as gym
-    from ray.rllib.core.rl_module.rl_module import RLModuleConfig
 
-    rl_module_config = RLModuleConfig(
+    my_net = TinyAtariCNN(
         observation_space=gym.spaces.Box(-1.0, 1.0, (42, 42, 4), np.float32),
         action_space=gym.spaces.Discrete(4),
     )
-    my_net = TinyAtariCNN(rl_module_config)
 
     B = 10
     w = 42
@@ -65,9 +63,8 @@ class TinyAtariCNN(TorchRLModule, ValueFunctionAPI):
         preprocessing through a connector pipeline (for example, flattening,
         frame-stacking, mean/std-filtering, etc..).
         """
-        # Get the CNN stack config from our RLModuleConfig's (self.config)
-        # `model_config_dict` property:
-        conv_filters = self.config.model_config_dict.get("conv_filters")
+        # Get the CNN stack config from the `self.model_config` property.
+        conv_filters = self.model_config.get("conv_filters")
         # Default CNN stack with 3 layers:
         if conv_filters is None:
             conv_filters = [
@@ -80,7 +77,7 @@ class TinyAtariCNN(TorchRLModule, ValueFunctionAPI):
         layers = []
 
         # Add user-specified hidden convolutional layers first
-        width, height, in_depth = self.config.observation_space.shape
+        width, height, in_depth = self.observation_space.shape
         in_size = [width, height]
         for filter_specs in conv_filters:
             out_depth, kernel_size, strides, padding = filter_specs
@@ -109,7 +106,7 @@ class TinyAtariCNN(TorchRLModule, ValueFunctionAPI):
 
         # Add the final CNN 1x1 layer with num_filters == num_actions to be reshaped to
         # yield the logits (no flattening, no additional linear layers required).
-        _final_conv = nn.Conv2d(in_depth, self.config.action_space.n, 1, 1, bias=True)
+        _final_conv = nn.Conv2d(in_depth, self.action_space.n, 1, 1, bias=True)
         nn.init.xavier_uniform_(_final_conv.weight)
         nn.init.zeros_(_final_conv.bias)
         self._logits = nn.Sequential(

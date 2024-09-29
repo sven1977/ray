@@ -1,9 +1,9 @@
 from typing import Any, Dict
 
 from ray.rllib.core.columns import Columns
-from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleConfig
+from ray.rllib.core.rl_module.rl_module import RLModule
 from ray.rllib.models.torch.torch_distributions import TorchCategorical
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule, MultiRLModuleConfig
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 from ray.rllib.core.models.specs.typing import SpecType
 from ray.rllib.utils.annotations import override
@@ -13,13 +13,10 @@ torch, nn = try_import_torch()
 
 
 class DiscreteBCTorchModule(TorchRLModule):
-    def __init__(self, config: RLModuleConfig) -> None:
-        super().__init__(config)
-
     def setup(self):
-        input_dim = self.config.observation_space.shape[0]
-        hidden_dim = self.config.model_config_dict["fcnet_hiddens"][0]
-        output_dim = self.config.action_space.n
+        input_dim = self.observation_space.shape[0]
+        hidden_dim = self.model_config["fcnet_hiddens"][0]
+        output_dim = self.action_space.n
 
         self.policy = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -28,27 +25,6 @@ class DiscreteBCTorchModule(TorchRLModule):
         )
 
         self.input_dim = input_dim
-
-    def get_train_action_dist_cls(self):
-        return TorchCategorical
-
-    def get_exploration_action_dist_cls(self):
-        return TorchCategorical
-
-    def get_inference_action_dist_cls(self):
-        return TorchCategorical
-
-    @override(RLModule)
-    def output_specs_exploration(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
-
-    @override(RLModule)
-    def output_specs_inference(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
-
-    @override(RLModule)
-    def output_specs_train(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
 
     @override(RLModule)
     def _forward_inference(self, batch: Dict[str, Any]) -> Dict[str, Any]:
@@ -64,6 +40,10 @@ class DiscreteBCTorchModule(TorchRLModule):
     def _forward_train(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         action_logits = self.policy(batch["obs"])
         return {Columns.ACTION_DIST_INPUTS: action_logits}
+
+    @override(RLModule)
+    def output_specs_train(self) -> SpecType:
+        return [Columns.ACTION_DIST_INPUTS]
 
 
 class BCTorchRLModuleWithSharedGlobalEncoder(TorchRLModule):
@@ -133,9 +113,6 @@ class BCTorchRLModuleWithSharedGlobalEncoder(TorchRLModule):
 
 
 class BCTorchMultiAgentModuleWithSharedEncoder(MultiRLModule):
-    def __init__(self, config: MultiRLModuleConfig) -> None:
-        super().__init__(config)
-
     def setup(self):
         module_specs = self.config.modules
         module_spec = next(iter(module_specs.values()))
