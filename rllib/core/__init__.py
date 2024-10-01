@@ -1,9 +1,13 @@
 from ray.rllib.core.columns import Columns
-
+from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule, MultiRLModuleSpec
+from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
+from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 
 DEFAULT_AGENT_ID = "default_agent"
 DEFAULT_POLICY_ID = "default_policy"
-DEFAULT_MODULE_ID = DEFAULT_POLICY_ID  # TODO (sven): Change this to "default_module"
+# TODO (sven): Change this to "default_module"
+DEFAULT_MODULE_ID = DEFAULT_POLICY_ID
+ALL_MODULES = "__all_modules__"
 
 COMPONENT_ENV_RUNNER = "env_runner"
 COMPONENT_ENV_TO_MODULE_CONNECTOR = "env_to_module_connector"
@@ -32,4 +36,9 @@ __all__ = [
     "DEFAULT_AGENT_ID",
     "DEFAULT_MODULE_ID",
     "DEFAULT_POLICY_ID",
+    "MultiRLModule",
+    "MultiRLModuleSpec",
+    "RLModule",
+    "RLModuleSpec",
+    "TorchRLModule",
 ]

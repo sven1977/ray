@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass, field
 import logging
 import pprint
@@ -17,13 +18,17 @@ from typing import (
     ValuesView,
 )
 
-from ray.rllib.core import COMPONENT_MULTI_RL_MODULE_SPEC
+import gymnasium as gym
+
+from ray.rllib.core import (
+    COMPONENT_MULTI_RL_MODULE_SPEC,
+    RLModule,
+    RLModuleSpec,
+)
 from ray.rllib.core.models.specs.typing import SpecType
-from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
 from ray.rllib.policy.sample_batch import MultiAgentBatch
 from ray.rllib.utils import force_list
 from ray.rllib.utils.annotations import (
-    ExperimentalAPI,
     override,
     OverrideToImplementCustomLogic,
 )
@@ -33,7 +38,12 @@ from ray.rllib.utils.deprecation import (
     DEPRECATED_VALUE,
     deprecation_warning,
 )
-from ray.rllib.utils.serialization import serialize_type, deserialize_type
+from ray.rllib.utils.serialization import (
+    gym_space_from_dict,
+    gym_space_to_dict,
+    serialize_type,
+    deserialize_type,
+)
 from ray.rllib.utils.typing import ModuleID, StateDict, T
 from ray.util.annotations import PublicAPI
 
@@ -69,8 +79,13 @@ class MultiRLModule(RLModule):
         self,
         config=DEPRECATED_VALUE,
         *,
-        rl_module_specs: Optional[Dict[ModuleID, RLModuleSpec]] = None,
+        observation_space: Optional[gym.Space] = None,
+        action_space: Optional[gym.Space] = None,
         inference_only: Optional[bool] = None,
+        # TODO (sven): Ignore learner_only setting for now on MultiRLModule.
+        learner_only: Optional[bool] = None,
+        model_config: Optional[dict] = None,
+        rl_module_specs: Optional[Dict[ModuleID, RLModuleSpec]] = None,
         **kwargs,
     ) -> None:
         """Initializes a MultiRLModule instance.
@@ -80,36 +95,36 @@ class MultiRLModule(RLModule):
         if config != DEPRECATED_VALUE:
             raise Exception
 
+        # Make sure we don't alter incoming module specs in this c'tor.
+        rl_module_specs = copy.deepcopy(rl_module_specs)
+        # Figure out global inference_only setting.
+        # If not provided (None), only if all submodules are
+        # inference_only, this MultiRLModule will be inference_only.
         inference_only = inference_only if inference_only is not None else all(
             spec.inference_only for spec in rl_module_specs.values()
         )
-        # TODO (sven): Maybe deep copy here to make sure we don't alter incoming
-        #  specs.
+        # If given inference_only=True, make all submodules also inference_only (before
+        # creating them).
         if inference_only is True:
             for rl_module_spec in rl_module_specs:
                 rl_module_spec.inference_only = True
+        self.__check_module_specs(rl_module_specs)
         self.rl_module_specs = rl_module_specs
 
         super().__init__(
-            observation_space={
-                mid: spec.observation_space for mid, spec in self.rl_module_specs.items()
-            },
-            action_space={
-                mid: spec.action_space for mid, spec in self.rl_module_specs.items()
-            },
+            observation_space=observation_space,
+            action_space=action_space,
             inference_only=inference_only,
             learner_only=None,
             catalog_class=None,
-            model_config={
-                mid: spec.model_config for mid, spec in self.rl_module_specs.items()
-            },
+            model_config=model_config,
         )
 
+    @OverrideToImplementCustomLogic
     @override(RLModule)
     def setup(self):
-        """Sets up the underlying RLModules."""
+        """Sets up the underlying, individual RLModules."""
         self._rl_modules = {}
-        self.__check_module_specs(self.rl_module_specs)
         # Make sure all individual RLModules have the same framework OR framework=None.
         framework = None
         for module_id, rl_module_spec in self.rl_module_specs.items():
@@ -498,9 +513,22 @@ class MultiRLModuleSpec:
 
     Args:
         multi_rl_module_class: The class of the MultiRLModule to construct. By
-            default it is set to MultiRLModule class. This class simply loops
-            throught each module and calls their foward methods.
-        module_specs: The module specs for each individual module. It can be either a
+            default, this is the base `MultiRLModule` class.
+        observation_space: Optional global observation space for the MultiRLModule.
+            Useful for shared network components that live only inside the MultiRLModule
+            and don't have their own ModuleID and own RLModule within
+            `self._rl_modules`.
+        action_space: Optional global action space for the MultiRLModule.
+            Useful for shared network components that live only inside the MultiRLModule
+            and don't have their own ModuleID and own RLModule within
+            `self._rl_modules`.
+        inference_only: An optional global inference_only flag. If not set (None by
+            default), considers the MultiRLModule to be inference_only=True, only
+            if all submodules also have their own inference_only flags set to True.
+        model_config: An optional global model_config dict. Useful to configure shared
+            network components that only live inside the MultiRLModule and don't have
+            their own ModuleID and own RLModule within `self._rl_modules`.
+        rl_module_specs: The module specs for each individual module. It can be either a
             RLModuleSpec used for all module_ids or a dictionary mapping
             from module IDs to RLModuleSpecs for each individual module.
         load_state_path: The path to the module state to load from. NOTE: This must be
@@ -516,10 +544,13 @@ class MultiRLModuleSpec:
     """
 
     multi_rl_module_class: Type[MultiRLModule] = MultiRLModule
-    inference_only: bool = False
+    observation_space: Optional[gym.Space] = None
+    action_space: Optional[gym.Space] = None
+    inference_only: Optional[bool] = None
     # TODO (sven): Once we support MultiRLModules inside other MultiRLModules, we would
     #  need this flag in here as well, but for now, we'll leave it out for simplicity.
     # learner_only: bool = False
+    model_config: Optional[dict] = None
     rl_module_specs: Union[RLModuleSpec, Dict[ModuleID, RLModuleSpec]] = None
 
     # TODO (sven): Deprecate these in favor of using the pure Checkpointable APIs for
@@ -527,6 +558,7 @@ class MultiRLModuleSpec:
     load_state_path: Optional[str] = None
     modules_to_load: Optional[Set[ModuleID]] = None
 
+    # Deprecated: Do not use anymore.
     module_specs: Optional[Union[RLModuleSpec, Dict[ModuleID, RLModuleSpec]]] = None
 
     def __post_init__(self):
@@ -564,6 +596,9 @@ class MultiRLModuleSpec:
         # Return MultiRLModule.
         module = self.multi_rl_module_class(
             rl_module_specs=self.rl_module_specs,
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            model_config=self.model_config,
             inference_only=self.inference_only,
         )
         return module
@@ -623,7 +658,10 @@ class MultiRLModuleSpec:
         multi_rl_module_class = module.__class__
         return MultiRLModuleSpec(
             multi_rl_module_class=multi_rl_module_class,
+            observation_space=module.observation_space,
+            action_space=module.action_space,
             inference_only=module.inference_only,
+            model_config=module.model_config,
             rl_module_specs=rl_module_specs,
         )
 
@@ -639,7 +677,10 @@ class MultiRLModuleSpec:
         """Converts the MultiRLModuleSpec to a dictionary."""
         return {
             "multi_rl_module_class": serialize_type(self.multi_rl_module_class),
+            "observation_space": gym_space_to_dict(self.observation_space),
+            "action_space": gym_space_to_dict(self.action_space),
             "inference_only": self.inference_only,
+            "model_config": self.model_config,
             "rl_module_specs": {
                 module_id: rl_module_spec.to_dict()
                 for module_id, rl_module_spec in self.rl_module_specs.items()
@@ -651,6 +692,9 @@ class MultiRLModuleSpec:
         """Creates a MultiRLModuleSpec from a dictionary."""
         return MultiRLModuleSpec(
             multi_rl_module_class=deserialize_type(d["multi_rl_module_class"]),
+            observation_space=gym_space_from_dict(d.get("observation_space")),
+            action_space=gym_space_from_dict(d.get("action_space")),
+            model_config=d.get("model_config"),
             inference_only=d["inference_only"],
             module_specs={
                 module_id: RLModuleSpec.from_dict(rl_module_spec)
