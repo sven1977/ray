@@ -3503,7 +3503,7 @@ class AlgorithmConfig(_Config):
 
         # `self._rl_module_spec` has been user defined (via call to `self.rl_module()`).
         if self._rl_module_spec is not None:
-            # Merge provided RL Module spec class with defaults
+            # Merge provided RL Module spec class with defaults.
             _check_rl_module_spec(self._rl_module_spec)
             # Merge given spec with default one (in case items are missing, such as
             # spaces, module class, etc.)

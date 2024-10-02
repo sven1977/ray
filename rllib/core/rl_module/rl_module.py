@@ -64,7 +64,7 @@ class RLModuleSpec:
             used for training, for example a shared value function in a multi-agent
             setup or a world model in a curiosity-learning setup.
             Note that `inference_only=True` AND `learner_only=True` is not allowed.
-        model_config_dict: The model config dict to use.
+        model_config: The model config dict or default RLlib dataclass to use.
         catalog_class: The Catalog class to use.
         load_state_path: The path to the module state to load from. NOTE: This must be
             an absolute path.
@@ -79,8 +79,16 @@ class RLModuleSpec:
     catalog_class: Optional[Type["Catalog"]] = None
     load_state_path: Optional[str] = None
 
-    # Deprecated field
-    model_config_dict=DEPRECATED_VALUE
+    # Deprecated field.
+    model_config_dict: Optional[Union[dict, int]] = None
+
+    def __post_init__(self):
+        if self.model_config_dict is not None:
+            deprecation_warning(
+                old="RLModuleSpec(model_config_dict=..)",
+                new="RLModuleSpec(model_config=..)",
+                error=True,
+            )
 
     def build(self) -> "RLModule":
         """Builds the RLModule from this spec."""
@@ -99,7 +107,7 @@ class RLModuleSpec:
                 model_config=self.model_config,
                 catalog_class=self.catalog_class,
             )
-        # Older custom model might still require the old RLModuleConfigs under
+        # Older custom model might still require the old `RLModuleConfig` under
         # the `config` arg.
         except AttributeError:
             module_config = self.get_rl_module_config()
@@ -113,6 +121,7 @@ class RLModuleSpec:
         if isinstance(module, MultiRLModule):
             raise ValueError("MultiRLModule cannot be converted to RLModuleSpec.")
 
+        # Try instantiating a new RLModule from the spec using the new c'tor args.
         try:
             rl_module_spec = RLModuleSpec(
                 module_class=type(module),
@@ -124,7 +133,8 @@ class RLModuleSpec:
                 catalog_class=type(module.catalog),
             )
 
-        # Old path through deprecated `RLModuleConfig` class.
+        # Old path through deprecated `RLModuleConfig` class. Used only if `module`
+        # still has a valid `config` attribute.
         except AttributeError:
             rl_module_spec = RLModuleSpec(
                 module_class=type(module),
@@ -197,7 +207,7 @@ class RLModuleSpec:
             self.action_space = other.action_space or self.action_space
             self.inference_only = other.inference_only or self.inference_only
             self.learner_only = other.learner_only and self.learner_only
-            self.model_config_dict = other.model_config_dict or self.model_config_dict
+            self.model_config = other.model_config or self.model_config
             self.catalog_class = other.catalog_class or self.catalog_class
             self.load_state_path = other.load_state_path or self.load_state_path
         # Only override, if the field is None in `self`.
@@ -206,7 +216,7 @@ class RLModuleSpec:
             self.module_class = self.module_class or other.module_class
             self.observation_space = self.observation_space or other.observation_space
             self.action_space = self.action_space or other.action_space
-            self.model_config_dict = self.model_config_dict or other.model_config_dict
+            self.model_config = self.model_config or other.model_config
             self.catalog_class = self.catalog_class or other.catalog_class
             self.load_state_path = self.load_state_path or other.load_state_path
 
@@ -221,9 +231,7 @@ class RLModuleSpec:
 
     def _get_model_config(self):
         return (
-            self.model_config_dict
-            if self.model_config_dict != DEPRECATED_VALUE
-            else self.model_config.asdict()
+            self.model_config.asdict()
             if dataclasses.is_dataclass(self.model_config)
             else (self.model_config or {})
         )
@@ -268,8 +276,8 @@ class RLModule(Checkpointable, abc.ABC):
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config_dict = {"hidden": [128, 128]},
-            catalog_class = PPOCatalog,
+            model_config={"hidden": [128, 128]},
+            catalog_class=PPOCatalog,
         )
         module = module_spec.build()
         action_dist_class = module.get_inference_action_dist_cls()
@@ -305,8 +313,8 @@ class RLModule(Checkpointable, abc.ABC):
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config_dict = {"hidden": [128, 128]},
-            catalog_class = PPOCatalog,
+            model_config={"hidden": [128, 128]},
+            catalog_class=PPOCatalog,
         )
         module = module_spec.build()
 
@@ -333,8 +341,8 @@ class RLModule(Checkpointable, abc.ABC):
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config_dict = {"hidden": [128, 128]},
-            catalog_class = PPOCatalog,
+            model_config={"hidden": [128, 128]},
+            catalog_class=PPOCatalog,
         )
         module = module_spec.build()
 

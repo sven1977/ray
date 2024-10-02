@@ -1,7 +1,7 @@
 from ray.rllib.core.columns import Columns
-from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule, MultiRLModuleSpec
-from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
-from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
+#from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule, MultiRLModuleSpec
+#from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
+#from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
 
 DEFAULT_AGENT_ID = "default_agent"
 DEFAULT_POLICY_ID = "default_policy"
@@ -36,9 +36,9 @@ __all__ = [
     "DEFAULT_AGENT_ID",
     "DEFAULT_MODULE_ID",
     "DEFAULT_POLICY_ID",
-    "MultiRLModule",
-    "MultiRLModuleSpec",
-    "RLModule",
-    "RLModuleSpec",
-    "TorchRLModule",
+    #"MultiRLModule",
+    #"MultiRLModuleSpec",
+    #"RLModule",
+    #"RLModuleSpec",
+    #"TorchRLModule",
 ]

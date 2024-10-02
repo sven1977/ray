@@ -20,8 +20,8 @@ from typing import (
 
 import gymnasium as gym
 
-from ray.rllib.core import (
-    COMPONENT_MULTI_RL_MODULE_SPEC,
+from ray.rllib.core import COMPONENT_MULTI_RL_MODULE_SPEC
+from ray.rllib.core.rl_module import (
     RLModule,
     RLModuleSpec,
 )
@@ -91,6 +91,16 @@ class MultiRLModule(RLModule):
         """Initializes a MultiRLModule instance.
 
         Args:
+            observation_space: The MultiRLModule's observation space.
+            action_space: The MultiRLModule's action space.
+            inference_only: The MultiRLModule's `inference_only` setting. If True, force
+                sets all inference_only flags inside `rl_module_specs` also to True.
+                If None, infers the value for `inference_only` by setting it to True,
+                iff all `inference_only` flags inside `rl_module_specs`, otherwise to
+                False.
+            model_config: The MultiRLModule's `model_config` dict.
+            rl_module_specs: A dict mapping ModuleIDs to `RLModuleSpec` instances used
+                to create the submodules.
         """
         if config != DEPRECATED_VALUE:
             raise Exception
@@ -118,6 +128,7 @@ class MultiRLModule(RLModule):
             learner_only=None,
             catalog_class=None,
             model_config=model_config,
+            **kwargs,
         )
 
     @OverrideToImplementCustomLogic
@@ -594,13 +605,20 @@ class MultiRLModuleSpec:
             return self.rl_module_specs[module_id].build()
 
         # Return MultiRLModule.
-        module = self.multi_rl_module_class(
-            rl_module_specs=self.rl_module_specs,
-            observation_space=self.observation_space,
-            action_space=self.action_space,
-            model_config=self.model_config,
-            inference_only=self.inference_only,
-        )
+        try:
+            module = self.multi_rl_module_class(
+                rl_module_specs=self.rl_module_specs,
+                observation_space=self.observation_space,
+                action_space=self.action_space,
+                model_config=self.model_config,
+                inference_only=self.inference_only,
+            )
+        # Older custom model might still require the old `MultiRLModuleConfig` under
+        # the `config` arg.
+        except AttributeError:
+            multi_rl_module_config = self.get_rl_module_config()
+            module = self.multi_rl_module_class(module_config)
+
         return module
 
     def add_modules(
@@ -712,7 +730,7 @@ class MultiRLModuleSpec:
         """Updates this spec with the other spec.
 
         Traverses this MultiRLModuleSpec's module_specs and updates them with
-        the module specs from the other MultiRLModuleSpec.
+        the module specs from the `other` (Multi)RLModuleSpec.
 
         Args:
             other: The other spec to update this spec with.
@@ -765,6 +783,16 @@ class MultiRLModuleSpec:
     @Deprecated(new="MultiRLModuleSpec.get_multi_rl_module_config", error=True)
     def get_marl_config(self, *args, **kwargs):
         pass
+
+    @Deprecated(
+        new="MultiRLModule(*, observation_space=.., action_space=.., ....)",
+        error=False,
+    )
+    def get_rl_module_config(self):
+        return MultiRLModuleConfig(
+            inference_only=self.inference_only,
+            modules=self.rl_module_specs,
+        )
 
 
 @Deprecated(
