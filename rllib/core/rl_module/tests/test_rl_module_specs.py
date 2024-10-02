@@ -8,7 +8,6 @@ from ray.rllib.core.rl_module.multi_rl_module import (
     MultiRLModuleSpec,
 )
 from ray.rllib.core.testing.torch.bc_module import (
-    DiscreteBCTorchModule,
     BCTorchRLModuleWithSharedGlobalEncoder,
     BCTorchMultiAgentModuleWithSharedEncoder,
 )
@@ -17,8 +16,9 @@ from ray.rllib.core.testing.tf.bc_module import (
     BCTfRLModuleWithSharedGlobalEncoder,
     BCTfMultiAgentModuleWithSharedEncoder,
 )
+from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
 
-MODULES = [DiscreteBCTorchModule, DiscreteBCTFModule]
+MODULES = [VPGTorchRLModule, DiscreteBCTFModule]
 CUSTOM_MODULES = {
     "torch": BCTorchRLModuleWithSharedGlobalEncoder,
     "tf2": BCTfRLModuleWithSharedGlobalEncoder,
@@ -159,7 +159,7 @@ class TestRLModuleSpecs(unittest.TestCase):
 
         # Test if RLModuleSpec.update() works.
         module_spec_1 = RLModuleSpec(
-            module_class=DiscreteBCTorchModule,
+            module_class=VPGTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config="Update me!",
@@ -189,7 +189,7 @@ class TestRLModuleSpecs(unittest.TestCase):
 
         # Test if RLModuleSpec.update() works.
         module_spec_1 = RLModuleSpec(
-            module_class=DiscreteBCTorchModule,
+            module_class=VPGTorchRLModule,
             observation_space="Do not update me!",
             action_space=env.action_space,
             model_config="Update me!",
@@ -200,7 +200,7 @@ class TestRLModuleSpecs(unittest.TestCase):
 
         self.assertEqual(module_spec_1.model_config, "Update me!")
         module_spec_1.update(module_spec_2)
-        self.assertEqual(module_spec_1.module_class, DiscreteBCTorchModule)
+        self.assertEqual(module_spec_1.module_class, VPGTorchRLModule)
         self.assertEqual(module_spec_1.observation_space, "Do not update me!")
         self.assertEqual(module_spec_1.action_space, env.action_space)
         self.assertEqual(
@@ -209,7 +209,7 @@ class TestRLModuleSpecs(unittest.TestCase):
 
         # Redefine module_spec_1 for following tests.
         module_spec_1 = RLModuleSpec(
-            module_class=DiscreteBCTorchModule,
+            module_class=VPGTorchRLModule,
             observation_space="Do not update me!",
             action_space=env.action_space,
             model_config="Update me!",
@@ -251,7 +251,7 @@ class TestRLModuleSpecs(unittest.TestCase):
 
         # Test if updating with an additional RLModuleSpec works.
         module_spec_3 = RLModuleSpec(
-            module_class=DiscreteBCTorchModule,
+            module_class=VPGTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config="I'm new!",

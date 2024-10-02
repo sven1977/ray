@@ -12,38 +12,6 @@ from ray.rllib.utils.framework import try_import_torch
 torch, nn = try_import_torch()
 
 
-class DiscreteBCTorchModule(TorchRLModule):
-    def setup(self):
-        input_dim = self.observation_space.shape[0]
-        hidden_dim = self.model_config["hidden_dim"]
-        output_dim = self.action_space.n
-
-        self.policy = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim),
-        )
-
-    @override(RLModule)
-    def _forward_inference(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        with torch.no_grad():
-            return self._forward_train(batch)
-
-    @override(RLModule)
-    def _forward_exploration(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        with torch.no_grad():
-            return self._forward_train(batch)
-
-    @override(RLModule)
-    def _forward_train(self, batch: Dict[str, Any]) -> Dict[str, Any]:
-        action_logits = self.policy(batch[Columns.OBS])
-        return {Columns.ACTION_DIST_INPUTS: action_logits}
-
-    @override(RLModule)
-    def output_specs_train(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
-
-
 class BCTorchRLModuleWithSharedGlobalEncoder(TorchRLModule):
     """An example of an RLModule that uses an encoder shared with other things.
 

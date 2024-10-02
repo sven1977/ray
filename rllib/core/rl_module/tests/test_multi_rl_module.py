@@ -4,7 +4,7 @@ import unittest
 from ray.rllib.core import COMPONENT_MULTI_RL_MODULE_SPEC, DEFAULT_MODULE_ID
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
-from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
+from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
 from ray.rllib.env.multi_agent_env import make_multi_agent
 from ray.rllib.utils.test_utils import check
 
@@ -15,14 +15,14 @@ class TestMultiRLModule(unittest.TestCase):
         env_class = make_multi_agent("CartPole-v0")
         env = env_class({"num_agents": 2})
         module1 = RLModuleSpec(
-            module_class=DiscreteBCTorchModule,
+            module_class=VPGTorchRLModule,
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config_dict={"fcnet_hiddens": [32]},
         )
 
         module2 = RLModuleSpec(
-            module_class=DiscreteBCTorchModule,
+            module_class=VPGTorchRLModule,
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config_dict={"fcnet_hiddens": [32]},
@@ -33,21 +33,21 @@ class TestMultiRLModule(unittest.TestCase):
         )
 
         self.assertEqual(set(multi_rl_module.keys()), {"module1", "module2"})
-        self.assertIsInstance(multi_rl_module["module1"], DiscreteBCTorchModule)
-        self.assertIsInstance(multi_rl_module["module2"], DiscreteBCTorchModule)
+        self.assertIsInstance(multi_rl_module["module1"], VPGTorchRLModule)
+        self.assertIsInstance(multi_rl_module["module2"], VPGTorchRLModule)
 
     def test_as_multi_rl_module(self):
 
         env_class = make_multi_agent("CartPole-v0")
         env = env_class({"num_agents": 2})
 
-        multi_rl_module = DiscreteBCTorchModule(
+        multi_rl_module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config={"fcnet_hiddens": [32]},
         ).as_multi_rl_module()
 
-        self.assertNotIsInstance(multi_rl_module, DiscreteBCTorchModule)
+        self.assertNotIsInstance(multi_rl_module, VPGTorchRLModule)
         self.assertIsInstance(multi_rl_module, MultiRLModule)
         self.assertEqual({DEFAULT_MODULE_ID}, set(multi_rl_module.keys()))
 
@@ -60,7 +60,7 @@ class TestMultiRLModule(unittest.TestCase):
         env_class = make_multi_agent("CartPole-v0")
         env = env_class({"num_agents": 2})
 
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config={"fcnet_hiddens": [32]},
@@ -77,7 +77,7 @@ class TestMultiRLModule(unittest.TestCase):
             set(module[DEFAULT_MODULE_ID].get_state().keys()),
         )
 
-        module2 = DiscreteBCTorchModule(
+        module2 = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config={"fcnet_hiddens": [32]},
@@ -95,7 +95,7 @@ class TestMultiRLModule(unittest.TestCase):
 
         env_class = make_multi_agent("CartPole-v0")
         env = env_class({"num_agents": 2})
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config={"fcnet_hiddens": [32]},
@@ -103,7 +103,7 @@ class TestMultiRLModule(unittest.TestCase):
 
         module.add_module(
             "test",
-            DiscreteBCTorchModule(
+            VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
                 model_config={"fcnet_hiddens": [32]},
@@ -118,7 +118,7 @@ class TestMultiRLModule(unittest.TestCase):
             ValueError,
             lambda: module.add_module(
                 DEFAULT_MODULE_ID,
-                DiscreteBCTorchModule(
+                VPGTorchRLModule(
                     observation_space=env.get_observation_space(0),
                     action_space=env.get_action_space(0),
                     model_config={"fcnet_hiddens": [32]},
@@ -128,7 +128,7 @@ class TestMultiRLModule(unittest.TestCase):
 
         module.add_module(
             DEFAULT_MODULE_ID,
-            DiscreteBCTorchModule(
+            VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
                 model_config={"fcnet_hiddens": [32]},
@@ -140,7 +140,7 @@ class TestMultiRLModule(unittest.TestCase):
         """Test saving and loading from checkpoint after adding / removing modules."""
         env_class = make_multi_agent("CartPole-v0")
         env = env_class({"num_agents": 2})
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
             model_config={"fcnet_hiddens": [32]},
@@ -148,7 +148,7 @@ class TestMultiRLModule(unittest.TestCase):
 
         module.add_module(
             "test",
-            DiscreteBCTorchModule(
+            VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
                 model_config={"fcnet_hiddens": [32]},
@@ -156,7 +156,7 @@ class TestMultiRLModule(unittest.TestCase):
         )
         module.add_module(
             "test2",
-            DiscreteBCTorchModule(
+            VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
                 model_config={"fcnet_hiddens": [128]},
@@ -185,7 +185,7 @@ class TestMultiRLModule(unittest.TestCase):
         # Check that - after adding a new module - the checkpoint is correct.
         module.add_module(
             "test3",
-            DiscreteBCTorchModule(
+            VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
                 model_config={"fcnet_hiddens": [120]},

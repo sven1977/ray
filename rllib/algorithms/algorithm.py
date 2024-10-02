@@ -1716,53 +1716,45 @@ class Algorithm(Checkpointable, Trainable, AlgorithmBase):
                 "code and delete this error message)."
             )
 
-        # Collect SampleBatches from sample workers until we have a full batch.
+        # Collect a list of Episodes from EnvRunners until we reach the train batch
+        # size.
         with self.metrics.log_time((TIMERS, ENV_RUNNER_SAMPLING_TIMER)):
             if self.config.count_steps_by == "agent_steps":
-                train_batch, env_runner_results = synchronous_parallel_sample(
+                episodes, env_runner_results = synchronous_parallel_sample(
                     worker_set=self.env_runner_group,
                     max_agent_steps=self.config.total_train_batch_size,
                     sample_timeout_s=self.config.sample_timeout_s,
-                    _uses_new_env_runners=(
-                        self.config.enable_env_runner_and_connector_v2
-                    ),
+                    _uses_new_env_runners=True,
                     _return_metrics=True,
                 )
             else:
-                train_batch, env_runner_results = synchronous_parallel_sample(
+                episodes, env_runner_results = synchronous_parallel_sample(
                     worker_set=self.env_runner_group,
                     max_env_steps=self.config.total_train_batch_size,
                     sample_timeout_s=self.config.sample_timeout_s,
-                    _uses_new_env_runners=(
-                        self.config.enable_env_runner_and_connector_v2
-                    ),
+                    _uses_new_env_runners=True,
                     _return_metrics=True,
                 )
-        train_batch = train_batch.as_multi_agent()
-
         # Reduce EnvRunner metrics over the n EnvRunners.
         self.metrics.merge_and_log_n_dicts(env_runner_results, key=ENV_RUNNER_RESULTS)
 
-        # Only train if train_batch is not empty.
-        # In an extreme situation, all rollout workers die during the
-        # synchronous_parallel_sample() call above.
-        # In which case, we should skip training, wait a little bit, then probe again.
         with self.metrics.log_time((TIMERS, LEARNER_UPDATE_TIMER)):
-            if train_batch.agent_steps() > 0:
-                learner_results = self.learner_group.update_from_batch(
-                    batch=train_batch
-                )
-                self.metrics.log_dict(learner_results, key=LEARNER_RESULTS)
-            else:
-                # Wait 1 sec before probing again via weight syncing.
-                time.sleep(1.0)
+            learner_results = self.learner_group.update_from_episodes(
+                episodes=episodes,
+                timesteps={
+                    NUM_ENV_STEPS_SAMPLED_LIFETIME: (
+                        self.metrics.peek(NUM_ENV_STEPS_SAMPLED_LIFETIME)
+                    ),
+                },
+            )
+            self.metrics.log_dict(learner_results, key=LEARNER_RESULTS)
 
         # Update weights - after learning on the local worker - on all
         # remote workers (only those RLModules that were actually trained).
         with self.metrics.log_time((TIMERS, SYNCH_WORKER_WEIGHTS_TIMER)):
             self.env_runner_group.sync_weights(
                 from_worker_or_learner_group=self.learner_group,
-                policies=set(learner_results.keys()) - {ALL_MODULES},
+                policies=list(set(learner_results.keys()) - {ALL_MODULES}),
                 inference_only=True,
             )
 

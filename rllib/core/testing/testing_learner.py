@@ -21,27 +21,19 @@ class BaseTestingAlgorithmConfig(AlgorithmConfig):
 
     @override(AlgorithmConfig)
     def get_default_learner_class(self) -> Type["Learner"]:
-        if self.framework_str == "tf2":
-            from ray.rllib.core.testing.tf.bc_learner import BCTfLearner
+        if self.framework_str == "torch":
+            from ray.rllib.examples.learners.classes.vpg_learner import VPGTorchLearner
 
-            return BCTfLearner
-        elif self.framework_str == "torch":
-            from ray.rllib.core.testing.torch.bc_learner import BCTorchLearner
-
-            return BCTorchLearner
+            return VPGTorchLearner
         else:
             raise ValueError(f"Unsupported framework: {self.framework_str}")
 
     @override(AlgorithmConfig)
     def get_default_rl_module_spec(self) -> "RLModuleSpecType":
-        if self.framework_str == "tf2":
-            from ray.rllib.core.testing.tf.bc_module import DiscreteBCTFModule
+        if self.framework_str == "torch":
+            from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
 
-            cls = DiscreteBCTFModule
-        elif self.framework_str == "torch":
-            from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
-
-            cls = DiscreteBCTorchModule
+            cls = VPGTorchRLModule
         else:
             raise ValueError(f"Unsupported framework: {self.framework_str}")
 
@@ -51,8 +43,8 @@ class BaseTestingAlgorithmConfig(AlgorithmConfig):
         )
 
         if self.is_multi_agent():
-            # TODO (Kourosh): Make this more multi-agent for example with policy ids
-            #  "1" and "2".
+            # TODO (sven): Make this more multi-agent for example with policy ids
+            #  "p0" and "p1".
             return MultiRLModuleSpec(
                 multi_rl_module_class=MultiRLModule,
                 module_specs={DEFAULT_MODULE_ID: spec},

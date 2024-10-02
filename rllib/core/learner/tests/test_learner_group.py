@@ -17,13 +17,10 @@ from ray.rllib.core import (
 from ray.rllib.core.learner.learner import Learner
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-from ray.rllib.core.testing.torch.bc_learner import BCTorchLearner
-from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
-from ray.rllib.core.testing.utils import (
-    add_module_to_learner_or_learner_group,
-)
 from ray.rllib.core.testing.testing_learner import BaseTestingAlgorithmConfig
 from ray.rllib.examples.envs.classes.multi_agent import MultiAgentCartPole
+from ray.rllib.examples.learners.classes.vpg_learner import VPGTorchLearner
+from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
 from ray.rllib.utils.test_utils import check, get_cartpole_dataset_reader
 from ray.rllib.utils.metrics import ALL_MODULES
@@ -84,11 +81,17 @@ class RemoteTrainingHelper:
 
         new_module_id = "test_module"
 
-        add_module_to_learner_or_learner_group(
-            config, env, new_module_id, learner_group
+        learner_group.add_module(
+            module_id=new_module_id,
+            module_spec=config.get_multi_rl_module_spec(env=env).module_specs[
+                DEFAULT_MODULE_ID
+            ],
         )
-        add_module_to_learner_or_learner_group(
-            config, env, new_module_id, local_learner
+        local_learner.add_module(
+            module_id=new_module_id,
+            module_spec=config.get_multi_rl_module_spec(env=env).module_specs[
+                DEFAULT_MODULE_ID
+            ],
         )
 
         # make the state of the learner and the local learner_group identical
@@ -195,10 +198,10 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
         # Config for which user defines custom learner class and RLModule spec.
         config = (
             BaseTestingAlgorithmConfig()
-            .training(learner_class=BCTorchLearner)
+            .training(learner_class=VPGTorchLearner)
             .rl_module(
                 rl_module_spec=RLModuleSpec(
-                    module_class=DiscreteBCTorchModule,
+                    module_class=VPGTorchRLModule,
                     model_config_dict={"fcnet_hiddens": [32]},
                 )
             )
@@ -287,8 +290,11 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
             new_module_id = "test_module"
 
             # Add a test_module.
-            add_module_to_learner_or_learner_group(
-                config, env, new_module_id, learner_group
+            learner_group.add_module(
+                module_id=new_module_id,
+                module_spec=config.get_multi_rl_module_spec(env=env).module_specs[
+                    DEFAULT_MODULE_ID
+                ],
             )
 
             # Do training that includes the test_module.

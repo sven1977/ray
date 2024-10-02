@@ -8,7 +8,7 @@ import torch
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.torch import TorchRLModule
 from ray.rllib.core.rl_module.torch.torch_compile_config import TorchCompileConfig
-from ray.rllib.core.testing.torch.bc_module import DiscreteBCTorchModule
+from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
 from ray.rllib.utils.test_utils import check
 from ray.rllib.utils.torch_utils import _dynamo_is_available
 
@@ -17,7 +17,7 @@ class TestRLModule(unittest.TestCase):
     def test_compilation(self):
 
         env = gym.make("CartPole-v1")
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
@@ -29,7 +29,7 @@ class TestRLModule(unittest.TestCase):
 
         bsize = 1024
         env = gym.make("CartPole-v1")
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
@@ -60,7 +60,7 @@ class TestRLModule(unittest.TestCase):
         """Test forward inference and exploration of"""
 
         env = gym.make("CartPole-v1")
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
@@ -76,7 +76,7 @@ class TestRLModule(unittest.TestCase):
     def test_get_set_state(self):
 
         env = gym.make("CartPole-v1")
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
@@ -85,7 +85,7 @@ class TestRLModule(unittest.TestCase):
         state = module.get_state()
         self.assertIsInstance(state, dict)
 
-        module2 = DiscreteBCTorchModule(
+        module2 = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
@@ -99,7 +99,7 @@ class TestRLModule(unittest.TestCase):
 
     def test_checkpointing(self):
         env = gym.make("CartPole-v1")
-        module = DiscreteBCTorchModule(
+        module = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
@@ -107,7 +107,7 @@ class TestRLModule(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = "/tmp/rl_module_test"
             module.save_to_path(tmpdir)
-            new_module = DiscreteBCTorchModule.from_checkpoint(tmpdir)
+            new_module = VPGTorchRLModule.from_checkpoint(tmpdir)
 
         check(module.get_state(), new_module.get_state())
         self.assertNotEqual(id(module), id(new_module))
@@ -128,7 +128,7 @@ class TestRLModuleGPU(unittest.TestCase):
 
         memory_before_create = get_memory_usage_cuda()
 
-        torch_rl_module = DiscreteBCTorchModule(
+        torch_rl_module = VPGTorchRLModule(
             observation_space=env.observation_space,
             action_space=env.action_space,
             model_config={"fcnet_hiddens": [32]},
