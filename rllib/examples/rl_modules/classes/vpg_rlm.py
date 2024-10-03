@@ -11,13 +11,14 @@ class VPGTorchRLModule(TorchRLModule):
 
     Use this as a minimum, bare-bones example implementation of a custom TorchRLModule.
     """
+
     @override(TorchRLModule)
     def setup(self):
         input_dim = self.observation_space.shape[0]
         hidden_dim = self.model_config["hidden_dim"]
         output_dim = self.action_space.n
 
-        self.policy = nn.Sequential(
+        self._policy_net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
@@ -35,5 +36,5 @@ class VPGTorchRLModule(TorchRLModule):
 
     @override(TorchRLModule)
     def _forward_train(self, batch, **kwargs):
-        action_logits = self.policy(batch[Columns.OBS])
+        action_logits = self._policy_net(batch[Columns.OBS])
         return {Columns.ACTION_DIST_INPUTS: action_logits}
