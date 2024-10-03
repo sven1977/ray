@@ -6,11 +6,10 @@ import unittest
 import ray
 from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.learner.learner import Learner
-from ray.rllib.core.testing.testing_learner import BaseTestingAlgorithmConfig
-
+from ray.rllib.examples.algorithms.classes.vpg import VPGConfig
 from ray.rllib.utils.numpy import convert_to_numpy
 from ray.rllib.utils.framework import try_import_torch
-from ray.rllib.utils.test_utils import check, get_cartpole_dataset_reader
+from ray.rllib.utils.test_utils import check, get_cartpole_offline_data
 from ray.rllib.utils.metrics import ALL_MODULES
 
 torch, _ = try_import_torch()
@@ -30,10 +29,10 @@ class TestLearner(unittest.TestCase):
 
     def test_end_to_end_update(self):
 
-        config = BaseTestingAlgorithmConfig()
+        config = VPGConfig()
 
         learner = config.build_learner(env=self.ENV)
-        reader = get_cartpole_dataset_reader(batch_size=512)
+        reader = get_cartpole_offline_data(batch_size=512, learner=learner)
 
         min_loss = float("inf")
         for iter_i in range(1000):
@@ -51,7 +50,7 @@ class TestLearner(unittest.TestCase):
         Tests that if we sum all the trainable variables the gradient of output w.r.t.
         the weights is all ones.
         """
-        config = BaseTestingAlgorithmConfig()
+        config = VPGConfig()
 
         learner = config.build_learner(env=self.ENV)
 
@@ -72,7 +71,7 @@ class TestLearner(unittest.TestCase):
         """Tests the base grad clipping logic in `postprocess_gradients()`."""
 
         # Clip by value only.
-        config = BaseTestingAlgorithmConfig().training(
+        config = VPGConfig().training(
             lr=0.0003, grad_clip=0.75, grad_clip_by="value"
         )
 
@@ -143,7 +142,7 @@ class TestLearner(unittest.TestCase):
         Tests that if we apply gradients of all ones, the new params are equal to the
         standard SGD/Adam update rule.
         """
-        config = BaseTestingAlgorithmConfig().training(lr=0.0003)
+        config = VPGConfig().training(lr=0.0003)
 
         learner = config.build_learner(env=self.ENV)
 
@@ -170,7 +169,7 @@ class TestLearner(unittest.TestCase):
         from default), and remove the default module, with a loss that is the sum of
         all variables the updated parameters follow the SGD update rule.
         """
-        config = BaseTestingAlgorithmConfig().training(lr=0.0003)
+        config = VPGConfig().training(lr=0.0003)
 
         learner = config.build_learner(env=self.ENV)
         rl_module_spec = config.get_default_rl_module_spec()
@@ -202,7 +201,7 @@ class TestLearner(unittest.TestCase):
 
     def test_save_to_path_and_restore_from_path(self):
         """Tests, whether a Learner's state is properly saved and restored."""
-        config = BaseTestingAlgorithmConfig()
+        config = VPGConfig()
 
         # Get a Learner instance for the framework and env.
         learner1 = config.build_learner(env=self.ENV)

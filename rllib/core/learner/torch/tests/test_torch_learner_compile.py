@@ -5,9 +5,9 @@ import gymnasium as gym
 
 import ray
 from ray.rllib.algorithms.algorithm_config import TorchCompileWhatToCompile
-from ray.rllib.core.testing.testing_learner import BaseTestingAlgorithmConfig
+from ray.rllib.examples.algorithms.classes.vpg import VPGConfig
 from ray.rllib.policy.sample_batch import MultiAgentBatch
-from ray.rllib.utils.test_utils import get_cartpole_dataset_reader
+from ray.rllib.utils.test_utils import get_cartpole_offline_data
 from ray.rllib.utils.torch_utils import _dynamo_is_available
 
 
@@ -43,7 +43,7 @@ class TestLearner(unittest.TestCase):
                 f"Testing is_multi_agent={is_multi_agent},"
                 f"what_to_compile={what_to_compile}"
             )
-            config = BaseTestingAlgorithmConfig().framework(
+            config = VPGConfig().framework(
                 torch_compile_learner=True,
                 torch_compile_learner_what_to_compile=what_to_compile,
             )
@@ -51,7 +51,7 @@ class TestLearner(unittest.TestCase):
 
             learner.build()
 
-            reader = get_cartpole_dataset_reader(batch_size=512)
+            reader = get_cartpole_offline_data(batch_size=512)
 
             for iter_i in range(10):
                 batch = reader.next()
@@ -84,12 +84,12 @@ class TestLearner(unittest.TestCase):
 
         env = gym.make("CartPole-v1")
 
-        config = BaseTestingAlgorithmConfig().framework(torch_compile_learner=True)
+        config = VPGConfig().framework(torch_compile_learner=True)
         learner = config.build_learner(env=env)
 
         import torch._dynamo as dynamo
 
-        reader = get_cartpole_dataset_reader(batch_size=512)
+        reader = get_cartpole_offline_data(batch_size=512)
 
         batch = reader.next().as_multi_agent()
         batch = learner._convert_batch_type(batch)

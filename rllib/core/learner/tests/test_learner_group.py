@@ -17,12 +17,12 @@ from ray.rllib.core import (
 from ray.rllib.core.learner.learner import Learner
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
-from ray.rllib.core.testing.testing_learner import BaseTestingAlgorithmConfig
+from ray.rllib.examples.algorithms.classes.vpg import VPGConfig
 from ray.rllib.examples.envs.classes.multi_agent import MultiAgentCartPole
 from ray.rllib.examples.learners.classes.vpg_learner import VPGTorchLearner
 from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
 from ray.rllib.policy.sample_batch import SampleBatch, MultiAgentBatch
-from ray.rllib.utils.test_utils import check, get_cartpole_dataset_reader
+from ray.rllib.utils.test_utils import check, get_cartpole_offline_data
 from ray.rllib.utils.metrics import ALL_MODULES
 from ray.rllib.utils.metrics.metrics_logger import MetricsLogger
 from ray.util.timer import _Timer
@@ -59,14 +59,14 @@ class RemoteTrainingHelper:
 
         env = gym.make("CartPole-v1")
 
-        reader = get_cartpole_dataset_reader(batch_size=500)
-        batch = reader.next().as_multi_agent()
-
         config_overrides = LOCAL_CONFIGS[scaling_mode]
-        config = BaseTestingAlgorithmConfig().update_from_dict(config_overrides)
+        config = VPGConfig().update_from_dict(config_overrides)
 
         learner_group = config.build_learner_group(env=env)
         local_learner = config.build_learner(env=env)
+
+        reader = get_cartpole_offline_data(batch_size=500, learner=local_learner)
+        batch = reader.next().as_multi_agent()
 
         # Make the state of the learner and the local learner_group identical.
         local_learner.set_state(learner_group.get_state()[COMPONENT_LEARNER])
@@ -190,14 +190,14 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
         env = gym.make("CartPole-v1")
 
         # Config that has its own learner class and RLModule spec.
-        config = BaseTestingAlgorithmConfig()
+        config = VPGConfig()
         learner_group = config.build_learner_group(env=env)
         print(learner_group)
         learner_group.shutdown()
 
         # Config for which user defines custom learner class and RLModule spec.
         config = (
-            BaseTestingAlgorithmConfig()
+            VPGConfig()
             .training(learner_class=VPGTorchLearner)
             .rl_module(
                 rl_module_spec=RLModuleSpec(
@@ -236,9 +236,12 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
             env = gym.make("CartPole-v1")
 
             config_overrides = REMOTE_CONFIGS[scaling_mode]
-            config = BaseTestingAlgorithmConfig().update_from_dict(config_overrides)
+            config = VPGConfig().update_from_dict(config_overrides)
             learner_group = config.build_learner_group(env=env)
-            reader = get_cartpole_dataset_reader(batch_size=1024)
+            reader = get_cartpole_offline_data(
+                batch_size=1024,
+                learner=learner_group._learner,
+            )
 
             min_loss = float("inf")
             for iter_i in range(1000):
@@ -279,9 +282,9 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
             config_overrides = REMOTE_CONFIGS.get(scaling_mode) or LOCAL_CONFIGS.get(
                 scaling_mode
             )
-            config = BaseTestingAlgorithmConfig().update_from_dict(config_overrides)
+            config = VPGConfig().update_from_dict(config_overrides)
             learner_group = config.build_learner_group(env=env)
-            reader = get_cartpole_dataset_reader(batch_size=512)
+            reader = get_cartpole_offline_data(batch_size=512)
             batch = reader.next()
 
             # Update once with the default policy.
@@ -358,7 +361,7 @@ class TestLearnerGroupCheckpointRestore(unittest.TestCase):
             config_overrides = REMOTE_CONFIGS.get(scaling_mode) or LOCAL_CONFIGS.get(
                 scaling_mode
             )
-            config = BaseTestingAlgorithmConfig().update_from_dict(config_overrides)
+            config = VPGConfig().update_from_dict(config_overrides)
             learner_group = config.build_learner_group(env=env)
             spec = config.get_multi_rl_module_spec(env=env).module_specs[
                 DEFAULT_MODULE_ID
@@ -465,7 +468,7 @@ class TestLearnerGroupSaveLoadState(unittest.TestCase):
             config_overrides = REMOTE_CONFIGS.get(scaling_mode) or LOCAL_CONFIGS.get(
                 scaling_mode
             )
-            config = BaseTestingAlgorithmConfig().update_from_dict(config_overrides)
+            config = VPGConfig().update_from_dict(config_overrides)
             learner_group = config.build_learner_group(env=env)
 
             # Checkpoint the initial learner state for later comparison.
@@ -557,9 +560,9 @@ class TestLearnerGroupAsyncUpdate(unittest.TestCase):
             print(f"Testing framework: {fw}, scaling mode: {scaling_mode}.")
             env = gym.make("CartPole-v1")
             config_overrides = REMOTE_CONFIGS[scaling_mode]
-            config = BaseTestingAlgorithmConfig().update_from_dict(config_overrides)
+            config = VPGConfig().update_from_dict(config_overrides)
             learner_group = config.build_learner_group(env=env)
-            reader = get_cartpole_dataset_reader(batch_size=512)
+            reader = get_cartpole_offline_data(batch_size=512)
             batch = reader.next()
             timer_sync = _Timer()
             timer_async = _Timer()

@@ -242,7 +242,7 @@ class MultiRLModule(RLModule):
             )
         # Set our own inference_only flag to False as soon as any added Module
         # has `inference_only=False`.
-        if not module.config.inference_only:
+        if not module.inference_only:
             self.inference_only = False
         self._rl_modules[module_id] = module
         # Update our RLModuleSpecs dict, such that - if written to disk -
@@ -252,7 +252,7 @@ class MultiRLModule(RLModule):
     def remove_module(
         self, module_id: ModuleID, *, raise_err_if_not_found: bool = True
     ) -> None:
-        """Removes a module at run time from the multi-agent module.
+        """Removes a module at runtime from the multi-agent module.
 
         Args:
             module_id: The module ID to remove.
@@ -451,11 +451,11 @@ class MultiRLModule(RLModule):
             # Go through all of our current modules and check, whether they are listed
             # in the given MultiRLModuleSpec. If not, erase them from `self`.
             for module_id, module in self._rl_modules.items():
-                if module_id not in multi_rl_module_spec.module_specs:
+                if module_id not in multi_rl_module_spec.rl_module_specs:
                     self.remove_module(module_id, raise_err_if_not_found=True)
             # Go through all the modules in the given MultiRLModuleSpec and if
             # they are not present in `self`, add them.
-            for module_id, module_spec in multi_rl_module_spec.module_specs.items():
+            for module_id, module_spec in multi_rl_module_spec.rl_module_specs.items():
                 if module_id not in self:
                     self.add_module(module_id, module_spec.build(), override=False)
 
@@ -714,7 +714,7 @@ class MultiRLModuleSpec:
             action_space=gym_space_from_dict(d.get("action_space")),
             model_config=d.get("model_config"),
             inference_only=d["inference_only"],
-            module_specs={
+            rl_module_specs={
                 module_id: RLModuleSpec.from_dict(rl_module_spec)
                 for module_id, rl_module_spec in (
                     d.get("rl_module_specs", d.get("module_specs")).items()

@@ -1,19 +1,14 @@
 import argparse
 from collections import Counter
 import copy
-import gymnasium as gym
-from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
-from gymnasium.spaces import Dict as GymDict
-from gymnasium.spaces import Tuple as GymTuple
 import json
 import logging
-import numpy as np
 import os
+from pathlib import Path
 import pprint
 import random
 import re
 import time
-import tree  # pip install dm_tree
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -26,11 +21,19 @@ from typing import (
 )
 import yaml
 
+import gymnasium as gym
+from gymnasium.spaces import Box, Discrete, MultiDiscrete, MultiBinary
+from gymnasium.spaces import Dict as GymDict
+from gymnasium.spaces import Tuple as GymTuple
+import numpy as np
+import tree  # pip install dm_tree
+
 import ray
 from ray import air, tune
 from ray.air.constants import TRAINING_ITERATION
 from ray.air.integrations.wandb import WandbLoggerCallback, WANDB_ENV_VAR
 from ray.rllib.common import SupportedFileType
+from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.env.wrappers.atari_wrappers import is_atari, wrap_deepmind
 from ray.rllib.train import load_experiments_from_file
 from ray.rllib.utils.annotations import OldAPIStack
@@ -789,7 +792,6 @@ def check_train_results_new_api_stack(train_results: ResultDict) -> None:
             data in it.
     """
     # Import these here to avoid circular dependencies.
-    from ray.rllib.core import DEFAULT_MODULE_ID
     from ray.rllib.utils.metrics import (
         ENV_RUNNER_RESULTS,
         FAULT_TOLERANCE_STATS,
@@ -1774,35 +1776,75 @@ def check_reproducibilty(
             )
 
 
-def get_cartpole_dataset_reader(batch_size: int = 1) -> "DatasetReader":
+def get_cartpole_offline_data(batch_size, learner) -> "DatasetReader":
     """Returns a DatasetReader for the cartpole dataset.
+
     Args:
         batch_size: The batch size to use for the reader.
+
     Returns:
         A rllib DatasetReader for the cartpole dataset.
     """
     from ray.rllib.algorithms import AlgorithmConfig
-    from ray.rllib.offline import IOContext
-    from ray.rllib.offline.dataset_reader import (
-        DatasetReader,
-        get_dataset_and_shards,
+    from ray.rllib.env import INPUT_ENV_SPACES
+    from ray.rllib.offline.offline_data import OfflineData
+
+    # Define the data paths.
+    data_path = "tests/data/cartpole/cartpole-v1_large"
+    base_path = Path(__file__).parents[1]
+    data_path = "local://" / base_path / data_path
+    assert data_path.is_dir(), data_path
+
+    # Define the BC config.
+    config = (
+        AlgorithmConfig()
+        .api_stack(
+            enable_rl_module_and_learner=True,
+            enable_env_runner_and_connector_v2=True,
+        )
+        .offline_data(
+            input_=[data_path.as_posix()],
+            input_read_method_kwargs={"override_num_blocks": 2},
+            map_batches_kwargs={"concurrency": 2, "num_cpus": 2},
+            iter_batches_kwargs={
+                "prefetch_batches": 1,
+                "local_shuffle_buffer_size": None,
+            },
+            dataset_num_iters_per_learner=1,
+        )
+        .training(
+            train_batch_size_per_learner=batch_size,
+        )
     )
 
-    path = "tests/data/cartpole/large.json"
-    input_config = {"format": "json", "paths": path}
-    dataset, _ = get_dataset_and_shards(
-        AlgorithmConfig().offline_data(input_="dataset", input_config=input_config)
-    )
-    ioctx = IOContext(
-        config=(
-            AlgorithmConfig()
-            .training(train_batch_size=batch_size)
-            .offline_data(actions_in_input_normalized=True)
-        ),
-        worker_index=0,
-    )
-    reader = DatasetReader(dataset, ioctx)
-    return reader
+    offline_data = OfflineData(config)
+    offline_data.learner_handles = [learner]
+    env = gym.make("CartPole-v1")
+    offline_data.spaces = {INPUT_ENV_SPACES: (env.observation_space, env.action_space)}
+    env.close()
+    return offline_data
+
+#from ray.rllib.offline import IOContext
+    #from ray.rllib.offline.dataset_reader import (
+    #    DatasetReader,
+    #    get_dataset_and_shards,
+    #)
+
+    #path = "tests/data/cartpole/large.json"
+    #input_config = {"format": "json", "paths": path}
+    #dataset, _ = get_dataset_and_shards(
+    #    AlgorithmConfig().offline_data(input_="dataset", input_config=input_config)
+    #)
+    #ioctx = IOContext(
+    #    config=(
+    #        AlgorithmConfig()
+    #        .training(train_batch_size=batch_size)
+    #        .offline_data(actions_in_input_normalized=True)
+    #    ),
+    #    worker_index=0,
+    #)
+    #reader = DatasetReader(dataset, ioctx)
+    #return reader
 
 
 class ModelChecker:

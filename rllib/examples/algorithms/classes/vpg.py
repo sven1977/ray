@@ -18,25 +18,47 @@ from ray.rllib.utils.typing import ResultDict
 
 
 class VPGConfig(AlgorithmConfig):
+    # A test setting to activate metrics on mean weights.
+    report_mean_weights: bool = True
+
     def __init__(self, algo_class=None):
         super().__init__(algo_class=algo_class or VPG)
 
         # VPG specific overrides.
         self.num_env_runners = 1
 
+        # Switch on the new API stack by default.
+        self.api_stack(
+            enable_env_runner_and_connector_v2=True,
+            enable_rl_module_and_learner=True,
+        )
+
     @override(AlgorithmConfig)
     def get_default_rl_module_spec(self):
         if self.framework_str == "torch":
-            return RLModuleSpec(module_class=VPGTorchRLModule)
+            spec = RLModuleSpec(
+                module_class=VPGTorchRLModule,
+                model_config={"hidden_dim": 64},
+            )
         else:
-            raise NotImplementedError
+            raise ValueError(f"Unsupported framework: {self.framework_str}")
+
+        #if self.is_multi_agent():
+        #    # TODO (sven): Make this more multi-agent for example with policy ids
+        #    #  "p0" and "p1".
+        #    return MultiRLModuleSpec(
+        #        multi_rl_module_class=MultiRLModule,
+        #        module_specs={DEFAULT_MODULE_ID: spec},
+        #    )
+        #else:
+        return spec
 
     @override(AlgorithmConfig)
     def get_default_learner_class(self):
         if self.framework_str == "torch":
             return VPGTorchLearner
         else:
-            raise NotImplementedError
+            raise ValueError(f"Unsupported framework: {self.framework_str}")
 
 
 class VPG(Algorithm):
