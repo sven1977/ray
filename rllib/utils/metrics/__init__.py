@@ -10,7 +10,7 @@ LEARNER_RESULTS = "learners"
 FAULT_TOLERANCE_STATS = "fault_tolerance"
 TIMERS = "timers"
 
-# RLModule metrics
+# RLModule metrics.
 NUM_TRAINABLE_PARAMETERS = "num_trainable_parameters"
 NUM_NON_TRAINABLE_PARAMETERS = "num_non_trainable_parameters"
 
