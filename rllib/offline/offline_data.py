@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 class OfflineData:
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     def __init__(self, config: AlgorithmConfig):
+
         self.config = config
         self.is_multi_agent = self.config.is_multi_agent()
         self.path = (
