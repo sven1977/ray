@@ -27,26 +27,16 @@ class DefaultBCTorchRLModule(TorchRLModule, abc.ABC):
         self._pi_head = self.catalog.build_pi_head(framework=self.framework)
 
     @override(TorchRLModule)
-    def _forward_inference(self, batch: Dict, **kwargs) -> Dict[str, Any]:
-        """BC forward pass for action inference."""
+    def _forward(self, batch: Dict, **kwargs) -> Dict[str, Any]:
+        """Generic BC forward pass."""
         output = {}
-        # State encodings.
+        # Features.
         encoder_outs = self._encoder(batch)
         # Actions.
-        action_logits = self._pi_head(encoder_outs[ENCODER_OUT])
-        output[Columns.ACTION_DIST_INPUTS] = action_logits
-
+        output[Columns.ACTION_DIST_INPUTS] = (
+            self._pi_head(encoder_outs[ENCODER_OUT])
+        )
         return output
-
-    @override(RLModule)
-    def _forward_exploration(self, batch: Dict, **kwargs) -> Dict[str, Any]:
-        """BC forward pass for exploratory behavior."""
-        return self._forward_inference(batch)
-
-    @override(RLModule)
-    def _forward_train(self, batch: Dict, **kwargs) -> Dict[str, Any]:
-        """BC forward pass for training."""
-        return self._forward_inference(batch)
 
     @override(RLModule)
     def output_specs_train(self) -> SpecType:

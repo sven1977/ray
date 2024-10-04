@@ -123,7 +123,7 @@ if __name__ == "__main__":
             lr=0.0003,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "fcnet_hiddens": [32],
                 "fcnet_activation": "linear",
                 "vf_share_layers": True,
@@ -152,7 +152,7 @@ if __name__ == "__main__":
             entropy_coeff=0.0,
         )
         base_config.rl_module(
-            model_config_dict={
+            model_config={
                 "vf_share_layers": True,
             }
         )

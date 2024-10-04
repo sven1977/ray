@@ -65,23 +65,23 @@ class VPGTorchMultiRLModuleWithSharedEncoder(MultiRLModule):
 
         config.rl_module(
             rl_module_spec=MultiRLModuleSpec(
-                module_specs={
+                rl_module_specs={
                     # Central/shared encoder net.
                     SHARED_ENCODER_ID: RLModuleSpec(
                         module_class=SharedTorchEncoder,
-                        model_config_dict={"feature_dim": FEATURE_DIM},
+                        model_config={"feature_dim": FEATURE_DIM},
                     ),
                     # Arbitrary number of policy nets (w/o encoder sub-net).
                     "p0": RLModuleSpec(
                         module_class=VPGTorchRLModuleUsingSharedEncoder,
-                        model_config_dict={
+                        model_config={
                             "feature_dim": FEATURE_DIM,
                             "hidden_dim": HIDDEN_DIM,
                         },
                     ),
                     "p1": RLModuleSpec(
                         module_class=VPGTorchRLModuleUsingSharedEncoder,
-                        model_config_dict={
+                        model_config={
                             "feature_dim": FEATURE_DIM,
                             "hidden_dim": HIDDEN_DIM,
                         },
@@ -109,7 +109,7 @@ class VPGTorchMultiRLModuleWithSharedEncoder(MultiRLModule):
         )
 
     @override(MultiRLModule)
-    def _run_forward_pass(self, forward_fn_name, batch, **kwargs):
+    def _forward(self, forward_fn_name, batch, **kwargs):
         outputs = {}
         encoder_forward_fn = getattr(
             self._rl_modules[SHARED_ENCODER_ID], forward_fn_name

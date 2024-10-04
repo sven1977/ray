@@ -18,14 +18,14 @@ class TestMultiRLModule(unittest.TestCase):
             module_class=VPGTorchRLModule,
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config_dict={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         )
 
         module2 = RLModuleSpec(
             module_class=VPGTorchRLModule,
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config_dict={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         )
 
         multi_rl_module = MultiRLModule(
@@ -44,7 +44,7 @@ class TestMultiRLModule(unittest.TestCase):
         multi_rl_module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         ).as_multi_rl_module()
 
         self.assertNotIsInstance(multi_rl_module, VPGTorchRLModule)
@@ -63,7 +63,7 @@ class TestMultiRLModule(unittest.TestCase):
         module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         ).as_multi_rl_module()
 
         state = module.get_state()
@@ -80,7 +80,7 @@ class TestMultiRLModule(unittest.TestCase):
         module2 = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         ).as_multi_rl_module()
         state2 = module2.get_state()
         check(state[DEFAULT_MODULE_ID], state2[DEFAULT_MODULE_ID], false=True)
@@ -98,7 +98,7 @@ class TestMultiRLModule(unittest.TestCase):
         module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         ).as_multi_rl_module()
 
         module.add_module(
@@ -106,7 +106,7 @@ class TestMultiRLModule(unittest.TestCase):
             VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
-                model_config={"fcnet_hiddens": [32]},
+                model_config={"hidden_dim": 32},
             ),
         )
         self.assertEqual(set(module.keys()), {DEFAULT_MODULE_ID, "test"})
@@ -121,7 +121,7 @@ class TestMultiRLModule(unittest.TestCase):
                 VPGTorchRLModule(
                     observation_space=env.get_observation_space(0),
                     action_space=env.get_action_space(0),
-                    model_config={"fcnet_hiddens": [32]},
+                    model_config={"hidden_dim": 32},
                 ),
             ),
         )
@@ -131,7 +131,7 @@ class TestMultiRLModule(unittest.TestCase):
             VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
-                model_config={"fcnet_hiddens": [32]},
+                model_config={"hidden_dim": 32},
             ),
             override=True,
         )
@@ -143,7 +143,7 @@ class TestMultiRLModule(unittest.TestCase):
         module = VPGTorchRLModule(
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [32]},
+            model_config={"hidden_dim": 32},
         ).as_multi_rl_module()
 
         module.add_module(
@@ -151,7 +151,7 @@ class TestMultiRLModule(unittest.TestCase):
             VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
-                model_config={"fcnet_hiddens": [32]},
+                model_config={"hidden_dim": 32},
             ),
         )
         module.add_module(
@@ -159,7 +159,7 @@ class TestMultiRLModule(unittest.TestCase):
             VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
-                model_config={"fcnet_hiddens": [128]},
+                model_config={"hidden_dim": 128},
             ),
         )
 
@@ -188,7 +188,7 @@ class TestMultiRLModule(unittest.TestCase):
             VPGTorchRLModule(
                 observation_space=env.get_observation_space(0),
                 action_space=env.get_action_space(0),
-                model_config={"fcnet_hiddens": [120]},
+                model_config={"hidden_dim": 120},
             ),
         )
         # Check that - after adding a module - the checkpoint is correct.

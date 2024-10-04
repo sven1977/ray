@@ -70,7 +70,7 @@ if __name__ == "__main__":
             vf_loss_coeff=0.005,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "use_lstm": args.use_lstm,
                 # Use a simpler FCNet when we also have an LSTM.
                 "fcnet_hiddens": [32] if args.use_lstm else [256, 256],
@@ -79,7 +79,7 @@ if __name__ == "__main__":
                 "vf_share_layers": True,
             },
             rl_module_spec=MultiRLModuleSpec(
-                module_specs={
+                rl_module_specs={
                     "p0": RLModuleSpec(),
                     "p1": RLModuleSpec(),
                 }

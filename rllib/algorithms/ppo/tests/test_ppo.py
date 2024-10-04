@@ -13,7 +13,7 @@ from ray.rllib.utils.metrics import LEARNER_RESULTS
 from ray.rllib.utils.test_utils import check, check_train_results_new_api_stack
 
 
-def get_model_config(framework, lstm=False):
+def get_model_config(lstm=False):
     return (
         dict(
             use_lstm=True,
@@ -103,8 +103,8 @@ class TestPPO(unittest.TestCase):
             for lstm in [False]:
                 print("LSTM={}".format(lstm))
                 config.rl_module(
-                    model_config_dict=get_model_config("torch", lstm=lstm)
-                ).framework(eager_tracing=False)
+                    model_config=get_model_config(lstm=lstm)
+                )
 
                 algo = config.build(env=env)
                 # TODO: Maybe add an API to get the Learner(s) instances within
@@ -143,7 +143,7 @@ class TestPPO(unittest.TestCase):
                 num_env_runners=1,
             )
             .rl_module(
-                model_config_dict={
+                model_config={
                     "fcnet_hiddens": [10],
                     "fcnet_activation": "linear",
                     "free_log_std": True,

@@ -130,7 +130,9 @@ class RLModuleSpec:
                 inference_only=module.inference_only,
                 learner_only=module.learner_only,
                 model_config=module.model_config,
-                catalog_class=type(module.catalog),
+                catalog_class=(
+                    type(module.catalog) if module.catalog is not None else None
+                ),
             )
 
         # Old path through deprecated `RLModuleConfig` class. Used only if `module`
@@ -156,7 +158,7 @@ class RLModuleSpec:
             "inference_only": self.inference_only,
             "learner_only": self.learner_only,
             "model_config": self._get_model_config(),
-            "catalog_class": serialize_type(self.catalog_class),
+            "catalog_class": serialize_type(self.catalog_class) if self.catalog_class is not None else None,
         }
 
     @classmethod
@@ -171,7 +173,7 @@ class RLModuleSpec:
                 inference_only=d["inference_only"],
                 learner_only=d["learner_only"],
                 model_config=d["model_config"],
-                catalog_class=deserialize_type(d["catalog_class"]),
+                catalog_class=deserialize_type(d["catalog_class"]) if d["catalog_class"] is not None else None,
             )
 
         # Old path through deprecated `RLModuleConfig` class.
@@ -225,7 +227,7 @@ class RLModuleSpec:
         from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 
         return MultiRLModuleSpec(
-            module_specs={DEFAULT_MODULE_ID: self},
+            rl_module_specs={DEFAULT_MODULE_ID: self},
             load_state_path=self.load_state_path,
         )
 
@@ -388,7 +390,7 @@ class RLModule(Checkpointable, abc.ABC):
         observation_space: Optional[gym.Space] = None,
         action_space: Optional[gym.Space] = None,
         inference_only: Optional[bool] = None,
-        learner_only: Optional[bool] = None,
+        learner_only: bool = False,
         model_config: Optional[Union[dict, DefaultModelConfig]] = None,
         catalog_class=None,
     ):
@@ -736,7 +738,9 @@ class RLModule(Checkpointable, abc.ABC):
                 "inference_only": self.inference_only,
                 "learner_only": self.learner_only,
                 "model_config": self.model_config,
-                "catalog_class": type(self.catalog),
+                "catalog_class": (
+                    type(self.catalog) if self.catalog is not None else None
+                ),
             },  # **kwargs
         )
 
@@ -786,8 +790,9 @@ class RLModule(Checkpointable, abc.ABC):
         """Returns a multi-agent wrapper around this module."""
         from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 
-        multi_rl_module = MultiRLModule()
-        multi_rl_module.add_module(DEFAULT_MODULE_ID, self)
+        multi_rl_module = MultiRLModule(
+            rl_module_specs={DEFAULT_MODULE_ID: RLModuleSpec.from_module(self)}
+        )
         return multi_rl_module
 
     def unwrapped(self) -> "RLModule":

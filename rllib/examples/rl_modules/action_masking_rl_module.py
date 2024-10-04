@@ -110,7 +110,7 @@ if __name__ == "__main__":
             },
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "post_fcnet_hiddens": [64, 64],
                 "post_fcnet_activation": "relu",
             },

@@ -28,7 +28,6 @@ class TestLearner(unittest.TestCase):
         ray.shutdown()
 
     def test_end_to_end_update(self):
-
         config = VPGConfig()
 
         learner = config.build_learner(env=self.ENV)
@@ -36,7 +35,7 @@ class TestLearner(unittest.TestCase):
 
         min_loss = float("inf")
         for iter_i in range(1000):
-            batch = reader.next()
+            batch = reader.sample(num_samples=1)
             results = learner.update_from_batch(batch=batch.as_multi_agent())
 
         loss = results[DEFAULT_MODULE_ID][Learner.TOTAL_LOSS_KEY].peek()

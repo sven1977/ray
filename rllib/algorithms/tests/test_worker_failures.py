@@ -543,7 +543,7 @@ class TestWorkerFailures(unittest.TestCase):
                 rollout_fragment_length=16,
             )
             .rl_module(
-                model_config_dict={"fcnet_hiddens": [4]},
+                model_config={"fcnet_hiddens": [4]},
             )
             .training(
                 train_batch_size_per_learner=32,
@@ -602,7 +602,7 @@ class TestWorkerFailures(unittest.TestCase):
                 rollout_fragment_length=16,
             )
             .rl_module(
-                model_config_dict={"fcnet_hiddens": [4]},
+                model_config={"fcnet_hiddens": [4]},
             )
             .training(
                 train_batch_size_per_learner=32,
@@ -711,7 +711,7 @@ class TestWorkerFailures(unittest.TestCase):
                 rollout_fragment_length=16,
             )
             .rl_module(
-                model_config_dict={"fcnet_hiddens": [4]},
+                model_config={"fcnet_hiddens": [4]},
             )
             .training(
                 train_batch_size_per_learner=32,

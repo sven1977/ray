@@ -71,7 +71,7 @@ config = (
         grad_clip_by="global_norm",
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "vf_share_layers": True,
             "conv_filters": [[16, 4, 2], [32, 4, 2], [64, 4, 2], [128, 4, 2]],
             "conv_activation": "relu",

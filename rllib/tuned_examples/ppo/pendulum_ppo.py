@@ -25,7 +25,7 @@ config = (
         # num_epochs=8,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "fcnet_activation": "relu",
         },
     )

@@ -79,7 +79,7 @@ if __name__ == "__main__":
         PPOConfig()
         .environment(env="correlated_actions_env")
         .rl_module(
-            model_config_dict={
+            model_config={
                 "post_fcnet_hiddens": [64, 64],
                 "post_fcnet_activation": "relu",
             },

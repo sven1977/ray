@@ -30,7 +30,7 @@ config = (
         entropy_coeff=0.0,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "vf_share_layers": True,
         },
     )

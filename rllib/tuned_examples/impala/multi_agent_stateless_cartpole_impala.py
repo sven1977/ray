@@ -43,7 +43,7 @@ config = (
         grad_clip=20.0,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "use_lstm": True,
             "max_seq_len": 20,
         },

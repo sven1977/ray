@@ -222,7 +222,7 @@ if __name__ == "__main__":
             vf_loss_coeff=0.01,
             lr=0.0002,
         )
-        .rl_module(model_config_dict={"vf_share_layers": True})
+        .rl_module(model_config={"vf_share_layers": True})
     )
 
     stop = {

@@ -134,7 +134,7 @@ if __name__ == "__main__":
             lr=args.lr,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "vf_share_layers": True,
             },
         )

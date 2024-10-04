@@ -125,7 +125,7 @@ if __name__ == "__main__":
             lr=args.lr_policy,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 # Another very important setting is this here. Make sure you use
                 # completely separate NNs for policy and value-functions.
                 "vf_share_layers": False,

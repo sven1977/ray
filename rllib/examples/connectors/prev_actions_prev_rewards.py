@@ -142,7 +142,7 @@ if __name__ == "__main__":
             vf_loss_coeff=0.01,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "use_lstm": True,
                 "max_seq_len": 20,
                 "fcnet_hiddens": [32],

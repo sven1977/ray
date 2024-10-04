@@ -160,11 +160,11 @@ if __name__ == "__main__":
             policies_to_train=["main"],
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "fcnet_hiddens": [512, 512],
             },
             rl_module_spec=MultiRLModuleSpec(
-                module_specs={
+                rl_module_specs={
                     "main": RLModuleSpec(),
                     "random": RLModuleSpec(module_class=RandomRLModule),
                 }

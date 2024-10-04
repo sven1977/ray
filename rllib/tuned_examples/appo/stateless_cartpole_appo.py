@@ -34,7 +34,7 @@ config = (
         grad_clip=20.0,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "vf_share_layers": True,
             "use_lstm": True,
             "max_seq_len": 20,

@@ -45,7 +45,7 @@ config = (
         dueling=True,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "fcnet_hiddens": [256],
             "fcnet_activation": "tanh",
             "epsilon": [(0, 1.0), (10000, 0.02)],

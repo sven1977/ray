@@ -306,7 +306,7 @@ class TestAlgorithmConfig(unittest.TestCase):
 
         expected_marl_spec = MultiRLModuleSpec(
             multi_rl_module_class=expected_multi_rl_module_class,
-            module_specs={
+            rl_module_specs={
                 "p1": RLModuleSpec(
                     module_class=expected_module_class,
                     observation_space=env.observation_space,
@@ -355,7 +355,7 @@ class TestAlgorithmConfig(unittest.TestCase):
             def get_default_rl_module_spec(self):
                 return MultiRLModuleSpec(
                     multi_rl_module_class=CustomMultiRLModule1,
-                    module_specs=RLModuleSpec(module_class=VPGTorchRLModule),
+                    rl_module_specs=RLModuleSpec(module_class=VPGTorchRLModule),
                 )
 
         ########################################
@@ -386,7 +386,7 @@ class TestAlgorithmConfig(unittest.TestCase):
             )
             .rl_module(
                 rl_module_spec=MultiRLModuleSpec(
-                    module_specs={
+                    rl_module_specs={
                         "p1": RLModuleSpec(module_class=CustomRLModule1),
                         "p2": RLModuleSpec(module_class=CustomRLModule1),
                     },
@@ -430,7 +430,7 @@ class TestAlgorithmConfig(unittest.TestCase):
             )
             .rl_module(
                 rl_module_spec=MultiRLModuleSpec(
-                    module_specs=RLModuleSpec(module_class=CustomRLModule1)
+                    rl_module_specs=RLModuleSpec(module_class=CustomRLModule1)
                 ),
             )
         )
@@ -457,7 +457,7 @@ class TestAlgorithmConfig(unittest.TestCase):
             .rl_module(
                 rl_module_spec=MultiRLModuleSpec(
                     multi_rl_module_class=CustomMultiRLModule1,
-                    module_specs={
+                    rl_module_specs={
                         "p1": RLModuleSpec(module_class=CustomRLModule1),
                         "p2": RLModuleSpec(module_class=CustomRLModule1),
                     },

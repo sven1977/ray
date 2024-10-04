@@ -591,6 +591,15 @@ class MultiRLModuleSpec:
                 "RLModuleSpec or a dictionary mapping from module IDs to "
                 "RLModuleSpecs for each individual module."
             )
+        self.module_specs = self.rl_module_specs
+        # Figure out global inference_only setting.
+        # If not provided (None), only if all submodules are
+        # inference_only, this MultiRLModule will be inference_only.
+        self.inference_only = (
+            self.inference_only
+            if self.inference_only is not None
+            else all(spec.inference_only for spec in self.rl_module_specs.values())
+        )
 
     @OverrideToImplementCustomLogic
     def build(self, module_id: Optional[ModuleID] = None) -> RLModule:
@@ -751,16 +760,16 @@ class MultiRLModuleSpec:
             for mid, spec in self.rl_module_specs.items():
                 self.rl_module_specs[mid].update(other, override=False)
         elif isinstance(other.module_specs, dict):
-            self.add_modules(other.module_specs, override=override)
+            self.add_modules(other.rl_module_specs, override=override)
         else:
             assert isinstance(other, MultiRLModuleSpec)
             if not self.rl_module_specs:
                 self.inference_only = other.inference_only
-                self.rl_module_specs = other.module_specs
+                self.rl_module_specs = other.rl_module_specs
             else:
                 if not other.inference_only:
                     self.inference_only = False
-                self.rl_module_specs.update(other.module_specs)
+                self.rl_module_specs.update(other.rl_module_specs)
 
     def as_multi_rl_module_spec(self) -> "MultiRLModuleSpec":
         """Returns self in order to match `RLModuleSpec.as_multi_rl_module_spec()`."""

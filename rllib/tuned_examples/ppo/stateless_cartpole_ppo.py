@@ -28,7 +28,7 @@ config = (
         vf_loss_coeff=0.05,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "vf_share_layers": True,
             "use_lstm": True,
             "max_seq_len": 20,

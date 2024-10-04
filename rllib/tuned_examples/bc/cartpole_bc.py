@@ -77,7 +77,7 @@ config = (
     )
     .rl_module(
         model_config=DefaultModelConfig(
-            encoder_fcnet_hiddens=[256, 256],
+            fcnet_hiddens=[256, 256],
         ),
     )
 )

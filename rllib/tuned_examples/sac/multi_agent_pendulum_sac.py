@@ -52,7 +52,7 @@ config = (
         num_steps_sampled_before_learning_starts=256,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "fcnet_hiddens": [256, 256],
             "fcnet_activation": "relu",
             "fcnet_weights_initializer": nn.init.xavier_uniform_,

@@ -36,7 +36,7 @@ class TestOfflineEnvRunner(unittest.TestCase):
             .environment("CartPole-v1")
             .rl_module(
                 # Use a small network for this test.
-                model_config_dict={
+                model_config={
                     "fcnet_hiddens": [32],
                     "fcnet_activation": "linear",
                     "vf_share_layers": True,

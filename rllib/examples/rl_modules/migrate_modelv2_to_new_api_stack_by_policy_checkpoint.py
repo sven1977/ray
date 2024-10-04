@@ -85,7 +85,7 @@ if __name__ == "__main__":
     ).rl_module(
         rl_module_spec=RLModuleSpec(
             module_class=ModelV2ToRLModule,
-            model_config_dict={"policy_checkpoint_dir": policy_path},
+            model_config={"policy_checkpoint_dir": policy_path},
         ),
     )
 

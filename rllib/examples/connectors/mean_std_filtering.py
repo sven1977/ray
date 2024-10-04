@@ -150,7 +150,7 @@ if __name__ == "__main__":
             vf_loss_coeff=0.01,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "fcnet_activation": "relu",
                 "fcnet_weights_initializer": torch.nn.init.xavier_uniform_,
                 "fcnet_bias_initializer": torch.nn.init.constant_,

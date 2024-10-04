@@ -38,7 +38,7 @@ config = (
         lambda_=0.5,
     )
     .rl_module(
-        model_config_dict={
+        model_config={
             "fcnet_activation": "relu",
         },
     )

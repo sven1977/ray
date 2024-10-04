@@ -49,11 +49,11 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
             algo_checkpoint_dir = pathlib.Path(algo_checkpoint_dir)
             if not algo_checkpoint_dir.is_dir():
                 raise ValueError(
-                    "The `model_config_dict` of your RLModule must contain a "
+                    "The `model_config` of your RLModule must contain a "
                     "`algo_checkpoint_dir` key pointing to the algo checkpoint "
                     "directory! You can find this dir inside the results dir of your "
                     "experiment. You can then add this path "
-                    "through `config.rl_module(model_config_dict={"
+                    "through `config.rl_module(model_config={"
                     "'algo_checkpoint_dir': [your algo checkpoint dir]})`."
                 )
             policy_checkpoint_dir = algo_checkpoint_dir / "policies" / policy_id
@@ -68,12 +68,12 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
             policy_checkpoint_dir = pathlib.Path(policy_checkpoint_dir)
             if not policy_checkpoint_dir.is_dir():
                 raise ValueError(
-                    "The `model_config_dict` of your RLModule must contain a "
+                    "The `model_config` of your RLModule must contain a "
                     "`policy_checkpoint_dir` key pointing to the policy checkpoint "
                     "directory! You can find this dir under the Algorithm's checkpoint "
                     "dir in subdirectory: [algo checkpoint dir]/policies/[policy ID "
                     "ex. `default_policy`]. You can then add this path through `config"
-                    ".rl_module(model_config_dict={'policy_checkpoint_dir': "
+                    ".rl_module(model_config={'policy_checkpoint_dir': "
                     "[your policy checkpoint dir]})`."
                 )
             # Create a temporary policy object.
@@ -83,11 +83,11 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
             config = self.config.model_config_dict.get("old_api_stack_algo_config")
             if not config:
                 raise ValueError(
-                    "The `model_config_dict` of your RLModule must contain a "
+                    "The `model_config` of your RLModule must contain a "
                     "`algo_config` key with a AlgorithmConfig object in it that "
                     "contains all the settings that would be necessary to construct a "
                     "old API stack Algorithm/Policy/ModelV2! You can add this setting "
-                    "through `config.rl_module(model_config_dict={'algo_config': "
+                    "through `config.rl_module(model_config={'algo_config': "
                     "[your old config]})`."
                 )
             # Get the multi-agent policies dict.

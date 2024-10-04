@@ -130,7 +130,7 @@ if __name__ == "__main__":
             num_epochs=10,
             vf_loss_coeff=0.01,
         )
-        .rl_module(model_config_dict={"vf_share_layers": True})
+        .rl_module(model_config={"vf_share_layers": True})
     )
 
     run_rllib_example_script_experiment(base_config, args)

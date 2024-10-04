@@ -94,7 +94,7 @@ if __name__ == "__main__":
                 # The `model_config_dict` defined here will be available inside your
                 # custom RLModule class through the `self.config.model_config_dict`
                 # property.
-                model_config_dict={
+                model_config={
                     "lstm_cell_size": 256,
                     "dense_layers": [256, 256],
                 },

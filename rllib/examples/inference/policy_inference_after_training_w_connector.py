@@ -156,7 +156,7 @@ if __name__ == "__main__":
             vf_loss_coeff=0.01,
         )
         # Add an LSTM setup to the default RLModule used.
-        .rl_module(model_config_dict={"use_lstm": True})
+        .rl_module(model_config={"use_lstm": True})
     )
 
     print("Training LSTM-policy until desired reward/timesteps/iterations. ...")

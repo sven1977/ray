@@ -100,7 +100,7 @@ if __name__ == "__main__":
             vf_loss_coeff=0.01,
         )
         .rl_module(
-            model_config_dict={
+            model_config={
                 "fcnet_hiddens": [32],
                 "fcnet_activation": "linear",
                 "vf_share_layers": True,

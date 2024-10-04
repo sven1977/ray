@@ -27,7 +27,7 @@ config = (
     )
     .environment("multi_agent_cartpole", env_config={"num_agents": args.num_agents})
     .rl_module(
-        model_config_dict={
+        model_config={
             "fcnet_hiddens": [32],
             "fcnet_activation": "linear",
             "vf_share_layers": True,

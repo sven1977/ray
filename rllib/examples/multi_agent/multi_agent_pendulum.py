@@ -57,7 +57,7 @@ if __name__ == "__main__":
             vf_clip_param=10.0,
         )
         .rl_module(
-            model_config_dict={"fcnet_activation": "relu"},
+            model_config={"fcnet_activation": "relu"},
         )
     )
 
