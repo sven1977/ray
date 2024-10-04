@@ -18,7 +18,7 @@ from ray.util.annotations import DeveloperAPI
 
 
 @DeveloperAPI(stability="alpha")
-class PPORLModule(RLModule, InferenceOnlyAPI, ValueFunctionAPI, abc.ABC):
+class DefaultPPORLModule(RLModule, InferenceOnlyAPI, ValueFunctionAPI, abc.ABC):
     @override(RLModule)
     def setup(self):
         # __sphinx_doc_begin__

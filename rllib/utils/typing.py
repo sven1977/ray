@@ -76,7 +76,11 @@ ModelConfigDict = dict  # @OldAPIStack
 # Each inner list has the format: [num_output_filters, kernel, stride], where kernel
 # and stride may be single ints (width and height are the same) or 2-tuples (int, int)
 # for width and height (different values).
-ConvFilterSpec = List[List[int, Union[int, List[int, int]], Union[int, List[int, int]]]]
+ConvFilterSpec = List[
+    Tuple[
+        int, Union[int, Tuple[int, int]], Union[int, Tuple[int, int]]
+    ]
+]
 
 # Objects that can be created through the `from_config()` util method
 # need a config dict with a "type" key, a class path (str), or a type directly.

@@ -23,6 +23,7 @@ class DefaultBCTorchRLModule(TorchRLModule, abc.ABC):
     @override(RLModule)
     def setup(self):
         # Build model components (encoder and pi head) from catalog.
+        super().setup()
         self._encoder = self.catalog.build_encoder(framework=self.framework)
         self._pi_head = self.catalog.build_pi_head(framework=self.framework)
 

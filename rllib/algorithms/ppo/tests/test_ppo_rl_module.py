@@ -10,8 +10,8 @@ from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
 from ray.rllib.algorithms.ppo.tf.ppo_tf_rl_module import (
     PPOTfRLModule,
 )
-from ray.rllib.algorithms.ppo.torch.ppo_torch_rl_module import (
-    PPOTorchRLModule,
+from ray.rllib.algorithms.ppo.torch.default_ppo_torch_rl_module import (
+    DefaultPPOTorchRLModule,
 )
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
@@ -85,7 +85,7 @@ def _get_ppo_module(framework, env, lstm, observation_space):
         catalog_class=PPOCatalog,
     )
     if framework == "torch":
-        module = PPOTorchRLModule(**kwargs_)
+        module = DefaultPPOTorchRLModule(**kwargs_)
     else:
         module = PPOTfRLModule(**kwargs_)
     return module

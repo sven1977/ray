@@ -100,7 +100,7 @@ class DefaultModelConfig:
             listed by the frameworks (`torch`). See
             https://pytorch.org/docs/stable/nn.init.html for `torch`.
             If `None` (default), the default initializer defined by `torch` is used.
-        conv_bias_initializer_config: Kwargs passed into the initializer
+        conv_bias_initializer_kwargs: Kwargs passed into the initializer
             function defined through `conv_bias_initializer`.
 
         ====================================================
@@ -174,23 +174,23 @@ class DefaultModelConfig:
     fcnet_hiddens: List[int] = field(default_factory=lambda: [256, 256])
     fcnet_activation: str = "relu"
     fcnet_kernel_initializer: Optional[Union[str, Callable]] = None
-    fcnet_kernel_initializer_config: Optional[dict] = None
+    fcnet_kernel_initializer_kwargs: Optional[dict] = None
     fcnet_bias_initializer: Optional[Union[str, Callable]] = None
-    fcnet_bias_initializer_config: Optional[dict] = None
+    fcnet_bias_initializer_kwargs: Optional[dict] = None
 
     conv_filters: Optional[ConvFilterSpec] = None
     conv_activation: str = "relu"
     conv_kernel_initializer: Optional[Union[str, Callable]] = None
-    conv_kernel_initializer_config: Optional[dict] = None
+    conv_kernel_initializer_kwargs: Optional[dict] = None
     conv_bias_initializer: Optional[Union[str, Callable]] = None
-    conv_bias_initializer_config: Optional[dict] = None
+    conv_bias_initializer_kwargs: Optional[dict] = None
 
     head_fcnet_hiddens: List[int] = field(default_factory=lambda: [])
     head_fcnet_activation: str = "relu"
     head_fcnet_kernel_initializer: Optional[Union[str, Callable]] = None
-    head_fcnet_kernel_initializer_config: Optional[dict] = None
+    head_fcnet_kernel_initializer_kwargs: Optional[dict] = None
     head_fcnet_bias_initializer: Optional[Union[str, Callable]] = None
-    head_fcnet_bias_initializer_config: Optional[dict] = None
+    head_fcnet_bias_initializer_kwargs: Optional[dict] = None
 
     free_log_std: bool = False
     log_std_clip_param: float = 20.0

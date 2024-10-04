@@ -1,7 +1,7 @@
 import abc
 from typing import Any, Dict, List, Tuple
 
-from ray.rllib.algorithms.ppo.ppo_rl_module import PPORLModule
+from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
 from ray.rllib.algorithms.appo.appo import OLD_ACTION_DIST_LOGITS_KEY
 from ray.rllib.core.learner.utils import make_target_network
 from ray.rllib.core.models.base import ACTOR

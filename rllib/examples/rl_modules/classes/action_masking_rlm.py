@@ -61,8 +61,8 @@ class ActionMaskingRLModule(RLModule):
         # Keeps track if observation specs have been checked already.
         self._checked_observations = False
 
-        # The PPORLModule, in its constructor will build networks for the original
-        # observation space (i.e. without the action mask).
+        # The DefaultPPORLModule, in its constructor will build networks for the
+        # original observation space (i.e. without the action mask).
         super().__init__(
             observation_space=observation_space,
             action_space=action_space,
@@ -142,7 +142,7 @@ class ActionMaskingTorchRLModule(ActionMaskingRLModule, PPOTorchRLModule):
         # Extract the available actions tensor from the observation.
         action_mask = batch[Columns.OBS].pop("action_mask")
 
-        # Modify the batch for the `PPORLModule`'s `forward` method, i.e.
+        # Modify the batch for the `DefaultPPORLModule`'s `forward` method, i.e.
         # pass only `"obs"` into the `forward` method.
         batch[Columns.OBS] = batch[Columns.OBS].pop("observations")
 
