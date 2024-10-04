@@ -1,5 +1,4 @@
 from ray.rllib.algorithms import Algorithm, AlgorithmConfig
-from ray.rllib.core import ALL_MODULES
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.examples.learners.classes.vpg_learner import VPGTorchLearner
 from ray.rllib.examples.rl_modules.classes.vpg_rlm import VPGTorchRLModule
