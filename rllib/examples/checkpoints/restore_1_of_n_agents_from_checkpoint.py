@@ -48,6 +48,7 @@ iterations instead of 190).
 
 import os
 from ray.air.constants import TRAINING_ITERATION
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
 from ray.rllib.examples.envs.classes.multi_agent import MultiAgentPendulum
 from ray.rllib.utils.metrics import (
@@ -103,7 +104,7 @@ if __name__ == "__main__":
             vf_clip_param=10.0,
         )
         .rl_module(
-            model_config={"fcnet_activation": "relu"},
+            model_config=DefaultModelConfig(fcnet_activation="relu"),
         )
     )
 

@@ -8,7 +8,7 @@ from ray.rllib.algorithms.ppo.ppo_learner import (
 from ray.rllib.algorithms.callbacks import DefaultCallbacks
 from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.learner.learner import DEFAULT_OPTIMIZER, LR_KEY
-
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.utils.metrics import LEARNER_RESULTS
 from ray.rllib.utils.test_utils import check, check_train_results_new_api_stack
 
@@ -143,12 +143,12 @@ class TestPPO(unittest.TestCase):
                 num_env_runners=1,
             )
             .rl_module(
-                model_config={
-                    "fcnet_hiddens": [10],
-                    "fcnet_activation": "linear",
-                    "free_log_std": True,
-                    "vf_share_layers": True,
-                }
+                model_config=DefaultModelConfig(
+                    fcnet_hiddens=[10],
+                    fcnet_activation="linear",
+                    free_log_std=True,
+                    vf_share_layers=True,
+                ),
             )
             .training(
                 gamma=0.99,

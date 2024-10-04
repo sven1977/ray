@@ -9,8 +9,9 @@ class DefaultModelConfig:
     """Dataclass to configure all default RLlib RLModules.
 
     Users should NOT use this class for configuring their own custom RLModules, but
-    use a custom `model_config` dict with arbitrary str keys passed into the
-    `RLModuleSpec` that defines their custom RLModule. For example:
+    use a custom `model_config` dict with arbitrary (str) keys passed into the
+    `RLModuleSpec` used to define the custom RLModule.
+    For example:
 
     .. testcode::
 
@@ -25,7 +26,7 @@ class DefaultModelConfig:
         ).build()
 
     Only RLlib's default RLModules (defined by the various algorithms) should use
-    this dataclass. Pass it into your config like so:
+    this dataclass. Pass an instance of it into your config like so:
 
     .. testcode::
 

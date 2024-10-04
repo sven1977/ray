@@ -11,6 +11,7 @@ from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
 from ray.rllib.algorithms.ppo.tf.ppo_tf_rl_module import PPOTfRLModule
 from ray.rllib.algorithms.ppo.torch.ppo_torch_rl_module import PPOTorchRLModule
 from ray.rllib.core import DEFAULT_MODULE_ID
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.core.rl_module.multi_rl_module import (
     MultiRLModuleSpec,
@@ -148,7 +149,7 @@ class TestAlgorithmRLModuleRestore(unittest.TestCase):
             module_class=module_class,
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [64]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[64]),
             catalog_class=PPOCatalog,
             load_state_path=module_to_swap_in_path,
         )
@@ -219,7 +220,7 @@ class TestAlgorithmRLModuleRestore(unittest.TestCase):
             module_class=module_class,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config={"fcnet_hiddens": [32]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[32]),
             catalog_class=PPOCatalog,
             load_state_path=module_ckpt_path,
         )
@@ -291,7 +292,7 @@ class TestAlgorithmRLModuleRestore(unittest.TestCase):
             module_class=module_class,
             observation_space=env.get_observation_space(0),
             action_space=env.get_action_space(0),
-            model_config={"fcnet_hiddens": [64]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[64]),
             catalog_class=PPOCatalog,
             load_state_path=module_to_swap_in_path,
         )

@@ -278,7 +278,7 @@ class RLModule(Checkpointable, abc.ABC):
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config={"hidden": [128, 128]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[128, 128]),
             catalog_class=PPOCatalog,
         )
         module = module_spec.build()
@@ -315,7 +315,7 @@ class RLModule(Checkpointable, abc.ABC):
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config={"hidden": [128, 128]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[128, 128]),
             catalog_class=PPOCatalog,
         )
         module = module_spec.build()
@@ -343,7 +343,7 @@ class RLModule(Checkpointable, abc.ABC):
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config={"hidden": [128, 128]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[128, 128]),
             catalog_class=PPOCatalog,
         )
         module = module_spec.build()

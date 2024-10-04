@@ -14,6 +14,7 @@ from ray.rllib.algorithms.ppo.torch.ppo_torch_rl_module import (
     PPOTorchRLModule,
 )
 from ray.rllib.core.columns import Columns
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.models.preprocessors import get_preprocessor
 from ray.rllib.utils.framework import try_import_tf, try_import_torch
 from ray.rllib.utils.numpy import convert_to_numpy
@@ -80,7 +81,7 @@ def _get_ppo_module(framework, env, lstm, observation_space):
     kwargs_ = dict(
         observation_space=observation_space,
         action_space=env.action_space,
-        model_config={"use_lstm": lstm},
+        model_config=DefaultModelConfig(use_lstm=lstm),
         catalog_class=PPOCatalog,
     )
     if framework == "torch":

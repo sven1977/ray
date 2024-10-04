@@ -311,13 +311,11 @@ class TestAlgorithmConfig(unittest.TestCase):
                     module_class=expected_module_class,
                     observation_space=env.observation_space,
                     action_space=env.action_space,
-                    model_config_dict=AlgorithmConfig().model_config,
                 ),
                 "p2": RLModuleSpec(
                     module_class=expected_module_class,
                     observation_space=env.observation_space,
                     action_space=env.action_space,
-                    model_config_dict=AlgorithmConfig().model_config,
                 ),
             },
         )

@@ -15,6 +15,7 @@ from ray.rllib.core import (
     DEFAULT_MODULE_ID,
 )
 from ray.rllib.core.learner.learner import Learner
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule
 from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.examples.algorithms.classes.vpg import VPGConfig
@@ -202,7 +203,7 @@ class TestLearnerGroupSyncUpdate(unittest.TestCase):
             .rl_module(
                 rl_module_spec=RLModuleSpec(
                     module_class=VPGTorchRLModule,
-                    model_config={"fcnet_hiddens": [32]},
+                    model_config=DefaultModelConfig(fcnet_hiddens=[32]),
                 )
             )
         )

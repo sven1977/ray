@@ -28,8 +28,9 @@ import gymnasium as gym
 from ray.rllib.algorithms.ppo import PPOConfig
 from ray.rllib.algorithms.ppo.ppo_catalog import PPOCatalog
 from ray.rllib.algorithms.ppo.torch.ppo_torch_rl_module import PPOTorchRLModule
-from ray.rllib.core.rl_module.rl_module import RLModuleSpec
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
+from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 from ray.rllib.examples.envs.classes.multi_agent import MultiAgentCartPole
 from ray.rllib.utils.test_utils import (
     add_rllib_example_script_args,
@@ -90,7 +91,7 @@ if __name__ == "__main__":
         .environment("CartPole-v1")
         .rl_module(
             # Use a different number of hidden units for the pre-trained module.
-            model_config={"fcnet_hiddens": [64]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[64]),
         )
     )
 
@@ -108,7 +109,7 @@ if __name__ == "__main__":
             module_class=PPOTorchRLModule,
             observation_space=env.observation_space,
             action_space=env.action_space,
-            model_config={"fcnet_hiddens": [32]},
+            model_config=DefaultModelConfig(fcnet_hiddens=[32]),
             catalog_class=PPOCatalog,
         )
 
@@ -117,7 +118,7 @@ if __name__ == "__main__":
         module_class=PPOTorchRLModule,
         observation_space=env.observation_space,
         action_space=env.action_space,
-        model_config={"fcnet_hiddens": [64]},
+        model_config=DefaultModelConfig(fcnet_hiddens=[64]),
         catalog_class=PPOCatalog,
         # Note, we load here the module directly from the checkpoint.
         load_state_path=module_chkpt_path,
