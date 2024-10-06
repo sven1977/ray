@@ -21,10 +21,6 @@ from typing import (
 import gymnasium as gym
 
 from ray.rllib.core import COMPONENT_MULTI_RL_MODULE_SPEC
-from ray.rllib.core.rl_module import (
-    RLModule,
-    RLModuleSpec,
-)
 from ray.rllib.core.models.specs.typing import SpecType
 from ray.rllib.core.rl_module.rl_module import RLModule, RLModuleSpec
 from ray.rllib.utils import force_list
@@ -374,15 +370,15 @@ class MultiRLModule(RLModule):
         return self._rl_modules[module_id]
 
     def items(self) -> ItemsView[ModuleID, RLModule]:
-        """Returns a keys view over the module IDs in this MultiRLModule."""
+        """Returns an ItemsView over the module IDs in this MultiRLModule."""
         return self._rl_modules.items()
 
     def keys(self) -> KeysView[ModuleID]:
-        """Returns a keys view over the module IDs in this MultiRLModule."""
+        """Returns a KeysView over the module IDs in this MultiRLModule."""
         return self._rl_modules.keys()
 
     def values(self) -> ValuesView[ModuleID]:
-        """Returns a keys view over the module IDs in this MultiRLModule."""
+        """Returns a ValuesView over the module IDs in this MultiRLModule."""
         return self._rl_modules.values()
 
     def __len__(self) -> int:

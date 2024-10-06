@@ -786,6 +786,48 @@ class RLModule(Checkpointable, abc.ABC):
         """Returns the default input specs."""
         return [Columns.OBS]
 
+    @OverrideToImplementCustomLogic_CallToSuperRecommended
+    def output_specs_inference(self) -> SpecType:
+        """Returns the output specs of the `forward_inference()` method.
+
+        Override this method to customize the output specs of the inference call.
+        The default implementation requires the `forward_inference()` method to return
+        a dict that has `action_dist` key and its value is an instance of
+        `Distribution`.
+        """
+        return [Columns.ACTION_DIST_INPUTS]
+
+    @OverrideToImplementCustomLogic_CallToSuperRecommended
+    def output_specs_exploration(self) -> SpecType:
+        """Returns the output specs of the `forward_exploration()` method.
+
+        Override this method to customize the output specs of the exploration call.
+        The default implementation requires the `forward_exploration()` method to return
+        a dict that has `action_dist` key and its value is an instance of
+        `Distribution`.
+        """
+        return [Columns.ACTION_DIST_INPUTS]
+
+    def output_specs_train(self) -> SpecType:
+        """Returns the output specs of the forward_train method."""
+        return {}
+
+    def input_specs_inference(self) -> SpecType:
+        """Returns the input specs of the forward_inference method."""
+        return self._default_input_specs()
+
+    def input_specs_exploration(self) -> SpecType:
+        """Returns the input specs of the forward_exploration method."""
+        return self._default_input_specs()
+
+    def input_specs_train(self) -> SpecType:
+        """Returns the input specs of the forward_train method."""
+        return self._default_input_specs()
+
+    def _default_input_specs(self) -> SpecType:
+        """Returns the default input specs."""
+        return [Columns.OBS]
+
     def as_multi_rl_module(self) -> "MultiRLModule":
         """Returns a multi-agent wrapper around this module."""
         from ray.rllib.core.rl_module.multi_rl_module import MultiRLModule

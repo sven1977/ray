@@ -50,33 +50,6 @@ class DefaultPPORLModule(RLModule, InferenceOnlyAPI, ValueFunctionAPI, abc.ABC):
         else:
             return {}
 
-    @override(RLModule)
-    def input_specs_inference(self) -> SpecDict:
-        return [Columns.OBS]
-
-    @override(RLModule)
-    def output_specs_inference(self) -> SpecDict:
-        return [Columns.ACTION_DIST_INPUTS]
-
-    @override(RLModule)
-    def input_specs_exploration(self):
-        return self.input_specs_inference()
-
-    @override(RLModule)
-    def output_specs_exploration(self) -> SpecDict:
-        return self.output_specs_inference()
-
-    @override(RLModule)
-    def input_specs_train(self) -> SpecDict:
-        return self.input_specs_exploration()
-
-    @override(RLModule)
-    def output_specs_train(self) -> SpecDict:
-        return [
-            Columns.VF_PREDS,
-            Columns.ACTION_DIST_INPUTS,
-        ]
-
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     @override(InferenceOnlyAPI)
     def get_non_inference_attributes(self) -> List[str]:

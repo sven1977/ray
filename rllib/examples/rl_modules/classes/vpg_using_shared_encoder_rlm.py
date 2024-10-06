@@ -19,33 +19,19 @@ class VPGTorchRLModuleUsingSharedEncoder(TorchRLModule):
         super().setup()
 
         # Incoming feature dim from the shared encoder.
-        feature_dim = self.model_config["feature_dim"]
+        embedding_dim = self.model_config["embedding_dim"]
         hidden_dim = self.model_config["hidden_dim"]
 
         self._pi_head = nn.Sequential(
-            nn.Linear(feature_dim, hidden_dim),
+            nn.Linear(embedding_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, self.action_space.n),
         )
 
-    @override(RLModule)
-    def _forward_inference(self, batch):
-        with torch.no_grad():
-            return self._common_forward(batch)
-
-    @override(RLModule)
-    def _forward_exploration(self, batch):
-        with torch.no_grad():
-            return self._common_forward(batch)
-
-    @override(RLModule)
-    def _forward_train(self, batch):
-        return self._common_forward(batch)
-
-    def _common_forward(self, batch):
-        # Features can be found in the batch under the "encoder_features" key.
-        features = batch["encoder_features"]
-        logits = self._pi_head(features)
+    def _forward(self, batch, **kwargs):
+        # Embeddings can be found in the batch under the "encoder_embeddings" key.
+        embeddings = batch["encoder_embeddings"]
+        logits = self._pi_head(embeddings)
         return {Columns.ACTION_DIST_INPUTS: logits}
 
 
@@ -60,7 +46,7 @@ class VPGTorchMultiRLModuleWithSharedEncoder(MultiRLModule):
         from ray.rllib.core.rl_module.multi_rl_module import MultiRLModuleSpec
         from ray.rllib.core.rl_module.rl_module import RLModuleSpec
 
-        FEATURE_DIM = 64  # encoder output (feature) dim
+        EMBEDDING_DIM = 64  # encoder output (feature) dim
         HIDDEN_DIM = 64  # hidden dim for the policy nets
 
         config.rl_module(
@@ -69,20 +55,20 @@ class VPGTorchMultiRLModuleWithSharedEncoder(MultiRLModule):
                     # Central/shared encoder net.
                     SHARED_ENCODER_ID: RLModuleSpec(
                         module_class=SharedTorchEncoder,
-                        model_config={"feature_dim": FEATURE_DIM},
+                        model_config={"embedding_dim": EMBEDDING_DIM},
                     ),
                     # Arbitrary number of policy nets (w/o encoder sub-net).
                     "p0": RLModuleSpec(
                         module_class=VPGTorchRLModuleUsingSharedEncoder,
                         model_config={
-                            "feature_dim": FEATURE_DIM,
+                            "embedding_dim": EMBEDDING_DIM,
                             "hidden_dim": HIDDEN_DIM,
                         },
                     ),
                     "p1": RLModuleSpec(
                         module_class=VPGTorchRLModuleUsingSharedEncoder,
                         model_config={
-                            "feature_dim": FEATURE_DIM,
+                            "embedding_dim": EMBEDDING_DIM,
                             "hidden_dim": HIDDEN_DIM,
                         },
                     ),
@@ -120,11 +106,11 @@ class VPGTorchMultiRLModuleWithSharedEncoder(MultiRLModule):
             rl_module = self._rl_modules[policy_id]
             forward_fn = getattr(rl_module, forward_fn_name)
 
-            # Pass policy's observations through shared encoder to get the features for
-            # this policy.
-            features = encoder_forward_fn(batch[policy_id])
-            # Pass the policy's features through the policy net.
-            batch[policy_id]["encoder_features"] = features
+            # Pass policy's observations through shared encoder to get the embeddings
+            # for this policy.
+            embeddings = encoder_forward_fn(batch[policy_id])
+            # Pass the policy's embeddings through the policy net.
+            batch[policy_id]["encoder_embeddings"] = embeddings
             outputs[policy_id] = forward_fn(batch[policy_id], **kwargs)
 
         return outputs
@@ -138,27 +124,13 @@ class SharedTorchEncoder(TorchRLModule):
         super().setup()
 
         input_dim = self.observation_space.shape[0]
-        feature_dim = self.model_config["feature_dim"]
+        embedding_dim = self.model_config["embedding_dim"]
 
         self._encoder = nn.Sequential(
-            nn.Linear(input_dim, feature_dim),
+            nn.Linear(input_dim, embedding_dim),
         )
 
-    @override(RLModule)
-    def _forward_inference(self, batch):
-        with torch.no_grad():
-            return self._common_forward(batch)
-
-    @override(RLModule)
-    def _forward_exploration(self, batch):
-        with torch.no_grad():
-            return self._common_forward(batch)
-
-    @override(RLModule)
-    def _forward_train(self, batch):
-        return self._common_forward(batch)
-
-    def _common_forward(self, batch):
+    def _forward(self, batch, **kwargs):
         # Pass observations through the encoder and return outputs.
-        features = self._encoder(batch[Columns.OBS])
-        return {"encoder_features": features}
+        embeddings = self._encoder(batch[Columns.OBS])
+        return {"encoder_embeddings": embeddings}

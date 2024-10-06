@@ -22,19 +22,19 @@ class LSTMContainingRLModule(TorchRLModule, ValueFunctionAPI):
 
         B = 10  # batch size
         T = 5  # seq len
-        f = 25  # feature dim
+        e = 25  # embedding dim
         CELL = 32  # LSTM cell size
 
         # Construct the RLModule.
         my_net = LSTMContainingRLModule(
-            observation_space=gym.spaces.Box(-1.0, 1.0, (f,), np.float32),
+            observation_space=gym.spaces.Box(-1.0, 1.0, (e,), np.float32),
             action_space=gym.spaces.Discrete(4),
             model_config={"lstm_cell_size": CELL}
         )
 
         # Create some dummy input.
         obs = torch.from_numpy(
-            np.random.random_sample(size=(B, T, f)
+            np.random.random_sample(size=(B, T, e)
         ).astype(np.float32))
         state_in = my_net.get_initial_state()
         # Repeat state_in across batch.
@@ -74,7 +74,7 @@ class LSTMContainingRLModule(TorchRLModule, ValueFunctionAPI):
 
         # Get the LSTM cell size from the model_config dict.
         # `model_config_dict` property:
-        self._lstm_cell_size = self.config.model_config.get("lstm_cell_size", 256)
+        self._lstm_cell_size = self.model_config.get("lstm_cell_size", 256)
         self._lstm = nn.LSTM(in_size, self._lstm_cell_size, batch_first=True)
         in_size = self._lstm_cell_size
 
@@ -105,9 +105,9 @@ class LSTMContainingRLModule(TorchRLModule, ValueFunctionAPI):
 
     @override(TorchRLModule)
     def _forward(self, batch, **kwargs):
-        # Compute the basic 1D feature tensor (inputs to policy- and value-heads).
-        features, state_outs = self._compute_features_and_state_outs(batch)
-        logits = self._pi_head(features)
+        # Compute the basic 1D embedding tensor (inputs to policy- and value-heads).
+        embeddings, state_outs = self._compute_embeddings_and_state_outs(batch)
+        logits = self._pi_head(embeddings)
 
         # Return logits as ACTION_DIST_INPUTS (categorical distribution).
         # Note that the default `GetActions` connector piece (in the EnvRunner) will
@@ -120,34 +120,34 @@ class LSTMContainingRLModule(TorchRLModule, ValueFunctionAPI):
 
     @override(TorchRLModule)
     def _forward_train(self, batch, **kwargs):
-        # Same logic as _forward, but also return features to be used by value function
-        # branch during training.
-        features, state_outs = self._compute_features_and_state_outs(batch)
-        logits = self._pi_head(features)
+        # Same logic as _forward, but also return embeddings to be used by value
+        # function branch during training.
+        embeddings, state_outs = self._compute_embeddings_and_state_outs(batch)
+        logits = self._pi_head(embeddings)
         return {
             Columns.ACTION_DIST_INPUTS: logits,
             Columns.STATE_OUT: state_outs,
-            Columns.FEATURES: features,
+            Columns.EMBEDDINGS: embeddings,
         }
 
     # We implement this RLModule as a ValueFunctionAPI RLModule, so it can be used
     # by value-based methods like PPO or IMPALA.
     @override(ValueFunctionAPI)
     def compute_values(
-        self, batch: Dict[str, Any], features: Optional[Any] = None
+        self, batch: Dict[str, Any], embeddings: Optional[Any] = None
     ) -> TensorType:
-        if features is None:
-            features, _ = self._compute_features_and_state_outs(batch)
-        values = self._values(features).squeeze(-1)
+        if embeddings is None:
+            embeddings, _ = self._compute_embeddings_and_state_outs(batch)
+        values = self._values(embeddings).squeeze(-1)
         return values
 
-    def _compute_features_and_state_outs(self, batch):
+    def _compute_embeddings_and_state_outs(self, batch):
         obs = batch[Columns.OBS]
         state_in = batch[Columns.STATE_IN]
         h, c = state_in["h"], state_in["c"]
         # Unsqueeze the layer dim (we only have 1 LSTM layer).
-        features, (h, c) = self._lstm(obs, (h.unsqueeze(0), c.unsqueeze(0)))
+        embeddings, (h, c) = self._lstm(obs, (h.unsqueeze(0), c.unsqueeze(0)))
         # Push through our FC net.
-        features = self._fc_net(features)
+        embeddings = self._fc_net(embeddings)
         # Squeeze the layer dim (we only have 1 LSTM layer).
-        return features, {"h": h.squeeze(0), "c": c.squeeze(0)}
+        return embeddings, {"h": h.squeeze(0), "c": c.squeeze(0)}
