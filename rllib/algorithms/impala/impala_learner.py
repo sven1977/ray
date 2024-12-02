@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 import tree  # pip install dm_tree
 
 import ray
+from ray.rllib.algorithms.appo.utils import CircularBuffer
 from ray.rllib.algorithms.impala.impala import LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.learner.learner import Learner
@@ -42,6 +43,8 @@ EPISODES_TO_BATCH_TIMER = "episodes_to_batch_timer"
 QUEUE_SIZE_GPU_LOADER_QUEUE = "queue_size_gpu_loader_queue"
 QUEUE_SIZE_LEARNER_THREAD_QUEUE = "queue_size_learner_thread_queue"
 QUEUE_SIZE_RESULTS_QUEUE = "queue_size_results_queue"
+
+_CURRENT_GLOBAL_TIMESTEPS = None
 
 
 class IMPALALearner(Learner):
@@ -84,8 +87,7 @@ class IMPALALearner(Learner):
         self._learner_thread_out_queue = Queue()
 
         #TODO
-        from ray.rllib.algorithms.appo.utils import CircularBuffer
-        self._circular_buffer = CircularBuffer(capacity=4, max_picks_per_batch=2)#TODO
+        self._circular_buffer = CircularBuffer(num_batches=4, iterations_per_batch=2)#TODO
 
         # Create and start the GPU loader thread(s).
         if self.config.num_gpus_per_learner > 0:
