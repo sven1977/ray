@@ -1,9 +1,8 @@
 from collections import deque
-import copy
-from queue import Empty, Queue
+import queue
 import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Union
 
 import tree  # pip install dm_tree
 
@@ -24,7 +23,6 @@ from ray.rllib.utils.lambda_defaultdict import LambdaDefaultDict
 from ray.rllib.utils.metrics import (
     ALL_MODULES,
     NUM_ENV_STEPS_SAMPLED_LIFETIME,
-    NUM_ENV_STEPS_TRAINED,
 )
 from ray.rllib.utils.metrics.metrics_logger import MetricsLogger
 from ray.rllib.utils.schedules.scheduler import Scheduler
@@ -82,9 +80,9 @@ class IMPALALearner(Learner):
         # the "GPU-loader queue" and loads them to the GPU, then places the GPU batches
         # on the "update queue" for the actual RLModule forward pass and loss
         # computations.
-        self._gpu_loader_in_queue = Queue()
+        self._gpu_loader_in_queue = queue.Queue()
         self._learner_thread_in_queue = deque(maxlen=self.config.learner_queue_size)
-        self._learner_thread_out_queue = Queue()
+        self._learner_thread_out_queue = queue.Queue()
 
         #TODO
         self._circular_buffer = CircularBuffer(capacity=4, max_picks_per_batch=2)#TODO
@@ -109,7 +107,7 @@ class IMPALALearner(Learner):
         self._learner_thread = _LearnerThread(
             update_method=self._update_from_batch_or_episodes,
             in_queue=None,#self._learner_thread_in_queue,
-            out_queue=self._learner_thread_out_queue,
+            #out_queue=self._learner_thread_out_queue,
             metrics_logger=self.metrics,
             circular_buffer=self._circular_buffer,
             #num_epochs=self.config.num_epochs,
@@ -124,19 +122,10 @@ class IMPALALearner(Learner):
         episodes: List[EpisodeType],
         *,
         timesteps: Dict[str, Any],
-        # TODO (sven): Deprecate these in favor of config attributes for only those
-        #  algos that actually need (and know how) to do minibatching.
-        minibatch_size: Optional[int] = None,
-        num_epochs: int = 1,
-        shuffle_batch_per_epoch: bool = False,
-        num_total_minibatches: int = 0,
-        reduce_fn=None,  # Deprecated args.
         **kwargs,
     ) -> ResultDict:
-        self.metrics.set_value(
-            (ALL_MODULES, NUM_ENV_STEPS_SAMPLED_LIFETIME),
-            timesteps[NUM_ENV_STEPS_SAMPLED_LIFETIME],
-        )
+        global _CURRENT_GLOBAL_TIMESTEPS
+        _CURRENT_GLOBAL_TIMESTEPS = timesteps
 
         # TODO (sven): IMPALA does NOT call additional update anymore from its
         #  `training_step()` method. Instead, we'll do this here (to avoid the extra
@@ -200,22 +189,10 @@ class IMPALALearner(Learner):
                 else:
                     # Enqueue to Learner thread's in-queue.
                     _LearnerThread.enqueue(
-                        self._learner_thread_in_queue,
-                        ma_batch,
-                        self.metrics,
+                        self._learner_thread_in_queue, ma_batch, self.metrics
                     )
 
-        # Return all queued result dicts thus far (after reducing over them).
-        results = {}
-        ts_trained = 0
-        try:
-            while True:
-                results = self._learner_thread_out_queue.get(block=False)
-                ts_trained += results[ALL_MODULES][NUM_ENV_STEPS_TRAINED].peek()
-        except Empty:
-            if ts_trained:
-                results[ALL_MODULES][NUM_ENV_STEPS_TRAINED].values = [ts_trained]
-            return results
+        return self.metrics.reduce()
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     def before_gradient_based_update(self, *, timesteps: Dict[str, Any]) -> None:
@@ -225,7 +202,7 @@ class IMPALALearner(Learner):
             # Update entropy coefficient via our Scheduler.
             new_entropy_coeff = self.entropy_coeff_schedulers_per_module[
                 module_id
-            ].update(timestep=timesteps.get(NUM_ENV_STEPS_SAMPLED_LIFETIME, 0))
+            ].update(timestep=timesteps[NUM_ENV_STEPS_SAMPLED_LIFETIME])
             self.metrics.log_value(
                 (module_id, LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY),
                 new_entropy_coeff,
@@ -245,7 +222,7 @@ class _GPULoaderThread(threading.Thread):
     def __init__(
         self,
         *,
-        in_queue: Queue,
+        in_queue: queue.Queue,
         out_queue: deque = None,
         device: torch.device,
         metrics_logger: MetricsLogger,
@@ -305,7 +282,7 @@ class _LearnerThread(threading.Thread):
         *,
         update_method,
         in_queue,
-        out_queue,
+        #out_queue,
         metrics_logger,
         #num_epochs,
         #minibatch_size,
@@ -319,7 +296,7 @@ class _LearnerThread(threading.Thread):
 
         self._update_method = update_method
         self._in_queue: deque = in_queue
-        self._out_queue: Queue = out_queue
+        #self._out_queue: queue.Queue = out_queue
 
         #self._num_epochs = num_epochs
         #self._minibatch_size = minibatch_size
@@ -332,16 +309,22 @@ class _LearnerThread(threading.Thread):
             self.step()
 
     def step(self):
+        global _CURRENT_GLOBAL_TIMESTEPS
+
         # Get a new batch from the GPU-data (deque.pop -> newest item first).
-        if self._circular_buffer:
-            ma_batch_on_gpu = self._circular_buffer.sample()
-        else:
-            with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_IN_QUEUE_WAIT_TIMER)):
+        with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_IN_QUEUE_WAIT_TIMER)):
+            if self._circular_buffer:
+                ma_batch_on_gpu = self._circular_buffer.sample()
+            else:
                 # Queue is empty: Sleep a tiny bit to avoid CPU-thrashing.
                 if not self._in_queue:
                     time.sleep(0.001)
                     return
-                ma_batch_on_gpu = self._in_queue.pop()
+                # Consume from the left (oldest batches first).
+                # If we consumed from the right, we would run into the danger of
+                # learning from newer batches (left side) most times, BUT sometimes
+                # grabbing older batches (right area of deque).
+                ma_batch_on_gpu = self._in_queue.popleft()
 
         # Call the update method on the batch.
         with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_UPDATE_TIMER)):
@@ -349,37 +332,27 @@ class _LearnerThread(threading.Thread):
             #  this thread has the information about the min minibatches necessary
             #  (due to different agents taking different steps in the env, e.g.
             #  MA-CartPole).
-            results = self._update_method(
+            self._update_method(
                 batch=ma_batch_on_gpu,
-                timesteps={
-                    NUM_ENV_STEPS_SAMPLED_LIFETIME: self.metrics.peek(
-                        (ALL_MODULES, NUM_ENV_STEPS_SAMPLED_LIFETIME), default=0
-                    )
-                },
-                #num_epochs=self._num_epochs,
-                #minibatch_size=self._minibatch_size,
-                #shuffle_batch_per_epoch=self._shuffle_batch_per_epoch,
-            )
-            # We have to deepcopy the results dict, b/c we must avoid having a returned
-            # Stats object sit in the queue and getting a new (possibly even tensor)
-            # value added to it, which would falsify this result.
-            self._out_queue.put(copy.deepcopy(results))
-
-            self.metrics.log_value(
-                (ALL_MODULES, QUEUE_SIZE_RESULTS_QUEUE),
-                self._out_queue.qsize(),
+                timesteps=_CURRENT_GLOBAL_TIMESTEPS,
             )
 
     @staticmethod
-    def enqueue(learner_queue, batch, metrics):
-        raise NotImplementedError("BAD!")
+    def enqueue(learner_queue: deque, batch, metrics):
         # Right-append to learner queue (a deque). If full, drops the leftmost
-        # (oldest) item in the deque. Note that we consume from the right
-        # (newest first), which is why the queue size should probably always be 1,
-        # otherwise we run into the danger of training with very old samples.
-        # ts_dropped = 0
-        # if len(learner_queue) == learner_queue.maxlen:
-        #     ts_dropped = learner_queue.popleft().env_steps()
+        # (oldest) item in the deque.
+        # Note that we consume from the left (oldest first), which is why the queue size
+        # should probably always be small'ish (<< 10), otherwise we run into the danger
+        # of training with very old samples.
+        # If we consumed from the right, we would run into the danger of learning
+        # from newer batches (left side) most times, BUT sometimes grabbing a
+        # really old batches (right area of deque).
+        if len(learner_queue) == learner_queue.maxlen:
+            metrics.log_value(
+                (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+                learner_queue.popleft().env_steps(),
+                reduce="sum",
+            )
         learner_queue.append(batch)
 
         # Log current queue size.
