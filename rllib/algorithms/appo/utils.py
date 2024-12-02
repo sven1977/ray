@@ -73,7 +73,7 @@ class CircularBuffer:
         entry[1] += 1
 
         # This batch has been exhausted (k == K) -> Invalidate it in the buffer.
-        if k == self.iterations_per_batch - 1:
+        if k == self.iterations_per_batch:
             entry[0] = None
             entry[1] = None
 
