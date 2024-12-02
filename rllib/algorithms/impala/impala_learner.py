@@ -81,21 +81,18 @@ class IMPALALearner(Learner):
         # on the "update queue" for the actual RLModule forward pass and loss
         # computations.
         self._gpu_loader_in_queue = queue.Queue()
-        self._learner_thread_in_queue = deque(maxlen=self.config.learner_queue_size)
-        self._learner_thread_out_queue = queue.Queue()
-
-        #TODO
-        self._circular_buffer = CircularBuffer(capacity=4, max_picks_per_batch=2)#TODO
+        # Default is to have a learner thread.
+        if not hasattr(self, "_learner_thread_in_queue"):
+            self._learner_thread_in_queue = deque(maxlen=self.config.learner_queue_size)
 
         # Create and start the GPU loader thread(s).
         if self.config.num_gpus_per_learner > 0:
             self._gpu_loader_threads = [
                 _GPULoaderThread(
                     in_queue=self._gpu_loader_in_queue,
-                    out_queue=None,#self._learner_thread_in_queue,
+                    out_queue=self._learner_thread_in_queue,
                     device=self._device,
                     metrics_logger=self.metrics,
-                    circular_buffer=self._circular_buffer,
                 )
                 for _ in range(self.config.num_gpu_loader_threads)
             ]
@@ -103,16 +100,10 @@ class IMPALALearner(Learner):
                 t.start()
 
         # Create and start the Learner thread.
-        #TODO
         self._learner_thread = _LearnerThread(
             update_method=self._update_from_batch_or_episodes,
-            in_queue=None,#self._learner_thread_in_queue,
-            #out_queue=self._learner_thread_out_queue,
+            in_queue=self._learner_thread_in_queue,
             metrics_logger=self.metrics,
-            circular_buffer=self._circular_buffer,
-            #num_epochs=self.config.num_epochs,
-            #minibatch_size=self.config.minibatch_size,
-            #shuffle_batch_per_epoch=self.config.shuffle_batch_per_epoch,
         )
         self._learner_thread.start()
 
@@ -178,9 +169,8 @@ class IMPALALearner(Learner):
                     {mid: SampleBatch(b) for mid, b in batch.items()},
                     env_steps=env_steps,
                 )
-                # Add the batch directly to the circular buffer.
-                if self._circular_buffer:
-                    ts_dropped = self._circular_buffer.add(ma_batch)
+                if isinstance(self._learner_thread_in_queue, CircularBuffer):
+                    ts_dropped = self._learner_thread_in_queue.add(ma_batch)
                     self.metrics.log_value(
                         (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
                         ts_dropped,
@@ -223,10 +213,9 @@ class _GPULoaderThread(threading.Thread):
         self,
         *,
         in_queue: queue.Queue,
-        out_queue: deque = None,
+        out_queue: deque,
         device: torch.device,
         metrics_logger: MetricsLogger,
-        circular_buffer=None
     ):
         super().__init__()
         self.daemon = True
@@ -236,8 +225,6 @@ class _GPULoaderThread(threading.Thread):
         self._ts_dropped = 0
         self._device = device
         self.metrics = metrics_logger
-
-        self._circular_buffer = circular_buffer
 
     def run(self) -> None:
         while True:
@@ -264,8 +251,8 @@ class _GPULoaderThread(threading.Thread):
                 env_steps=env_steps,
             )
 
-            if self._circular_buffer:
-                ts_dropped = self._circular_buffer.add(ma_batch_on_gpu)
+            if isinstance(self._out_queue, CircularBuffer):
+                ts_dropped = self._out_queue.add(ma_batch_on_gpu)
                 self.metrics.log_value(
                     (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
                     ts_dropped,
@@ -281,13 +268,8 @@ class _LearnerThread(threading.Thread):
         self,
         *,
         update_method,
-        in_queue,
-        #out_queue,
+        in_queue: deque,
         metrics_logger,
-        #num_epochs,
-        #minibatch_size,
-        #shuffle_batch_per_epoch,
-        circular_buffer=None,
     ):
         super().__init__()
         self.daemon = True
@@ -295,14 +277,7 @@ class _LearnerThread(threading.Thread):
         self.stopped = False
 
         self._update_method = update_method
-        self._in_queue: deque = in_queue
-        #self._out_queue: queue.Queue = out_queue
-
-        #self._num_epochs = num_epochs
-        #self._minibatch_size = minibatch_size
-        #self._shuffle_batch_per_epoch = shuffle_batch_per_epoch
-
-        self._circular_buffer = circular_buffer
+        self._in_queue: Union[deque, CircularBuffer] = in_queue
 
     def run(self) -> None:
         while not self.stopped:
@@ -313,8 +288,9 @@ class _LearnerThread(threading.Thread):
 
         # Get a new batch from the GPU-data (deque.pop -> newest item first).
         with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_IN_QUEUE_WAIT_TIMER)):
-            if self._circular_buffer:
-                ma_batch_on_gpu = self._circular_buffer.sample()
+            # Get a new batch from the GPU-data (learner queue OR circular buffer).
+            if isinstance(self._in_queue, CircularBuffer):
+                ma_batch_on_gpu = self._in_queue.sample()
             else:
                 # Queue is empty: Sleep a tiny bit to avoid CPU-thrashing.
                 if not self._in_queue:
