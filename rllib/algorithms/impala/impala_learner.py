@@ -181,6 +181,7 @@ class IMPALALearner(Learner):
                     (ALL_MODULES, QUEUE_SIZE_GPU_LOADER_QUEUE),
                     self._gpu_loader_in_queue.qsize(),
                 )
+            # Add the batch directly to the learner queue (or circular buffer).
             else:
                 ma_batch = MultiAgentBatch(
                     {mid: SampleBatch(b) for mid, b in batch.items()},
@@ -377,15 +378,6 @@ class _LearnerThread(threading.Thread):
         # if len(learner_queue) == learner_queue.maxlen:
         #     ts_dropped = learner_queue.popleft().env_steps()
         learner_queue.append(batch)
-        # TODO (sven): This metric will not show correctly on the Algo side (main
-        #  logger), b/c of the bug in the metrics not properly "upstreaming" reduce=sum
-        #  metrics (similarly: ENV_RUNNERS/NUM_ENV_STEPS_SAMPLED grows exponentially
-        #  on the main algo's logger).
-        # metrics_logger.log_value(
-        #    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
-        #    ts_dropped,
-        #    reduce="sum",
-        # )
 
         # Log current queue size.
         metrics_logger.log_value(

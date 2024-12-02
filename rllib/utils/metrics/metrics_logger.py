@@ -1,4 +1,6 @@
+import copy
 import logging
+import threading
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import tree  # pip install dm_tree
@@ -308,6 +310,13 @@ class MetricsLogger:
                 `self.reduce()` is called. Setting this to True is useful for cases,
                 in which the internal values list would otherwise grow indefinitely,
                 for example if reduce is None and there is no `window` provided.
+            with_throughput: Whether to track a throughput estimate together with this
+                metric. This is only supported for `reduce=sum` and
+                `clear_on_reduce=False` metrics (aka. "lifetime counts"). The `Stats`
+                object under the logged key then keeps track of the time passed
+                between two consecutive calls to `reduce()` and update its throughput
+                estimate. The current throughput estimate of a key can be obtained
+                through: `MetricsLogger.peek([some key], throughput=True)`.
         """
         # No reduction (continue appending to list) AND no window.
         # -> We'll force-reset our values upon `reduce()`.
@@ -632,9 +641,9 @@ class MetricsLogger:
                     more_stats.append(stat_or_value)
 
             # Special case: `base_stats` is a lifetime sum (reduce=sum,
-            # clear_on_reduce=False) -> We only(!) use `base_stats`'s values, not
-            # our own (b/c the sum over `base_stats` already contains older values from
-            # before).
+            # clear_on_reduce=False) -> We subtract the previous value (from 2
+            # `reduce()` calls ago) from all to-be-merged stats, so we don't count
+            # twice the older sum from before.
             if (
                 base_stats._reduce_method == "sum"
                 and base_stats._window is None
@@ -997,6 +1006,13 @@ class MetricsLogger:
                 in which the internal values list would otherwise grow indefinitely,
                 for example if reduce is None and there is no `window` provided.
                 Note that this is only applied if `key` does not exist in `self` yet.
+            with_throughput: Whether to track a throughput estimate together with this
+                metric. This is only supported for `reduce=sum` and
+                `clear_on_reduce=False` metrics (aka. "lifetime counts"). The `Stats`
+                object under the logged key then keeps track of the time passed
+                between two consecutive calls to `reduce()` and update its throughput
+                estimate. The current throughput estimate of a key can be obtained
+                through: `MetricsLogger.peek([some key], throughput=True)`.
         """
         # Key already in self -> Erase internal values list with [`value`].
         if self._key_in_stats(key):

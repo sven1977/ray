@@ -81,12 +81,16 @@ class IMPALAConfig(AlgorithmConfig):
     .. testcode::
 
         from ray.rllib.algorithms.impala import IMPALAConfig
-        config = IMPALAConfig()
-        config = config.training(lr=0.0003, train_batch_size_per_learner=512)
-        config = config.learners(num_learners=1)
-        config = config.env_runners(num_env_runners=1)
+
+        config = (
+            IMPALAConfig()
+            .environment("CartPole-v1")
+            .env_runners(num_env_runners=1)
+            .training(lr=0.0003, train_batch_size_per_learner=512)
+            .learners(num_learners=1)
+        )
         # Build a Algorithm object from the config and run 1 training iteration.
-        algo = config.build(env="CartPole-v1")
+        algo = config.build()
         algo.train()
         del algo
 
@@ -95,27 +99,20 @@ class IMPALAConfig(AlgorithmConfig):
         from ray.rllib.algorithms.impala import IMPALAConfig
         from ray import air
         from ray import tune
-        config = IMPALAConfig()
 
-        # Update the config object.
-        config = config.training(
-            lr=tune.grid_search([0.0001, 0.0002]), grad_clip=20.0
+        config = (
+            IMPALAConfig()
+            .environment("CartPole-v1")
+            .env_runners(num_env_runners=1)
+            .training(lr=tune.grid_search([0.0001, 0.0002]), grad_clip=20.0)
+            .learners(num_learners=1)
         )
-        config = config.learners(num_learners=1)
-        config = config.env_runners(num_env_runners=1)
-        # Set the config object's env.
-        config = config.environment(env="CartPole-v1")
         # Run with tune.
         tune.Tuner(
             "IMPALA",
             param_space=config,
             run_config=air.RunConfig(stop={"training_iteration": 1}),
         ).fit()
-
-    .. testoutput::
-        :hide:
-
-        ...
     """
 
     def __init__(self, algo_class=None):
@@ -147,8 +144,6 @@ class IMPALAConfig(AlgorithmConfig):
         self.broadcast_interval = 1
         self.num_aggregation_workers = 0
         self.num_gpu_loader_threads = 8
-        # IMPALA takes care of its own EnvRunner (weights, connector, metrics) synching.
-        self._dont_auto_sync_env_runner_states = True
 
         self.grad_clip = 40.0
         # Note: Only when using enable_rl_module_and_learner=True can the clipping mode
@@ -168,6 +163,9 @@ class IMPALAConfig(AlgorithmConfig):
         self.min_time_s_per_iteration = 10
         # __sphinx_doc_end__
         # fmt: on
+
+        # IMPALA takes care of its own EnvRunner (weights, connector, metrics) synching.
+        self._dont_auto_sync_env_runner_states = True
 
         self.lr_schedule = None  # @OldAPIStack
         self.entropy_coeff_schedule = None  # @OldAPIStack
@@ -1387,6 +1385,32 @@ class IMPALA(Algorithm):
 
 
 Impala = IMPALA
+
+
+@DeveloperAPI
+@ray.remote(num_cpus=0, max_restarts=-1)
+class AggregationWorker(FaultAwareApply):
+    """A worker performing LearnerConnector pass throughs of collected episodes."""
+
+    def __init__(self, config: AlgorithmConfig):
+        self.config = config
+        self._learner_connector = self.config.build_learner_connector(
+            input_observation_space=None,
+            input_action_space=None,
+        )
+        self._rl_module = None
+
+    def process_episodes(self, episodes):
+        batch = self._learner_connector(
+            batch={},
+            episodes=episodes,
+            rl_module=self._rl_module,
+            shared_data={},
+        )
+        return batch
+
+    def get_host(self) -> str:
+        return platform.node()
 
 
 @OldAPIStack
