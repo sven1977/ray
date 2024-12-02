@@ -183,7 +183,6 @@ class IMPALAConfig(AlgorithmConfig):
         self.epsilon = 0.1  # @OldAPIstack
         self._separate_vf_optimizer = False  # @OldAPIstack
         self._lr_vf = 0.0005  # @OldAPIstack
-        self.train_batch_size = 500  # @OldAPIstack
         self.num_gpus = 1  # @OldAPIstack
         self._tf_policy_handles_more_than_one_loss = True  # @OldAPIstack
 
@@ -599,7 +598,13 @@ class IMPALA(Algorithm):
         # update of the learner group
         self._results = {}
 
-        if not self.config.enable_rl_module_and_learner:
+        if self.config.enable_rl_module_and_learner:
+            # Set up auto-sleep time adjustment procedure. It is absolutely critical for
+            # this Algorithm's learning success that we sleep the correct amount of time
+            # in each training_step to establish a healthy balance between sample
+            # collection and training.
+            self._sleep_time_controller = SleepTimeController()
+        else:
             # Create and start the learner thread.
             self._learner_thread = make_learner_thread(self.env_runner, self.config)
             self._learner_thread.start()
@@ -643,8 +648,6 @@ class IMPALA(Algorithm):
                     data_packages_for_learner_group
                 )
             )
-
-        time.sleep(0.2)
 
         # Call the LearnerGroup's `update_from_episodes` method.
         with self.metrics.log_time((TIMERS, LEARNER_UPDATE_TIMER)):
@@ -736,6 +739,12 @@ class IMPALA(Algorithm):
                     connector_states=connector_states,
                     rl_module_state=rl_module_state,
                 )
+
+        # Balance the backpressures: Sampling vs training through sleeping a small
+        # amount of time. The sleep time is adjusted automatically based on trying
+        # to reach a maximum training throughput.
+        with self.metrics.log_time((TIMERS, "_balance_backpressure")):
+            self.balance_backpressure()
 
     def _sample_and_get_connector_states(self):
         def _remote_sample_get_state_and_metrics(_worker):
@@ -1415,6 +1424,32 @@ class IMPALA(Algorithm):
 
 
 Impala = IMPALA
+
+
+@DeveloperAPI
+@ray.remote(num_cpus=0, max_restarts=-1)
+class AggregationWorker(FaultAwareApply):
+    """A worker performing LearnerConnector pass throughs of collected episodes."""
+
+    def __init__(self, config: AlgorithmConfig):
+        self.config = config
+        self._learner_connector = self.config.build_learner_connector(
+            input_observation_space=None,
+            input_action_space=None,
+        )
+        self._rl_module = None
+
+    def process_episodes(self, episodes):
+        batch = self._learner_connector(
+            batch={},
+            episodes=episodes,
+            rl_module=self._rl_module,
+            shared_data={},
+        )
+        return batch
+
+    def get_host(self) -> str:
+        return platform.node()
 
 
 @OldAPIStack
