@@ -649,6 +649,12 @@ class IMPALA(Algorithm):
                 )
             )
 
+        # Balance the backpressures: Sampling vs training through sleeping a small
+        # amount of time. The sleep time is adjusted automatically based on trying
+        # to reach a maximum training throughput.
+        with self.metrics.log_time((TIMERS, "_balance_backpressure")):
+            self.balance_backpressure()
+
         # Call the LearnerGroup's `update_from_episodes` method.
         with self.metrics.log_time((TIMERS, LEARNER_UPDATE_TIMER)):
             self.metrics.log_value(
@@ -739,12 +745,6 @@ class IMPALA(Algorithm):
                     connector_states=connector_states,
                     rl_module_state=rl_module_state,
                 )
-
-        # Balance the backpressures: Sampling vs training through sleeping a small
-        # amount of time. The sleep time is adjusted automatically based on trying
-        # to reach a maximum training throughput.
-        with self.metrics.log_time((TIMERS, "_balance_backpressure")):
-            self.balance_backpressure()
 
     def _sample_and_get_connector_states(self):
         def _remote_sample_get_state_and_metrics(_worker):
