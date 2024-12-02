@@ -128,6 +128,7 @@ class MetricsLogger:
         key: Union[str, Tuple[str, ...]],
         *,
         default: Optional[Any] = None,
+        throughput: bool = False,
     ) -> Any:
         """Returns the (reduced) value(s) found under the given key or key sequence.
 
@@ -173,6 +174,8 @@ class MetricsLogger:
                 values to return.
             default: An optional default value in case `key` cannot be found in `self`.
                 If default is not provided and `key` cannot be found, throws a KeyError.
+            throughput: Whether to return the current throughput estimate instead of the
+                actual (reduced) value.
 
         Returns:
             The (reduced) values of the (possibly nested) sub-structure found under
@@ -188,7 +191,10 @@ class MetricsLogger:
         # Otherwise, return the reduced Stats' (peek) value.
 
         # Create a reduced view of the requested sub-structure or leaf (Stats object).
-        ret = tree.map_structure(lambda s: s.peek(), self._get_key(key))
+        ret = tree.map_structure(
+            lambda s: s.peek(throughput=throughput),
+            self._get_key(key),
+        )
         return ret
 
     @staticmethod
@@ -215,6 +221,7 @@ class MetricsLogger:
         window: Optional[Union[int, float]] = None,
         ema_coeff: Optional[float] = None,
         clear_on_reduce: bool = False,
+        with_throughput: bool = False,
     ) -> None:
         """Logs a new value under a (possibly nested) key to the logger.
 
@@ -338,6 +345,7 @@ class MetricsLogger:
                         window=window,
                         ema_coeff=ema_coeff,
                         clear_on_reduce=clear_on_reduce,
+                        throughput=with_throughput,
                     )
                 ),
             )
@@ -946,10 +954,10 @@ class MetricsLogger:
         assert self.tensor_mode
         self._tensor_mode = False
         # Return all logged tensors (logged during the tensor-mode phase).
-        ret = {key: self._get_key(key).peek() for key in self._tensor_keys}
+        logged_tensors = {key: self._get_key(key).peek() for key in self._tensor_keys}
         # Clear out logged tensor keys.
         self._tensor_keys.clear()
-        return ret
+        return logged_tensors
 
     def tensors_to_numpy(self, tensor_metrics):
         """Converts all previously logged and returned tensors back to numpy values."""
@@ -970,6 +978,7 @@ class MetricsLogger:
         window: Optional[Union[int, float]] = None,
         ema_coeff: Optional[float] = None,
         clear_on_reduce: bool = False,
+        with_throughput: bool = False,
     ) -> None:
         """Overrides the logged values under `key` with `value`.
 
@@ -1026,6 +1035,7 @@ class MetricsLogger:
                 window=window,
                 ema_coeff=ema_coeff,
                 clear_on_reduce=clear_on_reduce,
+                with_throughput=with_throughput,
             )
 
     def reset(self) -> None:

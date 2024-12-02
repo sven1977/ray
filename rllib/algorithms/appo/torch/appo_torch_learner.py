@@ -4,7 +4,7 @@ from ray.rllib.algorithms.appo.appo import (
     APPOConfig,
     LEARNER_RESULTS_CURR_KL_COEFF_KEY,
     LEARNER_RESULTS_KL_KEY,
-    TARGET_ACTION_DIST_LOGITS_KEY,
+    OLD_ACTION_DIST_LOGITS_KEY,
 )
 from ray.rllib.algorithms.appo.appo_learner import APPOLearner
 from ray.rllib.algorithms.impala.torch.impala_torch_learner import IMPALATorchLearner
@@ -60,32 +60,31 @@ class APPOTorchLearner(APPOLearner, IMPALATorchLearner):
         )
 
         action_dist_cls_train = module.get_train_action_dist_cls()
-
-        current_action_dist = action_dist_cls_train.from_logits(
+        target_policy_dist = action_dist_cls_train.from_logits(
             fwd_out[Columns.ACTION_DIST_INPUTS]
         )
-        current_actions_logp = current_action_dist.logp(batch[Columns.ACTIONS])
-        current_actions_logp_time_major = make_time_major(
-            current_actions_logp,
-            trajectory_len=rollout_frag_or_episode_len,
-            recurrent_seq_len=recurrent_seq_len,
-        )
 
-        target_action_dist = action_dist_cls_train.from_logits(
+        old_target_policy_dist = action_dist_cls_train.from_logits(
             module.forward_target(batch)[OLD_ACTION_DIST_LOGITS_KEY]
         )
-        target_actions_logp = target_action_dist.logp(
+        old_target_policy_actions_logp = old_target_policy_dist.logp(
             batch[Columns.ACTIONS]
+        )
+        behaviour_actions_logp = batch[Columns.ACTION_LOGP]
+        target_actions_logp = target_policy_dist.logp(batch[Columns.ACTIONS])
+
+        behaviour_actions_logp_time_major = make_time_major(
+            behaviour_actions_logp,
+            trajectory_len=rollout_frag_or_episode_len,
+            recurrent_seq_len=recurrent_seq_len,
         )
         target_actions_logp_time_major = make_time_major(
             target_actions_logp,
             trajectory_len=rollout_frag_or_episode_len,
             recurrent_seq_len=recurrent_seq_len,
         )
-
-        behaviour_actions_logp = batch[Columns.ACTION_LOGP]
-        behaviour_actions_logp_time_major = make_time_major(
-            behaviour_actions_logp,
+        old_actions_logp_time_major = make_time_major(
+            old_target_policy_actions_logp,
             trajectory_len=rollout_frag_or_episode_len,
             recurrent_seq_len=recurrent_seq_len,
         )
@@ -122,11 +121,11 @@ class APPOTorchLearner(APPOLearner, IMPALATorchLearner):
                 trajectory_len=rollout_frag_or_episode_len,
                 recurrent_seq_len=recurrent_seq_len,
             ).float()
-        ) * config.gamma * config.lambda_
+        ) * config.gamma
 
         # Note that vtrace will compute the main loop on the CPU for better performance.
         vtrace_adjusted_target_values, pg_advantages = vtrace_torch(
-            target_action_log_probs=target_actions_logp_time_major,
+            target_action_log_probs=old_actions_logp_time_major,
             behaviour_action_log_probs=behaviour_actions_logp_time_major,
             discounts=discounts_time_major,
             rewards=rewards_time_major,
@@ -139,12 +138,12 @@ class APPOTorchLearner(APPOLearner, IMPALATorchLearner):
 
         # The policy gradients loss.
         is_ratio = torch.clip(
-            torch.exp(behaviour_actions_logp_time_major - target_actions_logp_time_major),
+            torch.exp(behaviour_actions_logp_time_major - old_actions_logp_time_major),
             0.0,
             2.0,
         )
         logp_ratio = is_ratio * torch.exp(
-            current_actions_logp_time_major - behaviour_actions_logp_time_major
+            target_actions_logp_time_major - behaviour_actions_logp_time_major
         )
 
         surrogate_loss = torch.minimum(
@@ -154,7 +153,7 @@ class APPOTorchLearner(APPOLearner, IMPALATorchLearner):
         )
 
         if config.use_kl_loss:
-            action_kl = target_action_dist.kl(current_action_dist) * loss_mask
+            action_kl = old_target_policy_dist.kl(target_policy_dist) * loss_mask
             mean_kl_loss = torch.sum(action_kl) / size_loss_mask
         else:
             mean_kl_loss = 0.0
@@ -167,7 +166,7 @@ class APPOTorchLearner(APPOLearner, IMPALATorchLearner):
 
         # The entropy loss.
         mean_entropy_loss = (
-            -torch.sum(current_action_dist.entropy() * loss_mask) / size_loss_mask
+            -torch.sum(target_policy_dist.entropy() * loss_mask) / size_loss_mask
         )
 
         # The summed weighted loss.

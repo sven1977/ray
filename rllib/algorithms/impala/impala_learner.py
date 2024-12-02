@@ -369,7 +369,7 @@ class _LearnerThread(threading.Thread):
             )
 
     @staticmethod
-    def enqueue(learner_queue, batch, metrics_logger):
+    def enqueue(learner_queue, batch, metrics):
         # Right-append to learner queue (a deque). If full, drops the leftmost
         # (oldest) item in the deque. Note that we consume from the right
         # (newest first), which is why the queue size should probably always be 1,
@@ -380,7 +380,7 @@ class _LearnerThread(threading.Thread):
         learner_queue.append(batch)
 
         # Log current queue size.
-        metrics_logger.log_value(
+        metrics.log_value(
             (ALL_MODULES, QUEUE_SIZE_LEARNER_THREAD_QUEUE),
             len(learner_queue),
         )

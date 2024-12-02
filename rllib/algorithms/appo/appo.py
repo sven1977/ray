@@ -1,13 +1,13 @@
-"""
-Asynchronous Proximal Policy Optimization (APPO)
-================================================
+"""Asynchronous Proximal Policy Optimization (APPO)
 
-This file defines the distributed Algorithm class for the asynchronous version
-of proximal policy optimization (APPO).
-See `appo_[tf|torch]_policy.py` for the definition of the policy loss.
+The algorithm is described in [1] (under the name of "IMPACT"):
 
 Detailed documentation:
 https://docs.ray.io/en/master/rllib-algorithms.html#appo
+
+[1] IMPACT: Importance Weighted Asynchronous Architectures with Clipped Target Networks.
+Luo et al. 2020
+https://arxiv.org/pdf/1912.00167
 """
 
 from typing import Optional, Type
@@ -32,7 +32,8 @@ logger = logging.getLogger(__name__)
 
 LEARNER_RESULTS_KL_KEY = "mean_kl_loss"
 LEARNER_RESULTS_CURR_KL_COEFF_KEY = "curr_kl_coeff"
-TARGET_ACTION_DIST_LOGITS_KEY = "target_action_dist_logits"
+OLD_ACTION_DIST_KEY = "old_action_dist"
+OLD_ACTION_DIST_LOGITS_KEY = "old_action_dist_logits"
 
 
 class APPOConfig(IMPALAConfig):
