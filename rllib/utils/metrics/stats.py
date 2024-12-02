@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 import time
 import threading
 from typing import Any, Callable, Dict, Optional, Tuple, Union
@@ -224,8 +224,9 @@ class Stats:
         # Code to execute when exiting a with-context.
         self._on_exit = on_exit
 
-        # On each `.reduce()` call, we store the result of this call in
-        self._hist = (0, 0)
+        # On each `.reduce()` call, we store the result of this call in hist[0] and the
+        # previous `reduce()` result in hist[1].
+        self._hist = deque([0, 0, 0], maxlen=3)
 
         self._throughput = throughput if throughput is not True else 0.0
         if self._throughput is not False:
@@ -256,7 +257,7 @@ class Stats:
         # In case another thread already is measuring this Stats (timing), simply ignore
         # the "enter request" and return a clone of `self`.
         thread_id = threading.get_ident()
-        assert self._start_times[thread_id] is None
+        # assert self._start_times[thread_id] is None
         self._start_times[thread_id] = time.perf_counter()
         return self
 
@@ -273,7 +274,7 @@ class Stats:
 
         del self._start_times[thread_id]
 
-    def peek(self, *, previous: bool = False, throughput: bool = False) -> Any:
+    def peek(self, *, previous: Optional[int] = None, throughput: bool = False) -> Any:
         """Returns the result of reducing the internal values list.
 
         Note that this method does NOT alter the internal values list in this process.
@@ -281,15 +282,17 @@ class Stats:
         given the current internal values list.
 
         Args:
-            previous: If True, returns the previous (reduced) result of this `Stats`
-                object.
+            previous: If provided (int), returns that previously (reduced) result of
+                this `Stats` object, which was generated `previous` number of `reduce()`
+                calls ago). If None (default), returns the current (reduced) value.
 
         Returns:
             The result of reducing the internal values list (or the previously computed
             reduced result, if `previous` is True).
         """
-        if previous:
-            return self._hist[1]
+        # Return previously reduced value.
+        if previous is not None:
+            return self._hist[-abs(previous)]
         # Return the last measured throughput.
         elif throughput:
             return self._throughput if self._throughput is not False else None
@@ -329,7 +332,7 @@ class Stats:
         self.values = values
 
         # Shift historic reduced valued by one in our hist-tuple.
-        self._hist = (reduced, self._hist[0])
+        self._hist.append(reduced)
 
         # `clear_on_reduce` -> Return an empty new Stats object with the same settings
         # as `self`.
@@ -491,10 +494,12 @@ class Stats:
                 `self`.
         """
         # Make sure `others` have same reduction settings.
-        assert all(self._reduce_method == o._reduce_method for o in others)
-        assert all(self._window == o._window for o in others)
-        assert all(self._ema_coeff == o._ema_coeff for o in others)
-
+        assert all(
+            self._reduce_method == o._reduce_method
+            and self._window == o._window
+            and self._ema_coeff == o._ema_coeff
+            for o in others
+        )
         win = self._window or float("inf")
 
         # Take turns stepping through `self` and `*others` values, thereby moving
@@ -600,23 +605,25 @@ class Stats:
             "window": self._window,
             "ema_coeff": self._ema_coeff,
             "clear_on_reduce": self._clear_on_reduce,
+            "_hist": list(self._hist),
         }
 
     @staticmethod
     def from_state(state: Dict[str, Any]) -> "Stats":
-        return Stats(
+        stats = Stats(
             state["values"],
             reduce=state["reduce"],
             window=state["window"],
             ema_coeff=state["ema_coeff"],
             clear_on_reduce=state["clear_on_reduce"],
         )
+        stats._hist = deque(state["_hist"], maxlen=stats._hist.maxlen)
+        return stats
 
     @staticmethod
     def similar_to(
         other: "Stats",
         init_value: Optional[Any] = None,
-        prev_values: Optional[Tuple[Any, Any]] = None,
     ) -> "Stats":
         """Returns a new Stats object that's similar to `other`.
 

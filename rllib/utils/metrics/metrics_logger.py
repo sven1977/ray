@@ -110,6 +110,7 @@ class MetricsLogger:
         self.stats = {}
         self._tensor_mode = False
         self._tensor_keys = set()
+        self._threading_lock = threading.RLock()
 
     def __contains__(self, key: Union[str, Tuple[str, ...]]) -> bool:
         """Returns True, if `key` can be found in self.stats.
@@ -332,29 +333,31 @@ class MetricsLogger:
 
         self._check_tensor(key, value)
 
-        # `key` doesn't exist -> Automatically create it.
-        if not self._key_in_stats(key):
-            self._set_key(
-                key,
-                (
-                    Stats.similar_to(value, init_value=value.values)
-                    if isinstance(value, Stats)
-                    else Stats(
-                        value,
-                        reduce=reduce,
-                        window=window,
-                        ema_coeff=ema_coeff,
-                        clear_on_reduce=clear_on_reduce,
-                        throughput=with_throughput,
-                    )
-                ),
-            )
-        # If value itself is a `Stats`, we merge it on time axis into self's `Stats`.
-        elif isinstance(value, Stats):
-            self._get_key(key).merge_on_time_axis(value)
-        # Otherwise, we just push the value into self's `Stats`.
-        else:
-            self._get_key(key).push(value)
+        with self._threading_lock:
+            # `key` doesn't exist -> Automatically create it.
+            if not self._key_in_stats(key):
+                self._set_key(
+                    key,
+                    (
+                        Stats.similar_to(value, init_value=value.values)
+                        if isinstance(value, Stats)
+                        else Stats(
+                            value,
+                            reduce=reduce,
+                            window=window,
+                            ema_coeff=ema_coeff,
+                            clear_on_reduce=clear_on_reduce,
+                            throughput=with_throughput,
+                        )
+                    ),
+                )
+            # If value itself is a `Stats`, we merge it on time axis into self's
+            # `Stats`.
+            elif isinstance(value, Stats):
+                self._get_key(key).merge_on_time_axis(value)
+            # Otherwise, we just push the value into self's `Stats`.
+            else:
+                self._get_key(key).push(value)
 
     def log_dict(
         self,
@@ -658,7 +661,7 @@ class MetricsLogger:
                 and base_stats._clear_on_reduce is False
             ):
                 for stat in [base_stats] + more_stats:
-                    stat.push(-stat.peek(previous=True))
+                    stat.push(-stat.peek(previous=2))
 
             # There are more than one incoming parallel others -> Merge all of them
             # first in parallel.
@@ -901,21 +904,27 @@ class MetricsLogger:
             PATH = path
             return stats.reduce()
 
-        # Create a shallow copy of `self.stats` in case we need to reset some of our
-        # stats due to this `reduce()` call (and the Stat having self.clear_on_reduce
-        # set to True). In case we clear the Stats upon `reduce`, we receive a
-        # new empty `Stats` object from `stat.reduce()` with the same settings as
-        # existing one and can now re-assign it to `self.stats[key]` (while we return
-        # from this method the properly reduced, but not cleared/emptied new `Stats`).
+        # Create a shallow (yet nested) copy of `self.stats` in case we need to reset
+        # some of our stats due to this `reduce()` call and Stats having
+        # `self.clear_on_reduce=True`. In the latter case we would receive a new empty
+        # `Stats` object from `stat.reduce()` with the same settings as existing one and
+        # can now re-assign it to `self.stats[key]`, while we return from this method
+        # the properly reduced, but not cleared/emptied new `Stats`.
+        if key is not None:
+            stats_to_return = self._get_key(key, key_error=False)
+        else:
+            stats_to_return = self.stats
+
         try:
-            if key is not None:
-                stats_to_return = self._get_key(key, key_error=False).copy()
-                self._set_key(
-                    key, tree.map_structure_with_path(_reduce, stats_to_return)
+            with self._threading_lock:
+                assert not self.tensor_mode
+                reduced = copy.deepcopy(
+                    tree.map_structure_with_path(_reduce, stats_to_return)
                 )
-            else:
-                stats_to_return = self.stats.copy()
-                self.stats = tree.map_structure_with_path(_reduce, stats_to_return)
+                if key is not None:
+                    self._set_key(key, reduced)
+                else:
+                    self.stats = reduced
         # Provide proper error message if reduction fails due to bad data.
         except Exception as e:
             raise ValueError(
@@ -931,7 +940,7 @@ class MetricsLogger:
             return stats_to_return
         # Return actual (reduced) values (not reduced `Stats` objects) as leafs.
         else:
-            return tree.map_structure(lambda s: s.peek(), stats_to_return)
+            return self.peek_results(stats_to_return)
 
     def activate_tensor_mode(self):
         """Switches to tensor-mode, in which in-graph tensors can be logged.
@@ -946,6 +955,7 @@ class MetricsLogger:
         them TODO (sven) continue docstring
 
         """
+        self._threading_lock.acquire()
         assert not self.tensor_mode
         self._tensor_mode = True
 
@@ -964,6 +974,7 @@ class MetricsLogger:
         for key, values in tensor_metrics.items():
             assert self._key_in_stats(key)
             self._get_key(key).set_to_numpy_values(values)
+        self._threading_lock.release()
 
     @property
     def tensor_mode(self):
@@ -1025,7 +1036,9 @@ class MetricsLogger:
         """
         # Key already in self -> Erase internal values list with [`value`].
         if self._key_in_stats(key):
-            self._get_key(key).values = [value]
+            stats = self._get_key(key)
+            with self._threading_lock:
+                stats.values = [value]
         # Key cannot be found in `self` -> Simply log as a (new) value.
         else:
             self.log_value(
@@ -1079,7 +1092,8 @@ class MetricsLogger:
         def _map(path, stats):
             stats_dict[force_tuple(path)] = stats.get_state()
 
-        tree.map_structure_with_path(_map, self.stats)
+        with self._threading_lock:
+            tree.map_structure_with_path(_map, self.stats)
 
         return {"stats": stats_dict}
 
@@ -1089,8 +1103,9 @@ class MetricsLogger:
         Args:
             state: The state to set `self` to.
         """
-        for flat_key, stats_state in state["stats"].items():
-            self._set_key(flat_key, Stats.from_state(stats_state))
+        with self._threading_lock:
+            for flat_key, stats_state in state["stats"].items():
+                self._set_key(flat_key, Stats.from_state(stats_state))
 
     def _check_tensor(self, key: Tuple[str], value) -> None:
         # `value` is a tensor -> Log it in our keys set.
