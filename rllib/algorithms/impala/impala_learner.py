@@ -87,7 +87,7 @@ class IMPALALearner(Learner):
         self._learner_thread_out_queue = Queue()
 
         #TODO
-        self._circular_buffer = CircularBuffer(num_batches=4, iterations_per_batch=2)#TODO
+        self._circular_buffer = CircularBuffer(capacity=4, max_picks_per_batch=2)#TODO
 
         # Create and start the GPU loader thread(s).
         if self.config.num_gpus_per_learner > 0:
@@ -372,6 +372,7 @@ class _LearnerThread(threading.Thread):
 
     @staticmethod
     def enqueue(learner_queue, batch, metrics):
+        raise NotImplementedError("BAD!")
         # Right-append to learner queue (a deque). If full, drops the leftmost
         # (oldest) item in the deque. Note that we consume from the right
         # (newest first), which is why the queue size should probably always be 1,
