@@ -215,7 +215,7 @@ def gym_space_from_dict(d: Dict) -> gym.spaces.Space:
     Returns:
         De-serialized gym space.
     """
-    if not d:
+    if d is None:
         return None
 
     def __common(d: Dict):

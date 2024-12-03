@@ -28,6 +28,7 @@ class VPGTorchRLModuleUsingSharedEncoder(TorchRLModule):
             nn.Linear(hidden_dim, self.action_space.n),
         )
 
+    @override(RLModule)
     def _forward(self, batch, **kwargs):
         # Embeddings can be found in the batch under the "encoder_embeddings" key.
         embeddings = batch["encoder_embeddings"]
@@ -106,8 +107,8 @@ class VPGTorchMultiRLModuleWithSharedEncoder(MultiRLModule):
             rl_module = self._rl_modules[policy_id]
             forward_fn = getattr(rl_module, forward_fn_name)
 
-            # Pass policy's observations through shared encoder to get the embeddings
-            # for this policy.
+            # Pass policy's observations through shared encoder to get the features for
+            # this policy.
             embeddings = encoder_forward_fn(batch[policy_id])
             # Pass the policy's embeddings through the policy net.
             batch[policy_id]["encoder_embeddings"] = embeddings

@@ -12,6 +12,10 @@ if __name__ == "__main__":
     # Configure an old stack default ModelV2.
     config_old_stack = (
         PPOConfig()
+        .api_stack(
+            enable_env_runner_and_connector_v2=False,
+            enable_rl_module_and_learner=False,
+        )
         .environment("CartPole-v1")
         .training(
             lr=0.0003,
@@ -42,6 +46,7 @@ if __name__ == "__main__":
                 model_config={
                     "policy_id": DEFAULT_POLICY_ID,
                     "old_api_stack_algo_config": config_old_stack,
+                    "max_seq_len": 20,
                 },
             ),
         )

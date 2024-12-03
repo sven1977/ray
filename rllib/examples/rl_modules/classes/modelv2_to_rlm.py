@@ -41,10 +41,10 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
     @override(TorchRLModule)
     def setup(self):
         # Try extracting the policy ID from this RLModule's config dict.
-        policy_id = self.config.model_config_dict.get("policy_id", DEFAULT_POLICY_ID)
+        policy_id = self.model_config.get("policy_id", DEFAULT_POLICY_ID)
 
-        # Try getting the algorithm checkpoint from the `model_config_dict`.
-        algo_checkpoint_dir = self.config.model_config_dict.get("algo_checkpoint_dir")
+        # Try getting the algorithm checkpoint from the `model_config`.
+        algo_checkpoint_dir = self.model_config.get("algo_checkpoint_dir")
         if algo_checkpoint_dir:
             algo_checkpoint_dir = pathlib.Path(algo_checkpoint_dir)
             if not algo_checkpoint_dir.is_dir():
@@ -57,11 +57,9 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
                     "'algo_checkpoint_dir': [your algo checkpoint dir]})`."
                 )
             policy_checkpoint_dir = algo_checkpoint_dir / "policies" / policy_id
-        # Try getting the policy checkpoint from the `model_config_dict`.
+        # Try getting the policy checkpoint from the `model_config`.
         else:
-            policy_checkpoint_dir = self.config.model_config_dict.get(
-                "policy_checkpoint_dir"
-            )
+            policy_checkpoint_dir = self.model_config.get("policy_checkpoint_dir")
 
         # Create the ModelV2 from the Policy.
         if policy_checkpoint_dir:
@@ -80,7 +78,7 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
             policy = TorchPolicyV2.from_checkpoint(policy_checkpoint_dir)
         # Create the ModelV2 from scratch using the config.
         else:
-            config = self.config.model_config_dict.get("old_api_stack_algo_config")
+            config = self.model_config.get("old_api_stack_algo_config")
             if not config:
                 raise ValueError(
                     "The `model_config` of your RLModule must contain a "
@@ -93,18 +91,15 @@ class ModelV2ToRLModule(TorchRLModule, ValueFunctionAPI):
             # Get the multi-agent policies dict.
             policy_dict, _ = config.get_multi_agent_setup(
                 spaces={
-                    policy_id: (
-                        self.config.observation_space,
-                        self.config.action_space,
-                    ),
+                    policy_id: (self.observation_space, self.action_space),
                 },
                 default_policy_class=config.algo_class.get_default_policy_class(config),
             )
             config = config.to_dict()
             config["__policy_id"] = policy_id
             policy = policy_dict[policy_id].policy_class(
-                self.config.observation_space,
-                self.config.action_space,
+                self.observation_space,
+                self.action_space,
                 config,
             )
 

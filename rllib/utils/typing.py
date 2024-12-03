@@ -77,9 +77,7 @@ ModelConfigDict = dict  # @OldAPIStack
 # and stride may be single ints (width and height are the same) or 2-tuples (int, int)
 # for width and height (different values).
 ConvFilterSpec = List[
-    Tuple[
-        int, Union[int, Tuple[int, int]], Union[int, Tuple[int, int]]
-    ]
+    Tuple[int, Union[int, Tuple[int, int]], Union[int, Tuple[int, int]]]
 ]
 
 # Objects that can be created through the `from_config()` util method
@@ -183,7 +181,11 @@ ParamList = List[Param]
 
 # A single learning rate or a learning rate schedule (list of sub-lists, each of
 # the format: [ts (int), lr_to_reach_by_ts (float)]).
-LearningRateOrSchedule = Union[float, List[List[Union[int, float]]]]
+LearningRateOrSchedule = Union[
+    float,
+    List[List[Union[int, float]]],
+    List[Tuple[int, Union[int, float]]],
+]
 
 # Dict of tensors returned by compute gradients on the policy, e.g.,
 # {"td_error": [...], "learner_stats": {"vf_loss": ..., ...}}, for multi-agent,

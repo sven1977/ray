@@ -1,3 +1,4 @@
+import dataclasses
 import enum
 import functools
 from typing import Optional
@@ -14,7 +15,7 @@ from ray.rllib.core.models.configs import (
     RecurrentEncoderConfig,
 )
 from ray.rllib.core.models.configs import ModelConfig
-from ray.rllib.models import MODEL_DEFAULTS
+from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.models.distributions import Distribution
 from ray.rllib.models.preprocessors import get_preprocessor, Preprocessor
 from ray.rllib.models.utils import get_filter_config
@@ -101,10 +102,21 @@ class Catalog:
         if view_requirements != DEPRECATED_VALUE:
             deprecation_warning(old="Catalog(view_requirements=..)", error=True)
 
+        # TODO (sven): The following logic won't be needed anymore, once we get rid of
+        #  Catalogs entirely. We will assert directly inside the algo's DefaultRLModule
+        #  class that the `model_config` is a DefaultModelConfig. Thus users won't be
+        #  able to pass in partial config dicts into a default model (alternatively, we
+        #  could automatically augment the user provided dict by the default config
+        #  dataclass object only(!) for default modules).
+        if dataclasses.is_dataclass(model_config_dict):
+            model_config_dict = dataclasses.asdict(model_config_dict)
+        default_config = dataclasses.asdict(DefaultModelConfig())
+        # end: TODO
+
         self.observation_space = observation_space
         self.action_space = action_space
 
-        self._model_config_dict = model_config_dict
+        self._model_config_dict = default_config | model_config_dict
         self._latent_dims = None
 
         self._determine_components_hook()
@@ -247,8 +259,6 @@ class Catalog:
         """
         activation = model_config_dict["fcnet_activation"]
         output_activation = model_config_dict["fcnet_activation"]
-        fcnet_hiddens = model_config_dict["fcnet_hiddens"]
-        encoder_latent_dim = fcnet_hiddens[-1]
         use_lstm = model_config_dict["use_lstm"]
 
         if use_lstm:
@@ -256,17 +266,15 @@ class Catalog:
                 input_dims=observation_space.shape,
                 recurrent_layer_type="lstm",
                 hidden_dim=model_config_dict["lstm_cell_size"],
-                hidden_weights_initializer=model_config_dict[
-                    "lstm_weights_initializer"
-                ],
+                hidden_weights_initializer=model_config_dict["lstm_kernel_initializer"],
                 hidden_weights_initializer_config=model_config_dict[
-                    "lstm_weights_initializer_kwargs"
+                    "lstm_kernel_initializer_kwargs"
                 ],
                 hidden_bias_initializer=model_config_dict["lstm_bias_initializer"],
                 hidden_bias_initializer_config=model_config_dict[
                     "lstm_bias_initializer_kwargs"
                 ],
-                batch_major=not model_config_dict["_time_major"],
+                batch_major=True,
                 num_layers=1,
                 tokenizer_config=cls.get_tokenizer_config(
                     observation_space,
@@ -327,9 +335,6 @@ class Catalog:
                     input_dims=observation_space.shape,
                     cnn_filter_specifiers=model_config_dict["conv_filters"],
                     cnn_activation=model_config_dict["conv_activation"],
-                    #cnn_use_layernorm=model_config_dict.get(
-                    #    "conv_use_layernorm", False
-                    #),
                     cnn_kernel_initializer=model_config_dict["conv_kernel_initializer"],
                     cnn_kernel_initializer_config=model_config_dict[
                         "conv_kernel_initializer_kwargs"
@@ -346,7 +351,7 @@ class Catalog:
                 # RLlib used to support 2D Box spaces by silently flattening them
                 raise ValueError(
                     f"No default encoder config for obs space={observation_space},"
-                    f" lstm={use_lstm} and attention={use_attention} found. 2D Box "
+                    f" lstm={use_lstm} found. 2D Box "
                     f"spaces are not supported. They should be either flattened to a "
                     f"1D Box space or enhanced to be a 3D box space."
                 )
@@ -355,7 +360,7 @@ class Catalog:
                 # NestedModelConfig
                 raise ValueError(
                     f"No default encoder config for obs space={observation_space},"
-                    f" lstm={use_lstm} and attention={use_attention} found."
+                    f" lstm={use_lstm} found."
                 )
 
         return encoder_config

@@ -1,6 +1,7 @@
 import abc
 import dataclasses
 from dataclasses import dataclass, field
+import logging
 from typing import Any, Collection, Dict, Optional, Type, TYPE_CHECKING, Union
 
 import gymnasium as gym
@@ -8,17 +9,11 @@ import gymnasium as gym
 from ray.rllib.core import DEFAULT_MODULE_ID
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.specs.typing import SpecType
-from ray.rllib.core.models.specs.checker import (
-    check_input_specs,
-    check_output_specs,
-    convert_to_canonical_format,
-)
 from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.models.distributions import Distribution
 from ray.rllib.utils.annotations import (
     override,
     OverrideToImplementCustomLogic,
-    OverrideToImplementCustomLogic_CallToSuperRecommended,
 )
 from ray.rllib.utils.checkpoints import Checkpointable
 from ray.rllib.utils.deprecation import (
@@ -41,6 +36,8 @@ if TYPE_CHECKING:
         MultiRLModuleSpec,
     )
     from ray.rllib.core.models.catalog import Catalog
+
+logger = logging.getLogger("ray.rllib")
 
 
 @PublicAPI(stability="alpha")
@@ -104,7 +101,7 @@ class RLModuleSpec:
                 observation_space=self.observation_space,
                 action_space=self.action_space,
                 inference_only=self.inference_only,
-                model_config=self.model_config,
+                model_config=self._get_model_config(),
                 catalog_class=self.catalog_class,
             )
         # Older custom model might still require the old `RLModuleConfig` under
@@ -158,7 +155,9 @@ class RLModuleSpec:
             "inference_only": self.inference_only,
             "learner_only": self.learner_only,
             "model_config": self._get_model_config(),
-            "catalog_class": serialize_type(self.catalog_class) if self.catalog_class is not None else None,
+            "catalog_class": serialize_type(self.catalog_class)
+            if self.catalog_class is not None
+            else None,
         }
 
     @classmethod
@@ -173,7 +172,9 @@ class RLModuleSpec:
                 inference_only=d["inference_only"],
                 learner_only=d["learner_only"],
                 model_config=d["model_config"],
-                catalog_class=deserialize_type(d["catalog_class"]) if d["catalog_class"] is not None else None,
+                catalog_class=deserialize_type(d["catalog_class"])
+                if d["catalog_class"] is not None
+                else None,
             )
 
         # Old path through deprecated `RLModuleConfig` class.
@@ -233,7 +234,7 @@ class RLModuleSpec:
 
     def _get_model_config(self):
         return (
-            self.model_config.asdict()
+            dataclasses.asdict(self.model_config)
             if dataclasses.is_dataclass(self.model_config)
             else (self.model_config or {})
         )
@@ -397,6 +398,7 @@ class RLModule(Checkpointable, abc.ABC):
         # TODO (sven): Deprecate Catalog and replace with utility functions to create
         #  primitive components based on obs- and action spaces.
         self.catalog = None
+        self._catalog_ctor_error = None
 
         # Deprecated
         self.config = config
@@ -405,17 +407,10 @@ class RLModule(Checkpointable, abc.ABC):
                 old="RLModule(config=[RLModuleConfig])",
                 new="RLModule(observation_space=.., action_space=.., inference_only=..,"
                 " learner_only=.., model_config=..)",
-                error=False,
+                help="See https://github.com/ray-project/ray/blob/master/rllib/examples/rl_modules/custom_cnn_rl_module.py "  # noqa
+                "for how to write a custom RLModule.",
+                error=True,
             )
-            self.observation_space = self.config.observation_space
-            self.action_space = self.config.action_space
-            self.inference_only = self.config.inference_only
-            self.learner_only = self.config.learner_only
-            self.model_config = self.config.model_config_dict
-            try:
-                self.catalog = self.config.get_catalog()
-            except Exception:
-                pass
         else:
             self.observation_space = observation_space
             self.action_space = action_space
@@ -428,8 +423,28 @@ class RLModule(Checkpointable, abc.ABC):
                     action_space=self.action_space,
                     model_config_dict=self.model_config,
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(
+                    "Could not create a Catalog object for your RLModule! If you are "
+                    "not using the new API stack yet, make sure to switch it off in "
+                    "your config: `config.api_stack(enable_rl_module_and_learner=False"
+                    ", enable_env_runner_and_connector_v2=False)`. Some algos already "
+                    "use the new stack by default. Ignore this message, if your "
+                    "RLModule does not use a Catalog to build its sub-components."
+                )
+                self._catalog_ctor_error = e
+
+        # TODO (sven): Deprecate this. We keep it here for now in case users
+        #  still have custom models (or subclasses of RLlib default models)
+        #  into which they pass in a `config` argument.
+        self.config = RLModuleConfig(
+            observation_space=self.observation_space,
+            action_space=self.action_space,
+            inference_only=self.inference_only,
+            learner_only=self.learner_only,
+            model_config_dict=self.model_config,
+            catalog_class=catalog_class,
+        )
 
         self.action_dist_cls = None
         if self.catalog is not None:
@@ -437,59 +452,17 @@ class RLModule(Checkpointable, abc.ABC):
                 framework=self.framework
             )
 
-        # Make sure, `setup()` is only called once, no matter what. In some cases
-        # of multiple inheritance (and with our __post_init__ functionality in place,
-        # this might get called twice.
+        # Make sure, `setup()` is only called once, no matter what.
         if hasattr(self, "_is_setup") and self._is_setup:
             raise RuntimeError(
                 "`RLModule.setup()` called twice within your RLModule implementation "
                 f"{self}! Make sure you are using the proper inheritance order "
                 "(TorchRLModule before [Algo]RLModule) or (TfRLModule before "
-                "[Algo]RLModule) and that you are using `super().__init__(...)` in "
-                "your custom constructor."
+                "[Algo]RLModule) and that you are NOT overriding the constructor, but "
+                "only the `setup()` method of your subclass."
             )
         self.setup()
         self._is_setup = True
-
-    def __init_subclass__(cls, **kwargs):
-        # Automatically add a __post_init__ method to all subclasses of RLModule.
-        # This method is called after the __init__ method of the subclass.
-        def init_decorator(previous_init):
-            def new_init(self, *args, **kwargs):
-                previous_init(self, *args, **kwargs)
-                if type(self) is cls:
-                    self.__post_init__()
-
-            return new_init
-
-        cls.__init__ = init_decorator(cls.__init__)
-
-    def __post_init__(self):
-        """Called automatically after the __init__ method of the subclass.
-
-        The module first calls the __init__ method of the subclass, With in the
-        __init__ you should call the super().__init__ method. Then after the __init__
-        method of the subclass is called, the __post_init__ method is called.
-
-        This is a good place to do any initialization that requires access to the
-        subclass's attributes.
-        """
-        self._input_specs_train = convert_to_canonical_format(self.input_specs_train())
-        self._output_specs_train = convert_to_canonical_format(
-            self.output_specs_train()
-        )
-        self._input_specs_exploration = convert_to_canonical_format(
-            self.input_specs_exploration()
-        )
-        self._output_specs_exploration = convert_to_canonical_format(
-            self.output_specs_exploration()
-        )
-        self._input_specs_inference = convert_to_canonical_format(
-            self.input_specs_inference()
-        )
-        self._output_specs_inference = convert_to_canonical_format(
-            self.output_specs_inference()
-        )
 
     @OverrideToImplementCustomLogic
     def setup(self):
@@ -569,8 +542,6 @@ class RLModule(Checkpointable, abc.ABC):
         """
         return {}
 
-    @check_input_specs("_input_specs_inference")
-    @check_output_specs("_output_specs_inference")
     def forward_inference(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """DO NOT OVERRIDE! Forward-pass during evaluation, called from the sampler.
 
@@ -600,8 +571,6 @@ class RLModule(Checkpointable, abc.ABC):
         """
         return self._forward(batch, **kwargs)
 
-    @check_input_specs("_input_specs_exploration")
-    @check_output_specs("_output_specs_exploration")
     def forward_exploration(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """DO NOT OVERRIDE! Forward-pass during exploration, called from the sampler.
 
@@ -631,8 +600,6 @@ class RLModule(Checkpointable, abc.ABC):
         """
         return self._forward(batch, **kwargs)
 
-    @check_input_specs("_input_specs_train")
-    @check_output_specs("_output_specs_train")
     def forward_train(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """DO NOT OVERRIDE! Forward-pass during training called from the learner.
 
@@ -731,7 +698,7 @@ class RLModule(Checkpointable, abc.ABC):
     @override(Checkpointable)
     def get_ctor_args_and_kwargs(self):
         return (
-            (self.config,),  # *args
+            (),  # *args
             {
                 "observation_space": self.observation_space,
                 "action_space": self.action_space,
@@ -743,90 +710,6 @@ class RLModule(Checkpointable, abc.ABC):
                 ),
             },  # **kwargs
         )
-
-    @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def output_specs_inference(self) -> SpecType:
-        """Returns the output specs of the `forward_inference()` method.
-
-        Override this method to customize the output specs of the inference call.
-        The default implementation requires the `forward_inference()` method to return
-        a dict that has `action_dist` key and its value is an instance of
-        `Distribution`.
-        """
-        return [Columns.ACTION_DIST_INPUTS]
-
-    @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def output_specs_exploration(self) -> SpecType:
-        """Returns the output specs of the `forward_exploration()` method.
-
-        Override this method to customize the output specs of the exploration call.
-        The default implementation requires the `forward_exploration()` method to return
-        a dict that has `action_dist` key and its value is an instance of
-        `Distribution`.
-        """
-        return [Columns.ACTION_DIST_INPUTS]
-
-    def output_specs_train(self) -> SpecType:
-        """Returns the output specs of the forward_train method."""
-        return {}
-
-    def input_specs_inference(self) -> SpecType:
-        """Returns the input specs of the forward_inference method."""
-        return self._default_input_specs()
-
-    def input_specs_exploration(self) -> SpecType:
-        """Returns the input specs of the forward_exploration method."""
-        return self._default_input_specs()
-
-    def input_specs_train(self) -> SpecType:
-        """Returns the input specs of the forward_train method."""
-        return self._default_input_specs()
-
-    def _default_input_specs(self) -> SpecType:
-        """Returns the default input specs."""
-        return [Columns.OBS]
-
-    @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def output_specs_inference(self) -> SpecType:
-        """Returns the output specs of the `forward_inference()` method.
-
-        Override this method to customize the output specs of the inference call.
-        The default implementation requires the `forward_inference()` method to return
-        a dict that has `action_dist` key and its value is an instance of
-        `Distribution`.
-        """
-        return [Columns.ACTION_DIST_INPUTS]
-
-    @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def output_specs_exploration(self) -> SpecType:
-        """Returns the output specs of the `forward_exploration()` method.
-
-        Override this method to customize the output specs of the exploration call.
-        The default implementation requires the `forward_exploration()` method to return
-        a dict that has `action_dist` key and its value is an instance of
-        `Distribution`.
-        """
-        return [Columns.ACTION_DIST_INPUTS]
-
-    def output_specs_train(self) -> SpecType:
-        """Returns the output specs of the forward_train method."""
-        return {}
-
-    def input_specs_inference(self) -> SpecType:
-        """Returns the input specs of the forward_inference method."""
-        return self._default_input_specs()
-
-    def input_specs_exploration(self) -> SpecType:
-        """Returns the input specs of the forward_exploration method."""
-        return self._default_input_specs()
-
-    def input_specs_train(self) -> SpecType:
-        """Returns the input specs of the forward_train method."""
-        return self._default_input_specs()
-
-    def _default_input_specs(self) -> SpecType:
-        """Returns the default input specs."""
-        return [Columns.OBS]
 
     def as_multi_rl_module(self) -> "MultiRLModule":
         """Returns a multi-agent wrapper around this module."""
@@ -863,6 +746,32 @@ class RLModule(Checkpointable, abc.ABC):
     @Deprecated(new="RLModule.save_to_path(...)", error=True)
     def save_to_checkpoint(self, *args, **kwargs):
         pass
+
+    def output_specs_inference(self) -> SpecType:
+        return [Columns.ACTION_DIST_INPUTS]
+
+    def output_specs_exploration(self) -> SpecType:
+        return [Columns.ACTION_DIST_INPUTS]
+
+    def output_specs_train(self) -> SpecType:
+        """Returns the output specs of the forward_train method."""
+        return {}
+
+    def input_specs_inference(self) -> SpecType:
+        """Returns the input specs of the forward_inference method."""
+        return self._default_input_specs()
+
+    def input_specs_exploration(self) -> SpecType:
+        """Returns the input specs of the forward_exploration method."""
+        return self._default_input_specs()
+
+    def input_specs_train(self) -> SpecType:
+        """Returns the input specs of the forward_train method."""
+        return self._default_input_specs()
+
+    def _default_input_specs(self) -> SpecType:
+        """Returns the default input specs."""
+        return [Columns.OBS]
 
 
 @Deprecated(

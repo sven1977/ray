@@ -28,12 +28,12 @@ GcsAutoscalerStateManager::GcsAutoscalerStateManager(
     GcsNodeManager &gcs_node_manager,
     GcsActorManager &gcs_actor_manager,
     const GcsPlacementGroupManager &gcs_placement_group_manager,
-    std::shared_ptr<rpc::NodeManagerClientPool> raylet_client_pool)
+    rpc::NodeManagerClientPool &raylet_client_pool)
     : session_name_(session_name),
       gcs_node_manager_(gcs_node_manager),
       gcs_actor_manager_(gcs_actor_manager),
       gcs_placement_group_manager_(gcs_placement_group_manager),
-      raylet_client_pool_(std::move(raylet_client_pool)),
+      raylet_client_pool_(raylet_client_pool),
       last_cluster_resource_state_version_(0),
       last_seen_autoscaler_state_version_(0) {}
 
@@ -396,7 +396,7 @@ void GcsAutoscalerStateManager::HandleDrainNode(
   raylet_address.set_ip_address(node->node_manager_address());
   raylet_address.set_port(node->node_manager_port());
 
-  const auto raylet_client = raylet_client_pool_->GetOrConnectByAddress(raylet_address);
+  const auto raylet_client = raylet_client_pool_.GetOrConnectByAddress(raylet_address);
   raylet_client->DrainRaylet(
       request.reason(),
       request.reason_message(),
@@ -413,6 +413,30 @@ void GcsAutoscalerStateManager::HandleDrainNode(
         }
         send_reply_callback(status, nullptr, nullptr);
       });
+}
+
+std::string GcsAutoscalerStateManager::DebugString() const {
+  std::ostringstream stream;
+  stream << "GcsAutoscalerStateManager: "
+         << "\n- last_seen_autoscaler_state_version_: "
+         << last_seen_autoscaler_state_version_
+         << "\n- last_cluster_resource_state_version_: "
+         << last_cluster_resource_state_version_ << "\n- pending demands:\n";
+
+  auto aggregate_load = GetAggregatedResourceLoad();
+  for (const auto &[shape, demand] : aggregate_load) {
+    auto num_pending = demand.num_infeasible_requests_queued() + demand.backlog_size() +
+                       demand.num_ready_requests_queued();
+
+    stream << "\t{";
+    if (num_pending > 0) {
+      for (const auto &[resource, quantity] : shape) {
+        stream << resource << ": " << quantity << ", ";
+      }
+    }
+    stream << "} * " << num_pending << "\n";
+  }
+  return stream.str();
 }
 
 }  // namespace gcs

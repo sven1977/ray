@@ -50,7 +50,7 @@ class TestRLModuleSpecs(unittest.TestCase):
     def test_customized_multi_agent_module(self):
         """Tests creating a customized MARL BC module that owns a shared encoder."""
 
-        FEATURE_DIM = 10
+        EMBEDDING_DIM = 10
         HIDDEN_DIM = 20
         obs_space = gym.spaces.Box(-1.0, 1.0, shape=(4,), dtype=np.float32)
         act_space = gym.spaces.Discrete(2)
@@ -62,14 +62,14 @@ class TestRLModuleSpecs(unittest.TestCase):
                     module_class=SharedTorchEncoder,
                     observation_space=obs_space,
                     action_space=act_space,
-                    model_config={"feature_dim": FEATURE_DIM},
+                    model_config={"embedding_dim": EMBEDDING_DIM},
                 ),
                 "agent_1": RLModuleSpec(
                     module_class=VPGTorchRLModuleUsingSharedEncoder,
                     observation_space=obs_space,
                     action_space=act_space,
                     model_config={
-                        "feature_dim": FEATURE_DIM,
+                        "embedding_dim": EMBEDDING_DIM,
                         "hidden_dim": HIDDEN_DIM,
                     },
                 ),
@@ -78,7 +78,7 @@ class TestRLModuleSpecs(unittest.TestCase):
                     observation_space=obs_space,
                     action_space=act_space,
                     model_config={
-                        "feature_dim": FEATURE_DIM,
+                        "embedding_dim": EMBEDDING_DIM,
                         "hidden_dim": HIDDEN_DIM,
                     },
                 ),
@@ -170,9 +170,7 @@ class TestRLModuleSpecs(unittest.TestCase):
         self.assertEqual(module_spec_1.module_class, VPGTorchRLModule)
         self.assertEqual(module_spec_1.observation_space, "Do not update me!")
         self.assertEqual(module_spec_1.action_space, env.action_space)
-        self.assertEqual(
-            module_spec_1.model_config, module_spec_2.model_config
-        )
+        self.assertEqual(module_spec_1.model_config, module_spec_2.model_config)
 
         # Redefine module_spec_1 for following tests.
         module_spec_1 = RLModuleSpec(
@@ -207,13 +205,15 @@ class TestRLModuleSpecs(unittest.TestCase):
         )
 
         self.assertEqual(
-            marl_spec_3.rl_module_specs["agent_1"].observation_space, "Do not update me!"
+            marl_spec_3.rl_module_specs["agent_1"].observation_space,
+            "Do not update me!",
         )
         marl_spec_3.update(marl_spec_2, override=False)
         # If we would overwrite, we would replace the observation space even though
         # it was None. This is not the case here.
         self.assertEqual(
-            marl_spec_3.rl_module_specs["agent_1"].observation_space, "Do not update me!"
+            marl_spec_3.rl_module_specs["agent_1"].observation_space,
+            "Do not update me!",
         )
 
         # Test if updating with an additional RLModuleSpec works.

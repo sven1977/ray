@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from ray.rllib.algorithms.ppo.default_ppo_rl_module import DefaultPPORLModule
 from ray.rllib.core.columns import Columns
 from ray.rllib.core.models.base import ACTOR, CRITIC, ENCODER_OUT
-from ray.rllib.core.rl_module.apis import ValueFunctionAPI
+from ray.rllib.core.rl_module.apis.value_function_api import ValueFunctionAPI
 from ray.rllib.core.rl_module.rl_module import RLModule
 from ray.rllib.core.rl_module.torch import TorchRLModule
 from ray.rllib.utils.annotations import override
@@ -29,7 +29,7 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
 
     @override(RLModule)
     def _forward_train(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-        """Train forward pass (keep features for possible shared value func. call)."""
+        """Train forward pass (keep embeddings for possible shared value func. call)."""
         output = {}
         encoder_outs = self.encoder(batch)
         output[Columns.EMBEDDINGS] = encoder_outs[ENCODER_OUT][CRITIC]

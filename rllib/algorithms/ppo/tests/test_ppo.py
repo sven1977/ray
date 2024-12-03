@@ -66,11 +66,6 @@ class TestPPO(unittest.TestCase):
         # Build a PPOConfig object with the `SingleAgentEnvRunner` class.
         config = (
             ppo.PPOConfig()
-            # Enable new API stack and use EnvRunner.
-            .api_stack(
-                enable_rl_module_and_learner=True,
-                enable_env_runner_and_connector_v2=True,
-            )
             .env_runners(num_env_runners=0)
             .training(
                 num_epochs=2,
@@ -93,18 +88,14 @@ class TestPPO(unittest.TestCase):
 
         num_iterations = 2
 
-        # TODO (sven) Bring back "FrozenLake-v1"
         for env in [
-            # "CliffWalking-v0",
             "CartPole-v1",
             "Pendulum-v1",
-        ]:  # "ALE/Breakout-v5"]:
+        ]:
             print("Env={}".format(env))
             for lstm in [False]:
                 print("LSTM={}".format(lstm))
-                config.rl_module(
-                    model_config=get_model_config(lstm=lstm)
-                )
+                config.rl_module(model_config=get_model_config(lstm=lstm))
 
                 algo = config.build(env=env)
                 # TODO: Maybe add an API to get the Learner(s) instances within
@@ -134,10 +125,6 @@ class TestPPO(unittest.TestCase):
         """Tests the free log std option works."""
         config = (
             ppo.PPOConfig()
-            .api_stack(
-                enable_rl_module_and_learner=True,
-                enable_env_runner_and_connector_v2=True,
-            )
             .environment("Pendulum-v1")
             .env_runners(
                 num_env_runners=1,

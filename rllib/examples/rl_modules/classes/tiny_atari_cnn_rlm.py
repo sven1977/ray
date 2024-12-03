@@ -54,15 +54,16 @@ class TinyAtariCNN(TorchRLModule, ValueFunctionAPI):
         """Use this method to create all the model components that you require.
 
         Feel free to access the following useful properties in this class:
-        - `self.config.model_config_dict`: The config dict for this RLModule class,
+        - `self.model_config`: The config dict for this RLModule class,
         which should contain flxeible settings, for example: {"hiddens": [256, 256]}.
-        - `self.config.observation|action_space`: The observation and action space that
+        - `self.observation|action_space`: The observation and action space that
         this RLModule is subject to. Note that the observation space might not be the
         exact space from your env, but that it might have already gone through
         preprocessing through a connector pipeline (for example, flattening,
         frame-stacking, mean/std-filtering, etc..).
         """
-        # Get the CNN stack config from the `self.model_config` property.
+        # Get the CNN stack config from our RLModuleConfig's (self.config)
+        # `model_config` property:
         conv_filters = self.model_config.get("conv_filters")
         # Default CNN stack with 3 layers:
         if conv_filters is None:
@@ -79,9 +80,13 @@ class TinyAtariCNN(TorchRLModule, ValueFunctionAPI):
         width, height, in_depth = self.observation_space.shape
         in_size = [width, height]
         for filter_specs in conv_filters:
-            out_depth, kernel_size, strides, padding = filter_specs
+            if len(filter_specs) == 4:
+                out_depth, kernel_size, strides, padding = filter_specs
+            else:
+                out_depth, kernel_size, strides = filter_specs
+                padding = "same"
 
-            # Pad like in tensorflow's SAME/VALID mode.
+            # Pad like in tensorflow's SAME mode.
             if padding == "same":
                 padding_size, out_size = same_padding(in_size, kernel_size, strides)
                 layers.append(nn.ZeroPad2d(padding_size))

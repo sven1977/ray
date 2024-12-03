@@ -225,8 +225,14 @@ class AgentToModuleMapping(ConnectorV2):
         ret_space = {}
         for module_id in self._rl_module_specs:
             # Easy way out, user has provided space in the RLModule spec dict.
-            if isinstance(self._rl_module_specs, dict) and module_id in self._rl_module_specs:
-                if which == "obs" and self._rl_module_specs[module_id].observation_space:
+            if (
+                isinstance(self._rl_module_specs, dict)
+                and module_id in self._rl_module_specs
+            ):
+                if (
+                    which == "obs"
+                    and self._rl_module_specs[module_id].observation_space
+                ):
                     ret_space[module_id] = self._rl_module_specs[
                         module_id
                     ].observation_space
