@@ -143,11 +143,6 @@ class TorchLearner(Learner):
         batch: Dict,
         **kwargs,
     ):
-        #TEST
-        torch.autograd.set_detect_anomaly(True)
-        #torch.FloatTensor[13, 20, 128]
-        #END TEST
-
         """Performs a single update given a batch of data."""
         # Activate tensor-mode on our MetricsLogger.
         self.metrics.activate_tensor_mode()
