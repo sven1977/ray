@@ -565,7 +565,7 @@ def _dummy_client(port: int = 5556):
                         {
                             "type": MessageTypes.EPISODES_AND_GET_STATE.name,
                             "episodes": episodes,
-                            "timesteps": timesteps,
+                            "env_steps": timesteps,
                         },
                     )
                     # We are forced to sample on-policy. Have to wait for a response
