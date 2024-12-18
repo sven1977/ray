@@ -4,6 +4,7 @@ import gzip
 import json
 import pathlib
 import socket
+import subprocess
 import tempfile
 import threading
 import time
@@ -343,6 +344,7 @@ class TcpClientInferenceEnvRunner(EnvRunner, Checkpointable):
     def _send_set_state_message(self):
         with tempfile.TemporaryDirectory() as dir:
             onnx_file = pathlib.Path(dir) / "_temp_model.onnx"
+            mlir_file = pathlib.Path(dir) / "_temp_model.mlir"
             torch.onnx.export(
                 self.module,
                 {
@@ -353,14 +355,19 @@ class TcpClientInferenceEnvRunner(EnvRunner, Checkpointable):
                 onnx_file,
                 export_params=True,
             )
-            with open(onnx_file, "rb") as f:
-                compressed = gzip.compress(f.read())
-                onnx_binary = base64.b64encode(compressed).decode("utf-8")
+            # Convert ONNX to IREE (mlir file).
+            subprocess.run(["iree-import-onnx", onnx_file, "-o", mlir_file])
+            with open(mlir_file, "rb") as f:
+                #compressed = gzip.compress(f.read())
+                compressed = f.read()
+                print(f"Binary mlir content has len: {len(compressed)}")
+                model_binary = base64.b64encode(compressed).decode("ascii")
+        print(f"Sending model_binary b64 file message of len: {len(model_binary)}")
         _send_message(
             self.client_socket,
             {
                 "type": MessageTypes.SET_STATE.name,
-                "onnx_file": onnx_binary,
+                "mlir_binary_data": model_binary,
                 WEIGHTS_SEQ_NO: self._weights_seq_no,
             },
         )
