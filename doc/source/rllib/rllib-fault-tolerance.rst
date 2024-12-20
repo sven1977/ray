@@ -2,6 +2,7 @@
 
 .. include:: /_includes/rllib/new_api_stack.rst
 
+
 Fault Tolerance And Elastic Training
 ====================================
 
@@ -22,13 +23,18 @@ RLlib supports self-recovering and elastic :py:class:`~ray.rllib.env.env_runner_
 :ref:`training and evaluation EnvRunner workers <rolloutworker-reference-docs>`.
 This provides fault tolerance at worker level.
 
-This means that if you have n :py:class:`~ray.rllib.env.env_runner.EnvRunner` workers sitting on different machines and a
-machine is pre-empted, RLlib can continue training and evaluation with minimal interruption.
+This means that if you have ``n`` :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors located on different nodes and one
+of the nodes is pre-empted, RLlib continues training and evaluating with minimal interruption.
 
 The two properties that RLlib supports here are self-recovery and elasticity:
 
-* **Elasticity**: RLlib continues training even when an :py:class:`~ray.rllib.env.env_runner.EnvRunner` is removed. For example, if an RLlib trial uses spot instances, nodes may be removed from the cluster, potentially resulting in a subset of workers not getting scheduled. In this case, RLlib will continue with whatever healthy :py:class:`~ray.rllib.env.env_runner.EnvRunner` instances left at a reduced speed.
-* **Self-Recovery**: When possible, RLlib will attempt to restore any :py:class:`~ray.rllib.env.env_runner.EnvRunner` that was previously removed. During restoration, RLlib syncs the latest state over to the restored :py:class:`~ray.rllib.env.env_runner.EnvRunner` before new episodes can be sampled.
+* **Elasticity**: RLlib continues training even when an :py:class:`~ray.rllib.env.env_runner.EnvRunner` is removed.
+  For example, if an RLlib trial uses spot instances, nodes may be removed from the cluster, potentially resulting in a subset of
+  EnvRunners not getting scheduled. In this case, RLlib continues with whatever healthy :py:class:`~ray.rllib.env.env_runner.EnvRunner`
+  instances left at a reduced speed.
+* **Self-Recovery**: When possible, RLlib attempts to restore any :py:class:`~ray.rllib.env.env_runner.EnvRunner`
+  that was previously removed. During restoration, RLlib syncs the latest connector states and model weights over to
+  the restored :py:class:`~ray.rllib.env.env_runner.EnvRunner` before new episodes are sampled by the recovered actor.
 
 
 Worker fault tolerance can be turned on by setting ``config.fault_tolerance(restart_failed_env_runners=True)``.
@@ -86,6 +92,3 @@ job failed.
 The number of iterations it waits can be configured with the config
 ``num_consecutive_env_runner_failures_tolerance``.
 
-..
-    TODO(jungong) : move fault tolerance related options into a separate AlgorithmConfig
-    group and update the doc here.
