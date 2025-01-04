@@ -147,7 +147,7 @@ class EnvRunner(FaultAwareApply, metaclass=abc.ABCMeta):
         except Exception as e:
             # If user wants to simply restart the env -> recreate env and try again
             # (calling this method recursively until success).
-            if self.config.restart_failed_sub_environments:
+            if self.config.restart_failed_environments:
                 logger.exception(
                     "Resetting the env resulted in an error! The original error "
                     f"is: {e.args[0]}"
@@ -164,7 +164,7 @@ class EnvRunner(FaultAwareApply, metaclass=abc.ABCMeta):
             results = self.env.step(actions)
             return results
         except Exception as e:
-            if self.config.restart_failed_sub_environments:
+            if self.config.restart_failed_environments:
                 logger.exception(
                     "Stepping the env resulted in an error! The original error "
                     f"is: {e.args[0]}"

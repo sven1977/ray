@@ -412,7 +412,7 @@ class TestWorkerFailures(unittest.TestCase):
                 # Re-start failed individual sub-envs (then continue).
                 # This means no workers will ever fail due to individual env errors
                 # (only maybe for reasons other than the env).
-                restart_failed_sub_environments=True,
+                restart_failed_environments=True,
                 # If the worker was affected by an error (other than the env error),
                 # allow it to be removed, but training will continue.
                 ignore_env_runner_failures=True,
@@ -605,7 +605,7 @@ class TestWorkerFailures(unittest.TestCase):
                 evaluation_config=PPOConfig.overrides(
                     restart_failed_env_runners=True,
                     # Restart the entire eval worker.
-                    restart_failed_sub_environments=False,
+                    restart_failed_environments=False,
                     env_config={
                         "evaluation": True,
                         # Make eval worker (index 1) fail.

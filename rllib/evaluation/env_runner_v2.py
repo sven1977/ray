@@ -830,7 +830,7 @@ class EnvRunnerV2:
 
         # The sub environment at index `env_id` might throw an exception
         # during the following `try_reset()` attempt. If configured with
-        # `restart_failed_sub_environments=True`, the BaseEnv will restart
+        # `restart_failed_environments=True`, the BaseEnv will restart
         # the affected sub environment (create a new one using its c'tor) and
         # must reset the recreated sub env right after that.
         # Should the sub environment fail indefinitely during these

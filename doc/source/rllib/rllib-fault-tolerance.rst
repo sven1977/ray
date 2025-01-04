@@ -23,19 +23,40 @@ themselves or inside your custom environments.
 
 
 
+.. _rllib-fault-tolerance-docs:
 
-
-Fault Tolerance And Elastic Training
+Fault tolerance And elastic training
 ====================================
 
-RLlib handles common failures modes, such as machine failures, spot instance preemption,
-network outages, or Ray cluster failures.
+RLlib handles common failures modes, such as crashes in your custom code, like the RL environment
+or your model, Ray actor failures, spot instance preemption, or network outages.
 
-There are three main areas for RLlib fault tolerance support:
 
-* Worker recovery
-* Environment fault tolerance
-* Experiment level fault tolerance with Ray Tune
+RL environment fault tolerance
+------------------------------
+
+EnvRunner actors often run
+
+In addition to worker fault tolerance, RLlib offers fault tolerance at the environment level as well.
+
+Rollout or evaluation workers will often run multiple environments in parallel to take
+advantage of, for example, the parallel computing power that GPU offers. This can be controlled with
+the ``num_envs_per_env_runner`` config. It may then be wasteful if the entire worker needs to be
+reconstructed because of errors from a single environment.
+
+In that case, RLlib offers the capability to restart individual environments without bubbling the
+errors to higher level components. You can do that easily by turning on config
+``restart_failed_sub_environments``.
+
+.. note::
+    Environment restarts are blocking.
+
+    A rollout worker will wait until the environment comes back and finishes initialization.
+    So for on-policy algorithms, it may be better to recover at worker level to make sure
+    training progresses with elastic worker set while the environments are being reconstructed.
+    More specifically, use configs ``num_envs_per_env_runner=1``, ``restart_failed_sub_environments=False``,
+    and ``restart_failed_env_runners=True``.
+
 
 
 Worker Recovery
@@ -62,29 +83,6 @@ Worker fault tolerance can be turned on by setting ``config.fault_tolerance(rest
 
 RLlib achieves this by utilizing a
 `state-aware and fault tolerant actor manager <https://github.com/ray-project/ray/blob/master/rllib/utils/actor_manager.py>`__. Under the hood, RLlib relies on Ray Core :ref:`actor fault tolerance <actor-fault-tolerance>` to automatically recover failed worker actors.
-
-Env Fault Tolerance
--------------------
-
-In addition to worker fault tolerance, RLlib offers fault tolerance at the environment level as well.
-
-Rollout or evaluation workers will often run multiple environments in parallel to take
-advantage of, for example, the parallel computing power that GPU offers. This can be controlled with
-the ``num_envs_per_env_runner`` config. It may then be wasteful if the entire worker needs to be
-reconstructed because of errors from a single environment.
-
-In that case, RLlib offers the capability to restart individual environments without bubbling the
-errors to higher level components. You can do that easily by turning on config
-``restart_failed_sub_environments``.
-
-.. note::
-    Environment restarts are blocking.
-
-    A rollout worker will wait until the environment comes back and finishes initialization.
-    So for on-policy algorithms, it may be better to recover at worker level to make sure
-    training progresses with elastic worker set while the environments are being reconstructed.
-    More specifically, use configs ``num_envs_per_env_runner=1``, ``restart_failed_sub_environments=False``,
-    and ``restart_failed_env_runners=True``.
 
 
 Fault Tolerance and Recovery Provided by Ray Tune

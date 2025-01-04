@@ -6,7 +6,7 @@ instability is configurable through setting the probability of a crash and/or st
 
 RLlib has two major flags for EnvRunner fault tolerance, which can be independently
 set to True:
-1) `config.fault_tolerance(restart_failed_sub_environments=True)` causes only the
+1) `config.fault_tolerance(restart_failed_environments=True)` causes only the
 (gymnasium) environment object on an EnvRunner to be closed (try calling `close()` on
 the faulty object), garbage collected, and finally recreated from scratch. Note that
 during this process, the containing EnvRunner remaing up and running and sampling
@@ -16,14 +16,14 @@ fault tolerance and should be attempted first.
 EnvRunner (a Ray remote actor) to be restarted. This restart logically includes the
 gymnasium environment, the RLModule, and all connector pipelines on the EnvRunner.
 Use this option only if you face problems with the first option
-(restart_failed_sub_environments=True), such as incomplete cleanups and memory leaks.
+(restart_failed_environments=True), such as incomplete cleanups and memory leaks.
 
 
 How to run this script
 ----------------------
 `python [script file name].py --enable-new-api-stack
 
-You can switch on the fault tolerant behavior (1) (restart_failed_sub_environments)
+You can switch on the fault tolerant behavior (1) (restart_failed_environments)
 through the `--restart-failed-envs` flag. If this flag is not set, the script will
 recreate the entire (faulty) EnvRunner.
 
@@ -151,7 +151,7 @@ if __name__ == "__main__":
             restart_failed_env_runners=True,
             # Restart any failed environment (w/o recreating the EnvRunner). Note that
             # this is the much faster option.
-            restart_failed_sub_environments=args.restart_failed_envs,
+            restart_failed_environments=args.restart_failed_envs,
         )
     )
 

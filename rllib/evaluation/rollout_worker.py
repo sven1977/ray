@@ -560,7 +560,7 @@ class RolloutWorker(ParallelIteratorWorker, EnvRunner):
                 remote_env_batch_wait_ms=self.config.remote_env_batch_wait_ms,
                 worker=self,
                 restart_failed_sub_environments=(
-                    self.config.restart_failed_sub_environments
+                    self.config.restart_failed_environments
                 ),
             )
 
