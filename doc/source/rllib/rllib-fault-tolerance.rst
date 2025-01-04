@@ -4,6 +4,8 @@
 
 
 .. todo: put knowledge of this block somewhere here on this new page.
+    It's coming from the already reduced rllib-training.rst page and was intermingled
+    with the scaling guide content, which has already been moved into its own page.
 
 In case you are using lots of workers (``num_env_runners >> 10``) and you observe worker failures for whatever reasons, which normally interrupt your RLlib training runs, consider using
 the config settings ``ignore_env_runner_failures=True``, ``restart_failed_env_runners=True``, or ``restart_failed_sub_environments=True``:
