@@ -27,7 +27,7 @@ A checkpoint is a directory on disk or some `PyArrow <https://arrow.apache.org/>
 It contains architecture information, such as the class and the constructor arguments for creating a new instance,
 a ``pickle`` or ``msgpack`` file with state information, and a human readable ``metadata.json`` file with information about the Ray version,
 git commit, and checkpoint version.
-
+blabla
 You can generate a new :py:class:`~ray.rllib.algorithms.algorithm.Algorithm` instance or other subcomponent,
 like an :py:class:`~ray.rllib.core.rl_module.rl_module.RLModule`, from an existing checkpoint using
 the :py:meth:`~ray.rllib.utils.checkpoints.Checkpointable.from_checkpoint` method.
