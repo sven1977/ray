@@ -37,9 +37,11 @@ as well as multi-GPU training on multi-node (GPU) clusters when using the `Anysc
 +-----------------------------------------------------------------------------+------------------------------+------------------------------------+--------------------------------+
 | **Offline RL and Imitation Learning**                                                                                                                                            |
 +-----------------------------------------------------------------------------+------------------------------+------------------------------------+--------------------------------+
-| :ref:`BC (Behavior Cloning) <bc>`                                           | |single_agent|               | |multi_gpu| |multi_node_multi_gpu| | |cont_actions| |discr_actions| |
+| :ref:`BC (Behavior Cloning) <bc>`                                           | |single_agent|               |                                    | |cont_actions| |discr_actions| |
 +-----------------------------------------------------------------------------+------------------------------+------------------------------------+--------------------------------+
-| :ref:`MARWIL (Monotonic Advantage Re-Weighted Imitation Learning) <marwil>` | |single_agent|               | |multi_gpu| |multi_node_multi_gpu| | |cont_actions| |discr_actions| |
+| :ref:`CQL (Conservative Q-Learning) <cql>`                                  | |single_agent|               |                                    | |cont_actions| |discr_actions| |
++-----------------------------------------------------------------------------+------------------------------+------------------------------------+--------------------------------+
+| :ref:`MARWIL (Monotonic Advantage Re-Weighted Imitation Learning) <marwil>` | |single_agent|               |                                    | |cont_actions| |discr_actions| |
 +-----------------------------------------------------------------------------+------------------------------+------------------------------------+--------------------------------+
 | **Algorithm Extensions and -Plugins**                                                                                                                                            |
 +-----------------------------------------------------------------------------+------------------------------+------------------------------------+--------------------------------+
@@ -48,12 +50,12 @@ as well as multi-GPU training on multi-node (GPU) clusters when using the `Anysc
 
 
 On-policy
-~~~~~~~~~
+---------
 
 .. _ppo:
 
 Proximal Policy Optimization (PPO)
-----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 `[paper] <https://arxiv.org/abs/1707.06347>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/ppo/ppo.py>`__
 
@@ -80,13 +82,13 @@ Proximal Policy Optimization (PPO)
    :members: training
 
 
-Off-Policy
-~~~~~~~~~~
+Off-policy
+----------
 
 .. _dqn:
 
 Deep Q Networks (DQN, Rainbow, Parametric DQN)
-----------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 `[paper] <https://arxiv.org/abs/1312.5602>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/dqn/dqn.py>`__
 
@@ -130,7 +132,7 @@ See also how to use `parametric-actions in DQN <rllib-models.html#variable-lengt
 .. _sac:
 
 Soft Actor Critic (SAC)
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 `[original paper] <https://arxiv.org/pdf/1801.01290>`__,
 `[follow up paper] <https://arxiv.org/pdf/1812.05905.pdf>`__,
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/sac/sac.py>`__.
@@ -156,17 +158,18 @@ Soft Actor Critic (SAC)
    :members: training
 
 
-High-Throughput On- and Off-Policy
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+High-throughput on- and off-policy
+----------------------------------
 
 .. _appo:
 
 Asynchronous Proximal Policy Optimization (APPO)
-------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. tip::
 
-    APPO was originally `published under the name "IMPACT" <https://arxiv.org/abs/1707.06347>`__. RLlib's APPO exactly matches the algorithm described in the paper.
+    APPO was originally `published under the name "IMPACT" <https://arxiv.org/abs/1707.06347>`__.
+    RLlib's `APPO <https://github.com/ray-project/ray/blob/master/rllib/algorithms/appo/appo.py>`__ exactly matches the algorithm described in this paper.
 
 `[paper] <https://arxiv.org/abs/1707.06347>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/appo/appo.py>`__
@@ -176,19 +179,23 @@ Asynchronous Proximal Policy Optimization (APPO)
 
     **APPO architecture:** APPO is an asynchronous variant of :ref:`Proximal Policy Optimization (PPO) <ppo>` based on the IMPALA architecture,
     but using a surrogate policy loss with clipping, allowing for multiple SGD passes per collected train batch.
-    In a training iteration, APPO requests samples from all EnvRunners asynchronously and the collected episode
-    samples are returned to the main algorithm process as Ray references rather than actual objects available on the local process.
-    APPO then passes these episode references to the Learners for asynchronous updates of the model.
-    RLlib doesn't always synch back the weights to the EnvRunners right after a new model version is available.
-    To account for the EnvRunners being off-policy, APPO uses a procedure called v-trace,
+    In a training iteration, APPO requests samples from all :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors asynchronously and lists of
+    episodes are returned as Ray object store references. The references are passed to an :py:class:`~ray.rllib.algorithms.utils.AggregatorActor`
+    set, on which the conversion from episodes to GPU-bound train batches takes place. Finally, APPO passes the returned batch references
+    to the correct, GPU co-located :py:class:`~ray.rllib.core.learner.learner.Learner` actors for asynchronous updates of the model.
+    RLlib doesn't always synch back the weights to the :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors right after a new model version is available.
+    To account for ``EnvRunners`` being off-policy, APPO uses a procedure called v-trace,
     `described in the IMPALA paper <https://arxiv.org/abs/1802.01561>`__.
-    APPO scales out on both axes, supporting multiple EnvRunners for sample collection and multiple GPU- or CPU-based Learners
-    for updating the model.
+    APPO scales out on three axes, supporting multiple :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors for sample collection, multiple
+    :py:class:`~ray.rllib.algorithms.utils.AggregatorActor` instances for batch processing and GPU pre-loading, and multiple GPU- or CPU-based
+    :py:class:`~ray.rllib.core.learner.learner.Learner` actors for updating the model.
 
 
 **Tuned examples:**
 `Pong-v5 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/appo/pong_appo.py>`__
 `HalfCheetah-v4 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/appo/halfcheetah_appo.py>`__
+`CartPole-v1 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/appo/cartpole_appo.py>`__
+`Pendulum-v1 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/appo/pendulum_appo.py>`__
 
 **APPO-specific configs** (see also `common configs <rllib-training.html#common-parameters>`__):
 
@@ -199,35 +206,30 @@ Asynchronous Proximal Policy Optimization (APPO)
 .. _impala:
 
 Importance Weighted Actor-Learner Architecture (IMPALA)
--------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 `[paper] <https://arxiv.org/abs/1802.01561>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/impala/impala.py>`__
 
 .. figure:: images/algos/impala-architecture.svg
     :width: 750
 
-    **IMPALA architecture:** In a training iteration, IMPALA requests samples from all EnvRunners asynchronously and the collected episodes
-    are returned to the main algorithm process as Ray references rather than actual objects available on the local process.
-    IMPALA then passes these episode references to the Learners for asynchronous updates of the model.
-    RLlib doesn't always synch back the weights to the EnvRunners right after a new model version is available.
-    To account for the EnvRunners being off-policy, IMPALA uses a procedure called v-trace,
+    **IMPALA architecture:** In a training iteration, IMPALA requests samples from all :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors asynchronously and lists of
+    episodes are returned as Ray object store references. The references are passed to an :py:class:`~ray.rllib.algorithms.utils.AggregatorActor`
+    set, on which the conversion from episodes to GPU-bound train batches takes place. Finally, IMPALA passes the returned batch references
+    to the correct, GPU co-located :py:class:`~ray.rllib.core.learner.learner.Learner` actors for asynchronous updates of the model.
+
+    RLlib doesn't always synch back the weights to the :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors right after a new model version is available.
+    To account for ``EnvRunners`` being off-policy, IMPALA uses a procedure called v-trace,
     `described in the paper <https://arxiv.org/abs/1802.01561>`__.
-    IMPALA scales out on both axes, supporting multiple EnvRunners for sample collection and multiple GPU- or CPU-based Learners
-    for updating the model.
+
+    IMPALA scales out on three axes, supporting multiple :py:class:`~ray.rllib.env.env_runner.EnvRunner` actors for sample collection, multiple
+    :py:class:`~ray.rllib.algorithms.utils.AggregatorActor` instances for batch processing and GPU pre-loading, and multiple GPU- or CPU-based
+    :py:class:`~ray.rllib.core.learner.learner.Learner` actors for updating the model.
 
 
 Tuned examples:
-`PongNoFrameskip-v4 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/impala/pong-impala.yaml>`__,
-`vectorized configuration <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/impala/pong-impala-vectorized.yaml>`__,
-`multi-gpu configuration <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/impala/pong-impala-fast.yaml>`__,
-`{BeamRider,Breakout,Qbert,SpaceInvaders}NoFrameskip-v4 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/impala/atari-impala.yaml>`__.
-
-.. figure:: images/impala.png
-    :width: 650
-
-    Multi-GPU IMPALA scales up to solve PongNoFrameskip-v4 in ~3 minutes using a pair of V100 GPUs and 128 CPU workers.
-    The maximum training throughput reached is ~30k transitions per second (~120k environment frames per second).
-
+`Pong-v5 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/impala/pong_impala.py>`__,
+`CartPole-v1 <https://github.com/ray-project/ray/blob/master/rllib/tuned_examples/impala/cartpole_impala.py>`__,
 
 **IMPALA-specific configs** (see also `common configs <rllib-training.html#common-parameters>`__):
 
@@ -236,12 +238,12 @@ Tuned examples:
 
 
 Model-based RL
-~~~~~~~~~~~~~~
+--------------
 
 .. _dreamerv3:
 
 DreamerV3
----------
+~~~~~~~~~
 `[paper] <https://arxiv.org/pdf/2301.04104v1.pdf>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/dreamerv3/dreamerv3.py>`__
 
@@ -296,13 +298,13 @@ DreamerV3
 
 
 
-Offline RL and Imitation Learning
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Offline RL and imitation learning
+---------------------------------
 
 .. _bc:
 
 Behavior Cloning (BC)
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 `[paper] <http://papers.nips.cc/paper/7866-exponentially-weighted-imitation-learning-for-batched-historical-data>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/bc/bc.py>`__
 
@@ -331,7 +333,7 @@ Behavior Cloning (BC)
 .. _cql:
 
 Conservative Q-Learning (CQL)
------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 `[paper] <https://arxiv.org/abs/2006.04779>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/cql/cql.py>`__
 
@@ -356,7 +358,7 @@ Conservative Q-Learning (CQL)
 .. _marwil:
 
 Monotonic Advantage Re-Weighted Imitation Learning (MARWIL)
------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 `[paper] <http://papers.nips.cc/paper/7866-exponentially-weighted-imitation-learning-for-batched-historical-data>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/algorithms/marwil/marwil.py>`__
 
@@ -382,12 +384,12 @@ Monotonic Advantage Re-Weighted Imitation Learning (MARWIL)
 
 
 Algorithm Extensions- and Plugins
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------
 
 .. _icm:
 
 Curiosity-driven Exploration by Self-supervised Prediction
-----------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 `[paper] <https://arxiv.org/pdf/1705.05363.pdf>`__
 `[implementation] <https://github.com/ray-project/ray/blob/master/rllib/examples/curiosity/inverse_dynamics_model_based_curiosity.py>`__
 

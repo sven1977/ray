@@ -521,7 +521,7 @@ check out `examples/parametric_actions_cartpole.py <https://github.com/ray-proje
 .. |both| replace:: **both**
 .. _both: https://github.com/ray-project/ray/blob/master/rllib/examples/_old_api_stack/models/parametric_actions_model.py
 
-Note that since masking introduces ``tf.float32.min`` values into the model output, this technique might not work with all algorithm options. For example, algorithms might crash if they incorrectly process the ``tf.float32.min`` values. The cartpole example has working configurations for DQN (must set ``hiddens=[]``), PPO (must disable running mean and set ``model.vf_share_layers=True``), and several other algorithms. Not all algorithms support parametric actions; see the `algorithm overview <rllib-algorithms.html#available-algorithms-overview>`__.
+Note that since masking introduces ``tf.float32.min`` values into the model output, this technique might not work with all algorithm options. For example, algorithms might crash if they incorrectly process the ``tf.float32.min`` values. The cartpole example has working configurations for DQN (must set ``hiddens=[]``), PPO (must disable running mean and set ``model.vf_share_layers=True``), and several other algorithms. Not all algorithms support parametric actions; see the :ref:`algorithm overview <rllib-algorithms-doc>`.
 
 
 Autoregressive Action Distributions
@@ -636,4 +636,4 @@ To do this, you need both a custom model that implements the autoregressive patt
 
 .. note::
 
-   Not all algorithms support autoregressive action distributions; see the `algorithm overview table <rllib-algorithms.html#available-algorithms-overview>`__ for more information.
+   Not all algorithms support autoregressive action distributions; see the :ref:`algorithm overview table <rllib-algorithms-doc>` for more information.

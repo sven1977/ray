@@ -23,7 +23,7 @@ RLlib: Industry-Grade, Scalable Reinforcement Learning
         ...  <- external
         ...  <- hierarchical
     algorithm-configs
-        rllib-algorithms (overview of all available algos)
+        algorithms (overview of all available algos)
     dev-guide (replaces user-guides)
         debugging
         scaling-guide
@@ -51,7 +51,7 @@ RLlib: Industry-Grade, Scalable Reinforcement Learning
     key-concepts
     rllib-env
     algorithm-config
-    rllib-algorithms
+    algorithms
     user-guides
     rllib-examples
     new-api-stack-migration-guide

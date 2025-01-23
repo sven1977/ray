@@ -84,7 +84,7 @@ this `SimpleCorridor example
 .. tip::
 
     Not all action spaces are compatible with all RLlib algorithms. See the
-    `algorithm overview <rllib-algorithms.html#available-algorithms-overview>`__
+    :ref:`algorithm overview <rllib-algorithms-doc>`
     for details. In particular, pay attention to which algorithms support discrete
     and which support continuous action spaces or both.
 
