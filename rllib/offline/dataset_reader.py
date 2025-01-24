@@ -11,7 +11,7 @@ from ray.rllib.offline.input_reader import InputReader
 from ray.rllib.offline.io_context import IOContext
 from ray.rllib.offline.json_reader import from_json_data, postprocess_actions
 from ray.rllib.policy.sample_batch import concat_samples, SampleBatch, DEFAULT_POLICY_ID
-from ray.rllib.utils.annotations import override, PublicAPI
+from ray.rllib.utils.annotations import override, OldAPIStack
 from ray.rllib.utils.typing import SampleBatchType
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ def _unzip_if_needed(paths: List[str], format: str):
     return ret_paths
 
 
-@PublicAPI
+@OldAPIStack
 def get_dataset_and_shards(
     config: "AlgorithmConfig", num_workers: int = 0
 ) -> Tuple[ray.data.Dataset, List[ray.data.Dataset]]:
@@ -175,7 +175,7 @@ def get_dataset_and_shards(
         return dataset, [None] + remote_shards
 
 
-@PublicAPI
+@OldAPIStack
 class DatasetReader(InputReader):
     """Reader object that loads data from Ray Dataset.
 
@@ -196,7 +196,6 @@ class DatasetReader(InputReader):
         }
     """
 
-    @PublicAPI
     def __init__(self, ds: ray.data.Dataset, ioctx: Optional[IOContext] = None):
         """Initializes a DatasetReader instance.
 

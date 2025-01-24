@@ -10,8 +10,7 @@ LEARNER_RESULTS_MOVING_AVG_SQD_ADV_NORM_KEY = "moving_avg_sqd_adv_norm"
 LEARNER_RESULTS_VF_EXPLAINED_VAR_KEY = "vf_explained_variance"
 
 
-# TODO (simon): Check, if the norm update should be done inside
-# the Learner.
+# TODO (simon): Check, if the norm update should be done inside the Learner.
 class MARWILLearner(Learner):
     @override(Learner)
     def build(self) -> None:

@@ -384,12 +384,13 @@ class MARWILConfig(AlgorithmConfig):
         if self.beta < 0.0 or self.beta > 1.0:
             self._value_error("`beta` must be within 0.0 and 1.0!")
 
-        if self.postprocess_inputs is False and self.beta > 0.0:
-            self._value_error(
-                "`postprocess_inputs` must be True for MARWIL (to "
-                "calculate accum., discounted returns)! Try setting "
-                "`config.offline_data(postprocess_inputs=True)`."
-            )
+        if not self.enable_rl_module_and_learner:
+            if self.postprocess_inputs is False and self.beta > 0.0:
+                self._value_error(
+                    "`postprocess_inputs` must be True for MARWIL (to "
+                    "calculate accum., discounted returns)! Try setting "
+                    "`config.offline_data(postprocess_inputs=True)`."
+                )
 
         # Assert that for a local learner the number of iterations is 1. Note,
         # this is needed because we have no iterators, but instead a single
