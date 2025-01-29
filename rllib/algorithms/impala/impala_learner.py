@@ -96,10 +96,16 @@ class IMPALALearner(Learner):
         if isinstance(self._learner_thread_in_queue, CircularBuffer):
             # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
             #  figured out GPU pre-loading.
-            ma_batch_on_gpu = convert_to_torch_tensor(
-                batch, pin_memory=True, device=self._device
-            )
-            ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
+            batch_on_gpu = {}
+            for module_id, module_data in batch.copy().items():
+                infos = module_data.pop("infos", None)
+                module_data_on_gpu = convert_to_torch_tensor(
+                    batch, pin_memory=True, device=self._device
+                )
+                if infos is not None:
+                    module_data_on_gpu["infos"] = infos
+                batch_on_gpu[module_id] = module_data_on_gpu
+            ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
             self.metrics.log_value(
                 (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
                 ts_dropped,
