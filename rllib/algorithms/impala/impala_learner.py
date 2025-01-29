@@ -20,6 +20,7 @@ from ray.rllib.utils.metrics import (
 )
 from ray.rllib.utils.metrics.metrics_logger import MetricsLogger
 from ray.rllib.utils.schedules.scheduler import Scheduler
+from ray.rllib.utils.torch_utils import convert_to_torch_tensor
 from ray.rllib.utils.typing import ModuleID, ResultDict
 
 torch, _ = try_import_torch()
@@ -93,7 +94,12 @@ class IMPALALearner(Learner):
         self.before_gradient_based_update(timesteps=timesteps or {})
 
         if isinstance(self._learner_thread_in_queue, CircularBuffer):
-            ts_dropped = self._learner_thread_in_queue.add(batch)
+            # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
+            #  figured out GPU pre-loading.
+            ma_batch_on_gpu = convert_to_torch_tensor(
+                batch, pin_memory=True, device=self._device
+            )
+            ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
             self.metrics.log_value(
                 (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
                 ts_dropped,

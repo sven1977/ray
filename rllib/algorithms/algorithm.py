@@ -889,8 +889,11 @@ class Algorithm(Checkpointable, Trainable, AlgorithmBase):
             )
             self._aggregator_actor_to_learner = {}
             for agg_idx, aggregator_location in aggregator_locations:
+                aggregator_location = aggregator_location.get()
                 for learner_idx, learner_location in learner_locations:
-                    if learner_location.get() == aggregator_location.get():
+                    # TODO (sven): Activate full comparison (including device) when Ray
+                    #  has figured out GPU pre-loading.
+                    if learner_location.get()[0] == aggregator_location[0]:
                         # Round-robin, in case all Learners are on same device/node.
                         learner_locations = learner_locations[1:] + [
                             learner_locations[0]
