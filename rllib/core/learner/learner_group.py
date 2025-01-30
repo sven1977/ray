@@ -592,14 +592,17 @@ class LearnerGroup(Checkpointable):
                 )
                 if num_sent_requests:
                     self._update_request_tags[update_tag] = num_sent_requests
-                print(f"update_tag={update_tag} -> set to num_sent_requests={num_sent_requests}")
+                    print(f"update_tag={update_tag} -> set to num_sent_requests={num_sent_requests}")
 
                 # Some requests were dropped, record lost ts/data.
                 if num_sent_requests != len(self._workers):
                     factor = 1 - (num_sent_requests / len(self._workers))
                     # Batch: Measure its length.
                     if episodes is None:
-                        dropped = len(batch)
+                        if isinstance(batch, list) and isinstance(batch[0], ObjectRef):
+                            dropped = len(batch) * self.config.train_batch_size_per_learner
+                        else:
+                            dropped = len(batch)
                     # List of Ray ObjectRefs (each object ref is a list of episodes of
                     # total len=`rollout_fragment_length * num_envs_per_env_runner`)
                     elif isinstance(episodes[0], ObjectRef):
