@@ -588,7 +588,7 @@ class LearnerGroup(Checkpointable):
                 assert update_tag not in self._update_request_tags
                 self._update_request_tag += 1
                 num_sent_requests = self._worker_manager.foreach_actor_async(
-                    partials, tag=str(update_tag), _print=True
+                    partials, tag=str(update_tag)#, _print=True
                 )
                 if num_sent_requests:
                     self._update_request_tags[update_tag] = num_sent_requests
