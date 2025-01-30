@@ -97,21 +97,12 @@ class IMPALALearner(Learner):
         self.before_gradient_based_update(timesteps=timesteps or {})
 
         #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
-        if False:#isinstance(self._learner_thread_in_queue, CircularBuffer):
+        if isinstance(self._learner_thread_in_queue, CircularBuffer):
             # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
             #  figured out GPU pre-loading.
-            batch_on_gpu = batch.to_device(self._device, pin_memory=True)
-            #for module_id, module_data in batch.policy_batches.items():
-            #    infos = module_data.pop("infos", None)
-            #    module_data_on_gpu = convert_to_torch_tensor(
-            #        batch, pin_memory=True, device=self._device
-            #    )
-            #    if infos is not None:
-            #        module_data_on_gpu["infos"] = infos
-            #    batch_on_gpu[module_id] = SampleBatch(module_data_on_gpu)
-            #batch_on_gpu = MultiAgentBatch(batch_on_gpu, env_steps=env_steps)
+            ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
 
-            ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
+            #ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
 
             #self.metrics.log_value(
             #    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
@@ -119,11 +110,16 @@ class IMPALALearner(Learner):
             #    reduce="sum",
             #)
         # Enqueue to Learner thread's in-queue.
-        elif False:
+        else:
+            assert False
             _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
         #TEST: remove when we re-add learner thread.
-        self._log_steps_trained_metrics(batch)
+        #self._log_steps_trained_metrics(batch)
+        self._update_from_batch_or_episodes(
+            batch=ma_batch_on_gpu,
+            timesteps=_CURRENT_GLOBAL_TIMESTEPS,
+        )
 
         #with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
         ret = self.metrics.reduce()
