@@ -95,8 +95,13 @@ class IMPALALearner(Learner):
         else:
             assert False
 
+        t1 = time.perf_counter()
+        print(f"DELTA ray.get = {t1 - t0}")
         with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
             self.before_gradient_based_update(timesteps=timesteps or {})
+
+        t2 = time.perf_counter()
+        print(f"DELTA before_gradient_based_update = {t2 - t1}")
 
         with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
             if isinstance(self._learner_thread_in_queue, CircularBuffer):
@@ -104,7 +109,13 @@ class IMPALALearner(Learner):
                 #  figured out GPU pre-loading.
                 ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
 
+                t3 = time.perf_counter()
+                print(f"DELTA batch.to_device = {t3 - t2}")
+
                 ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
+
+                t4 = time.perf_counter()
+                print(f"DELTA adding batch to circular buffer = {t4 - t3}")
 
                 self.metrics.log_value(
                     (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
@@ -125,7 +136,8 @@ class IMPALALearner(Learner):
         #with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
         ret = self.metrics.reduce()
 
-        print(f"DELTA time for Learner.update = {time.perf_counter() - t0}")
+        t5 = time.perf_counter()
+        print(f"FINAL DELTA time for Learner.update = {t5 - t0}")
         return ret
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended
