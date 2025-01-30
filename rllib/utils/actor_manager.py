@@ -535,6 +535,8 @@ class FaultTolerantActorManager:
                 num_outstanding_reqs = self._remote_actor_states[
                     i
                 ].num_in_flight_async_requests
+                if _print:
+                    print(f"actor {i} num_outstanding_reqs {num_outstanding_reqs} ")
                 if (
                     num_outstanding_reqs + num_calls_to_make[i]
                     < self._max_remote_requests_in_flight_per_actor
@@ -542,7 +544,12 @@ class FaultTolerantActorManager:
                     num_calls_to_make[i] += 1
                     limited_func.append(f)
                     limited_remote_actor_ids.append(i)
+                else:
+                    if _print:
+                        print(f".. NOT making request (actor busy)")
         else:
+            if _print:
+                assert False
             limited_func = func
             limited_remote_actor_ids = []
             for i in remote_actor_ids:
