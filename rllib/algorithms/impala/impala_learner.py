@@ -1,13 +1,19 @@
 from collections import deque
+import copy
+import queue
 import threading
 import time
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
+
+import tree  # pip install dm_tree
 
 import ray
 from ray.rllib.algorithms.appo.utils import CircularBuffer
 from ray.rllib.algorithms.impala.impala import LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY
+from ray.rllib.core.columns import Columns
 from ray.rllib.core.learner.learner import Learner
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
+from ray.rllib.policy.sample_batch import MultiAgentBatch, SampleBatch
 from ray.rllib.utils.annotations import (
     override,
     OverrideToImplementCustomLogic_CallToSuperRecommended,
@@ -17,6 +23,7 @@ from ray.rllib.utils.lambda_defaultdict import LambdaDefaultDict
 from ray.rllib.utils.metrics import (
     ALL_MODULES,
     NUM_ENV_STEPS_SAMPLED_LIFETIME,
+    NUM_ENV_STEPS_TRAINED,
 )
 from ray.rllib.utils.metrics.metrics_logger import MetricsLogger
 from ray.rllib.utils.schedules.scheduler import Scheduler
@@ -65,9 +72,29 @@ class IMPALALearner(Learner):
             )
         )
 
+        # Create and start the GPU-loader thread. It picks up train-ready batches from
+        # the "GPU-loader queue" and loads them to the GPU, then places the GPU batches
+        # on the "update queue" for the actual RLModule forward pass and loss
+        # computations.
+        self._gpu_loader_in_queue = queue.Queue()
+
         # Default is to have a learner thread.
         if not hasattr(self, "_learner_thread_in_queue"):
             self._learner_thread_in_queue = deque(maxlen=self.config.learner_queue_size)
+
+        # Create and start the GPU loader thread(s).
+        if self.config.num_gpus_per_learner > 0:
+            self._gpu_loader_threads = [
+                _GPULoaderThread(
+                    in_queue=self._gpu_loader_in_queue,
+                    out_queue=self._learner_thread_in_queue,
+                    device=self._device,
+                    metrics_logger=self.metrics,
+                )
+                for _ in range(self.config.num_gpu_loader_threads)
+            ]
+            for t in self._gpu_loader_threads:
+                t.start()
 
         # Create and start the Learner thread.
         self._learner_thread = _LearnerThread(
@@ -103,14 +130,21 @@ class IMPALALearner(Learner):
         t2 = time.perf_counter()
         #print(f"DELTA before_gradient_based_update = {t2 - t1}")
 
+        self._gpu_loader_in_queue.put(batch)
+        self.metrics.log_value(
+            (ALL_MODULES, QUEUE_SIZE_GPU_LOADER_QUEUE),
+            self._gpu_loader_in_queue.qsize(),
+        )
+        t4 = time.perf_counter()
+
         #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
-        if isinstance(self._learner_thread_in_queue, CircularBuffer):
+        if False:#isinstance(self._learner_thread_in_queue, CircularBuffer):
             # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
             #  figured out GPU pre-loading.
-            #ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
-            ma_batch_on_gpu = batch
+            ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
+            #ma_batch_on_gpu = batch
             t3 = time.perf_counter()
-            #print(f"DELTA batch.to_device ({self._device}) = {t3 - t2}")
+            print(f"DELTA batch.to_device ({self._device}) = {t3 - t2}")
 
             ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
 
@@ -123,7 +157,7 @@ class IMPALALearner(Learner):
             #    reduce="sum",
             #)
         # Enqueue to Learner thread's in-queue.
-        else:
+        elif False:
             assert False
             _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
@@ -170,6 +204,63 @@ class IMPALALearner(Learner):
 
 
 ImpalaLearner = IMPALALearner
+
+
+class _GPULoaderThread(threading.Thread):
+    def __init__(
+        self,
+        *,
+        in_queue: queue.Queue,
+        out_queue: deque,
+        device: torch.device,
+        metrics_logger: MetricsLogger,
+    ):
+        super().__init__()
+        self.daemon = True
+
+        self._in_queue = in_queue
+        self._out_queue = out_queue
+        self._ts_dropped = 0
+        self._device = device
+        self.metrics = metrics_logger
+
+    def run(self) -> None:
+        while True:
+            self._step()
+
+    def _step(self) -> None:
+        # Only measure time, if we have a `metrics` instance.
+        #with self.metrics.log_time((ALL_MODULES, GPU_LOADER_QUEUE_WAIT_TIMER)):
+        # Get a new batch from the data (inqueue).
+        #batch_on_cpu, env_steps = self._in_queue.get()
+        batch_on_cpu = self._in_queue.get()
+        ma_batch_on_gpu = batch_on_cpu.to_device(self._device, pin_memory=True)
+        #with self.metrics.log_time((ALL_MODULES, GPU_LOADER_LOAD_TO_GPU_TIMER)):
+        # Load the batch onto the GPU device.
+        #batch_on_gpu = tree.map_structure_with_path(
+        #    lambda path, t: (
+        #        t
+        #        if isinstance(path, tuple) and Columns.INFOS in path
+        #        else t.to(self._device, non_blocking=True)
+        #    ),
+        #    batch_on_cpu,
+        #)
+        #ma_batch_on_gpu = MultiAgentBatch(
+        #    policy_batches={mid: SampleBatch(b) for mid, b in batch_on_gpu.items()},
+        #    env_steps=env_steps,
+        #)
+
+        if isinstance(self._out_queue, CircularBuffer):
+            ts_dropped = self._out_queue.add(ma_batch_on_gpu)
+            #self.metrics.log_value(
+            #    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+            #    ts_dropped,
+            #    reduce="sum",
+            #)
+        else:
+            assert False
+            # Enqueue to Learner thread's in-queue.
+            _LearnerThread.enqueue(self._out_queue, ma_batch_on_gpu, self.metrics)
 
 
 class _LearnerThread(threading.Thread):
