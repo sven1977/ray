@@ -93,37 +93,37 @@ class IMPALALearner(Learner):
         else:
             assert False
 
-        with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
-            self.before_gradient_based_update(timesteps=timesteps or {})
+        #with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
+        self.before_gradient_based_update(timesteps=timesteps or {})
 
-        with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
-            if isinstance(self._learner_thread_in_queue, CircularBuffer):
-                # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
-                #  figured out GPU pre-loading.
-                batch_on_gpu = batch.to_device(self._device, pin_memory=True)
-                #for module_id, module_data in batch.policy_batches.items():
-                #    infos = module_data.pop("infos", None)
-                #    module_data_on_gpu = convert_to_torch_tensor(
-                #        batch, pin_memory=True, device=self._device
-                #    )
-                #    if infos is not None:
-                #        module_data_on_gpu["infos"] = infos
-                #    batch_on_gpu[module_id] = SampleBatch(module_data_on_gpu)
-                #batch_on_gpu = MultiAgentBatch(batch_on_gpu, env_steps=env_steps)
+        #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
+        if isinstance(self._learner_thread_in_queue, CircularBuffer):
+            # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
+            #  figured out GPU pre-loading.
+            batch_on_gpu = batch.to_device(self._device, pin_memory=True)
+            #for module_id, module_data in batch.policy_batches.items():
+            #    infos = module_data.pop("infos", None)
+            #    module_data_on_gpu = convert_to_torch_tensor(
+            #        batch, pin_memory=True, device=self._device
+            #    )
+            #    if infos is not None:
+            #        module_data_on_gpu["infos"] = infos
+            #    batch_on_gpu[module_id] = SampleBatch(module_data_on_gpu)
+            #batch_on_gpu = MultiAgentBatch(batch_on_gpu, env_steps=env_steps)
 
-                ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
+            ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
 
-                self.metrics.log_value(
-                    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
-                    ts_dropped,
-                    reduce="sum",
-                )
-            # Enqueue to Learner thread's in-queue.
-            else:
-                _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
+            #self.metrics.log_value(
+            #    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+            #    ts_dropped,
+            #    reduce="sum",
+            #)
+        # Enqueue to Learner thread's in-queue.
+        else:
+            _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
-        with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
-            ret = self.metrics.reduce()
+        #with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
+        ret = self.metrics.reduce()
 
         return ret
 
@@ -136,11 +136,11 @@ class IMPALALearner(Learner):
             new_entropy_coeff = self.entropy_coeff_schedulers_per_module[
                 module_id
             ].update(timestep=timesteps.get(NUM_ENV_STEPS_SAMPLED_LIFETIME, 0))
-            self.metrics.log_value(
-                (module_id, LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY),
-                new_entropy_coeff,
-                window=1,
-            )
+            #self.metrics.log_value(
+            #    (module_id, LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY),
+            #    new_entropy_coeff,
+            #    window=1,
+            #)
 
     @override(Learner)
     def remove_module(self, module_id: str):
@@ -182,32 +182,32 @@ class _LearnerThread(threading.Thread):
         global _CURRENT_GLOBAL_TIMESTEPS
 
         # Get a new batch from the GPU-data (deque.pop -> newest item first).
-        with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_IN_QUEUE_WAIT_TIMER)):
-            # Get a new batch from the GPU-data (learner queue OR circular buffer).
-            if isinstance(self._in_queue, CircularBuffer):
-                ma_batch_on_gpu = self._in_queue.sample()
-            else:
-                assert False
-                # Queue is empty: Sleep a tiny bit to avoid CPU-thrashing.
-                while not self._in_queue:
-                    time.sleep(0.001)
-                    #return
-                # Consume from the left (oldest batches first).
-                # If we consumed from the right, we would run into the danger of
-                # learning from newer batches (left side) most times, BUT sometimes
-                # grabbing older batches (right area of deque).
-                ma_batch_on_gpu = self._in_queue.popleft()
+        #with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_IN_QUEUE_WAIT_TIMER)):
+        # Get a new batch from the GPU-data (learner queue OR circular buffer).
+        if isinstance(self._in_queue, CircularBuffer):
+            ma_batch_on_gpu = self._in_queue.sample()
+        else:
+            assert False
+            # Queue is empty: Sleep a tiny bit to avoid CPU-thrashing.
+            while not self._in_queue:
+                time.sleep(0.001)
+                #return
+            # Consume from the left (oldest batches first).
+            # If we consumed from the right, we would run into the danger of
+            # learning from newer batches (left side) most times, BUT sometimes
+            # grabbing older batches (right area of deque).
+            ma_batch_on_gpu = self._in_queue.popleft()
 
         # Call the update method on the batch.
-        with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_UPDATE_TIMER)):
-            # TODO (sven): For multi-agent AND SGD iter > 1, we need to make sure
-            #  this thread has the information about the min minibatches necessary
-            #  (due to different agents taking different steps in the env, e.g.
-            #  MA-CartPole).
-            self._update_method(
-                batch=ma_batch_on_gpu,
-                timesteps=_CURRENT_GLOBAL_TIMESTEPS,
-            )
+        #with self.metrics.log_time((ALL_MODULES, LEARNER_THREAD_UPDATE_TIMER)):
+        # TODO (sven): For multi-agent AND SGD iter > 1, we need to make sure
+        #  this thread has the information about the min minibatches necessary
+        #  (due to different agents taking different steps in the env, e.g.
+        #  MA-CartPole).
+        self._update_method(
+            batch=ma_batch_on_gpu,
+            timesteps=_CURRENT_GLOBAL_TIMESTEPS,
+        )
 
     @staticmethod
     def enqueue(learner_queue: deque, batch, metrics):
@@ -219,16 +219,16 @@ class _LearnerThread(threading.Thread):
         # If we consumed from the right, we would run into the danger of learning
         # from newer batches (left side) most times, BUT sometimes grabbing a
         # really old batches (right area of deque).
-        if len(learner_queue) == learner_queue.maxlen:
-            metrics.log_value(
-                (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
-                learner_queue.popleft().env_steps(),
-                reduce="sum",
-            )
+        #if len(learner_queue) == learner_queue.maxlen:
+        #    metrics.log_value(
+        #        (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+        #        learner_queue.popleft().env_steps(),
+        #        reduce="sum",
+        #    )
         learner_queue.append(batch)
 
         # Log current queue size.
-        metrics.log_value(
-            (ALL_MODULES, QUEUE_SIZE_LEARNER_THREAD_QUEUE),
-            len(learner_queue),
-        )
+        #metrics.log_value(
+        #    (ALL_MODULES, QUEUE_SIZE_LEARNER_THREAD_QUEUE),
+        #    len(learner_queue),
+        #)

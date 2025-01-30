@@ -584,11 +584,11 @@ class Learner(Checkpointable):
                             # Note, `tf.linalg.global_norm` needs a list of tensors.
                             list(grad_dict_to_clip.values()),
                         )
-                    self.metrics.log_value(
-                        key=(module_id, f"gradients_{optimizer_name}_global_norm"),
-                        value=global_norm,
-                        window=1,
-                    )
+                    #self.metrics.log_value(
+                    #    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
+                    #    value=global_norm,
+                    #    window=1,
+                    #)
                 postprocessed_grads.update(grad_dict_to_clip)
             # In the other case check, if we want to log gradients only.
             elif config.log_gradients:
@@ -597,11 +597,11 @@ class Learner(Checkpointable):
                     # Note, `tf.linalg.global_norm` needs a list of tensors.
                     list(grad_dict_to_clip.values()),
                 )
-                self.metrics.log_value(
-                    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
-                    value=global_norm,
-                    window=1,
-                )
+                #self.metrics.log_value(
+                #    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
+                #    value=global_norm,
+                #    window=1,
+                #)
 
         return postprocessed_grads
 
@@ -1473,21 +1473,21 @@ class Learner(Checkpointable):
 
             # Log all individual RLModules' loss terms and its registered optimizers'
             # current learning rates.
-            for mid, loss in convert_to_numpy(loss_per_module).items():
-                self.metrics.log_value(
-                    key=(mid, self.TOTAL_LOSS_KEY),
-                    value=loss,
-                    window=1,
-                )
+            #for mid, loss in convert_to_numpy(loss_per_module).items():
+            #    self.metrics.log_value(
+            #        key=(mid, self.TOTAL_LOSS_KEY),
+            #        value=loss,
+            #        window=1,
+            #    )
 
         self._weights_seq_no += 1
-        self.metrics.log_dict(
-            {
-                (mid, WEIGHTS_SEQ_NO): self._weights_seq_no
-                for mid in batch.policy_batches.keys()
-            },
-            window=1,
-        )
+        #self.metrics.log_dict(
+        #    {
+        #        (mid, WEIGHTS_SEQ_NO): self._weights_seq_no
+        #        for mid in batch.policy_batches.keys()
+        #    },
+        #    window=1,
+        #)
 
         self._set_slicing_by_batch_id(batch, value=False)
 
@@ -1534,13 +1534,13 @@ class Learner(Checkpointable):
                         timestep=timesteps.get(NUM_ENV_STEPS_SAMPLED_LIFETIME, 0)
                     )
                     self._set_optimizer_lr(optimizer, lr=new_lr)
-                self.metrics.log_value(
-                    # Cut out the module ID from the beginning since it's already part
-                    # of the key sequence: (ModuleID, "[optim name]_lr").
-                    key=(module_id, f"{optimizer_name[len(module_id) + 1:]}_{LR_KEY}"),
-                    value=convert_to_numpy(self._get_optimizer_lr(optimizer)),
-                    window=1,
-                )
+                #self.metrics.log_value(
+                #    # Cut out the module ID from the beginning since it's already part
+                #    # of the key sequence: (ModuleID, "[optim name]_lr").
+                #    key=(module_id, f"{optimizer_name[len(module_id) + 1:]}_{LR_KEY}"),
+                #    value=convert_to_numpy(self._get_optimizer_lr(optimizer)),
+                #    window=1,
+                #)
 
     def _set_slicing_by_batch_id(
         self, batch: MultiAgentBatch, *, value: bool
@@ -1740,41 +1740,41 @@ class Learner(Checkpointable):
         for mid, module_batch in batch.policy_batches.items():
             module_batch_size = len(module_batch)
             # Log average batch size (for each module).
-            self.metrics.log_value(
-                key=(mid, MODULE_TRAIN_BATCH_SIZE_MEAN),
-                value=module_batch_size,
-            )
+            #self.metrics.log_value(
+            #    key=(mid, MODULE_TRAIN_BATCH_SIZE_MEAN),
+            #    value=module_batch_size,
+            #)
             # Log module steps (for each module).
-            self.metrics.log_value(
-                key=(mid, NUM_MODULE_STEPS_TRAINED),
-                value=module_batch_size,
-                reduce="sum",
-                clear_on_reduce=True,
-            )
-            self.metrics.log_value(
-                key=(mid, NUM_MODULE_STEPS_TRAINED_LIFETIME),
-                value=module_batch_size,
-                reduce="sum",
-            )
+            #self.metrics.log_value(
+            #    key=(mid, NUM_MODULE_STEPS_TRAINED),
+            #    value=module_batch_size,
+            #    reduce="sum",
+            #    clear_on_reduce=True,
+            #)
+            #self.metrics.log_value(
+            #    key=(mid, NUM_MODULE_STEPS_TRAINED_LIFETIME),
+            #    value=module_batch_size,
+            #    reduce="sum",
+            #)
             # Log module steps (sum of all modules).
-            self.metrics.log_value(
-                key=(ALL_MODULES, NUM_MODULE_STEPS_TRAINED),
-                value=module_batch_size,
-                reduce="sum",
-                clear_on_reduce=True,
-            )
-            self.metrics.log_value(
-                key=(ALL_MODULES, NUM_MODULE_STEPS_TRAINED_LIFETIME),
-                value=module_batch_size,
-                reduce="sum",
-            )
+            #self.metrics.log_value(
+            #    key=(ALL_MODULES, NUM_MODULE_STEPS_TRAINED),
+            #    value=module_batch_size,
+            #    reduce="sum",
+            #    clear_on_reduce=True,
+            #)
+            #self.metrics.log_value(
+            #    key=(ALL_MODULES, NUM_MODULE_STEPS_TRAINED_LIFETIME),
+            #    value=module_batch_size,
+            #    reduce="sum",
+            #)
         # Log env steps (all modules).
-        self.metrics.log_value(
-            (ALL_MODULES, NUM_ENV_STEPS_TRAINED),
-            batch.env_steps(),
-            reduce="sum",
-            clear_on_reduce=True,
-        )
+        #self.metrics.log_value(
+        #    (ALL_MODULES, NUM_ENV_STEPS_TRAINED),
+        #    batch.env_steps(),
+        #    reduce="sum",
+        #    clear_on_reduce=True,
+        #)
         self.metrics.log_value(
             (ALL_MODULES, NUM_ENV_STEPS_TRAINED_LIFETIME),
             batch.env_steps(),
