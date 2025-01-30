@@ -280,7 +280,7 @@ class Learner(Checkpointable):
     #  all Learner workers and then immediately builds them any ways? Unless there is
     #  a reason related to Train worker group setup.
     @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def build(self, learner_index) -> None:
+    def build(self) -> None:
         """Builds the Learner.
 
         This method should be called before the learner is used. It is responsible for
@@ -292,7 +292,7 @@ class Learner(Checkpointable):
             return
 
         # TODO (sven): Move this into c'tor.
-        self.learner_index = learner_index
+        #self.learner_index = learner_index
 
         # Build learner connector pipeline used on this Learner worker.
         self._learner_connector = None
@@ -1360,7 +1360,7 @@ class Learner(Checkpointable):
             assert False
             batch = ray.get(batch)
 
-        print(f"Learner {self._learner_index} learns on batch ({batch.env_steps()} env steps)")
+        print(f"Learner learns on batch ({batch.env_steps()} env steps)")
 
         if isinstance(episodes, ray.ObjectRef):
             assert False
