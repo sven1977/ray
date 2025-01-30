@@ -357,7 +357,7 @@ class AlgorithmConfig(_Config):
         self.num_gpus_per_learner = 0
         self.num_cpus_per_learner = 1
         self.num_aggregator_actors_per_learner = 0
-        self.max_requests_in_flight_per_aggregator_actor = 100
+        self.max_requests_in_flight_per_aggregator_actor = 3
         self.local_gpu_idx = 0
         # TODO (sven): This probably works even without any restriction
         #  (allowing for any arbitrary number of requests in-flight). Test with

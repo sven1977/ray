@@ -654,6 +654,7 @@ class IMPALA(Algorithm):
                     _print=True,
                 )
                 print(".. num dropped aggegator actor remote calls", len(packs) - sent)
+                self.metrics.log_value("aggregator_actor_set_env_steps_dropped", self.config.train_batch_size_per_learner * (len(packs) - sent))
 
             # Get n lists of m ObjRef[MABatch] (m=num_learners) to perform n calls to
             # all learner workers with the already GPU-located batches.
@@ -671,10 +672,10 @@ class IMPALA(Algorithm):
 
         # Call the LearnerGroup's `update_from_episodes` method.
         with self.metrics.log_time((TIMERS, LEARNER_UPDATE_TIMER)):
-            #self.metrics.log_value(
-            #    key=MEAN_NUM_LEARNER_GROUP_UPDATE_CALLED,
-            #    value=len(data_packages_for_learner_group),
-            #)
+            self.metrics.log_value(
+                key=MEAN_NUM_LEARNER_GROUP_UPDATE_CALLED,
+                value=len(data_packages_for_learner_group),
+            )
             rl_module_state = None
             num_learner_group_results_received = 0
 

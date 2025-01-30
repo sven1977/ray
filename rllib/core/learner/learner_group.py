@@ -366,6 +366,7 @@ class LearnerGroup(Checkpointable):
             # multi-learner setup and `update_from_iterator` needs to
             # handle updating.
             if isinstance(_batch_shard, ray.data.DataIterator):
+                assert False
                 result = _learner.update_from_iterator(
                     iterator=_batch_shard,
                     timesteps=_timesteps,
@@ -383,6 +384,7 @@ class LearnerGroup(Checkpointable):
                     **_kwargs,
                 )
             else:
+                assert False
                 result = _learner.update_from_episodes(
                     episodes=_episodes_shard,
                     timesteps=_timesteps,
@@ -574,12 +576,14 @@ class LearnerGroup(Checkpointable):
                 # (each actor is allowed only some number of max in-flight requests
                 # at the same time).
                 update_tag = self._update_request_tag
+                assert update_tag not in self._update_request_tags
                 self._update_request_tag += 1
                 num_sent_requests = self._worker_manager.foreach_actor_async(
                     partials, tag=str(update_tag)
                 )
                 if num_sent_requests:
                     self._update_request_tags[update_tag] = num_sent_requests
+                print(f"In LearnerGroup: num_sent_requests={num_sent_requests} tag={update_tag}")
 
                 # Some requests were dropped, record lost ts/data.
                 if num_sent_requests != len(self._workers):

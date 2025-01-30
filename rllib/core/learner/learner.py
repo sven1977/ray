@@ -1354,9 +1354,14 @@ class Learner(Checkpointable):
         # actual batch/episodes objects).
         if isinstance(batch, ray.ObjectRef):
             batch = ray.get(batch)
+        else:
+            assert False
+
         if isinstance(episodes, ray.ObjectRef):
+            assert False
             episodes = ray.get(episodes)
         elif isinstance(episodes, list) and isinstance(episodes[0], ray.ObjectRef):
+            assert False
             # It's possible that individual refs are invalid due to the EnvRunner
             # that produced the ref has crashed or had its entire node go down.
             # In this case, try each ref individually and collect only valid results.
@@ -1373,6 +1378,7 @@ class Learner(Checkpointable):
 
         # Call the learner connector on the given `episodes` (if we have one).
         if episodes is not None and self._learner_connector is not None:
+            assert False
             # Call the learner connector pipeline.
             shared_data = {}
             batch = self._learner_connector(
