@@ -97,34 +97,34 @@ class IMPALALearner(Learner):
 
         t1 = time.perf_counter()
         print(f"DELTA ray.get = {t1 - t0}")
-        with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
-            self.before_gradient_based_update(timesteps=timesteps or {})
+        #with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
+        self.before_gradient_based_update(timesteps=timesteps or {})
 
         t2 = time.perf_counter()
         print(f"DELTA before_gradient_based_update = {t2 - t1}")
 
-        with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
-            if isinstance(self._learner_thread_in_queue, CircularBuffer):
-                # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
-                #  figured out GPU pre-loading.
-                ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
+        #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
+        if isinstance(self._learner_thread_in_queue, CircularBuffer):
+            # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
+            #  figured out GPU pre-loading.
+            ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
 
-                t3 = time.perf_counter()
-                print(f"DELTA batch.to_device = {t3 - t2}")
+            t3 = time.perf_counter()
+            print(f"DELTA batch.to_device = {t3 - t2}")
 
-                ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
+            ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
 
-                t4 = time.perf_counter()
-                print(f"DELTA adding batch to circular buffer = {t4 - t3}")
+            t4 = time.perf_counter()
+            print(f"DELTA adding batch to circular buffer = {t4 - t3}")
 
-                self.metrics.log_value(
-                    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
-                    ts_dropped,
-                    reduce="sum",
-                )
-            # Enqueue to Learner thread's in-queue.
-            else:
-                _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
+            #self.metrics.log_value(
+            #    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+            #    ts_dropped,
+            #    reduce="sum",
+            #)
+        # Enqueue to Learner thread's in-queue.
+        else:
+            _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
         #TEST: remove when we re-add learner thread.
         #self._log_steps_trained_metrics(batch)
