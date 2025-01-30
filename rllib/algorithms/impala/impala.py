@@ -653,7 +653,7 @@ class IMPALA(Algorithm):
                     tag="batches",
                     _print=True,
                 )
-                print(".. num dropped aggegator actor remote calls", num_agg - sent)
+                print(".. num dropped aggegator actor remote calls", len(packs) - sent)
 
             # Get n lists of m ObjRef[MABatch] (m=num_learners) to perform n calls to
             # all learner workers with the already GPU-located batches.
