@@ -90,35 +90,42 @@ class IMPALALearner(Learner):
 
         if isinstance(batch, ray.ObjectRef):
             batch = ray.get(batch)
-
-        self.before_gradient_based_update(timesteps=timesteps or {})
-
-        if isinstance(self._learner_thread_in_queue, CircularBuffer):
-            # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
-            #  figured out GPU pre-loading.
-            batch_on_gpu = batch.to_device(self._device, pin_memory=True)
-            #for module_id, module_data in batch.policy_batches.items():
-            #    infos = module_data.pop("infos", None)
-            #    module_data_on_gpu = convert_to_torch_tensor(
-            #        batch, pin_memory=True, device=self._device
-            #    )
-            #    if infos is not None:
-            #        module_data_on_gpu["infos"] = infos
-            #    batch_on_gpu[module_id] = SampleBatch(module_data_on_gpu)
-            #batch_on_gpu = MultiAgentBatch(batch_on_gpu, env_steps=env_steps)
-
-            ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
-
-            self.metrics.log_value(
-                (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
-                ts_dropped,
-                reduce="sum",
-            )
-        # Enqueue to Learner thread's in-queue.
         else:
-            _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
+            assert False
 
-        return self.metrics.reduce()
+        with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
+            self.before_gradient_based_update(timesteps=timesteps or {})
+
+        with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
+            if isinstance(self._learner_thread_in_queue, CircularBuffer):
+                # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
+                #  figured out GPU pre-loading.
+                batch_on_gpu = batch.to_device(self._device, pin_memory=True)
+                #for module_id, module_data in batch.policy_batches.items():
+                #    infos = module_data.pop("infos", None)
+                #    module_data_on_gpu = convert_to_torch_tensor(
+                #        batch, pin_memory=True, device=self._device
+                #    )
+                #    if infos is not None:
+                #        module_data_on_gpu["infos"] = infos
+                #    batch_on_gpu[module_id] = SampleBatch(module_data_on_gpu)
+                #batch_on_gpu = MultiAgentBatch(batch_on_gpu, env_steps=env_steps)
+
+                ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
+
+                self.metrics.log_value(
+                    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+                    ts_dropped,
+                    reduce="sum",
+                )
+            # Enqueue to Learner thread's in-queue.
+            else:
+                _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
+
+        with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
+            ret = self.metrics.reduce()
+
+        return ret
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     def before_gradient_based_update(self, *, timesteps: Dict[str, Any]) -> None:
