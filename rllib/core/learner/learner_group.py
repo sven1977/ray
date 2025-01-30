@@ -127,7 +127,7 @@ class LearnerGroup(Checkpointable):
         # A single local Learner.
         if not self.is_remote:
             self._learner = learner_class(config=config, module_spec=module_spec)
-            self._learner.build()
+            self._learner.build(learner_idx=0)
             self._worker_manager = None
         # N remote Learner workers.
         else:
@@ -170,8 +170,9 @@ class LearnerGroup(Checkpointable):
 
             self._workers = [w.actor for w in backend_executor.worker_group.workers]
 
-            # Run the neural network building code on remote workers.
-            ray.get([w.build.remote() for w in self._workers])
+            # Run the neural network building code on remote workers and send them their
+            # worker indices.
+            ray.get([w.build.remote(learner_idx=i) for i, w in enumerate(self._workers)])
 
             self._worker_manager = FaultTolerantActorManager(
                 self._workers,

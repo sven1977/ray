@@ -233,9 +233,10 @@ class Learner(Checkpointable):
         self._module_spec: Optional[MultiRLModuleSpec] = module_spec
         self._module_obj: Optional[MultiRLModule] = module
 
-        # Make node and device of this Learner available.
+        # Make node, device, and index of this Learner available.
         self._node = platform.node()
         self._device = None
+        self._learner_index = None
 
         # Set a seed, if necessary.
         if self.config.seed is not None:
@@ -279,7 +280,7 @@ class Learner(Checkpointable):
     #  all Learner workers and then immediately builds them any ways? Unless there is
     #  a reason related to Train worker group setup.
     @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def build(self) -> None:
+    def build(self, learner_index: Optional[int] = None) -> None:
         """Builds the Learner.
 
         This method should be called before the learner is used. It is responsible for
@@ -289,6 +290,9 @@ class Learner(Checkpointable):
         if self._is_built:
             logger.debug("Learner already built. Skipping build.")
             return
+
+        # TODO (sven): Move this into c'tor.
+        self.learner_index = learner_index
 
         # Build learner connector pipeline used on this Learner worker.
         self._learner_connector = None
@@ -1353,7 +1357,10 @@ class Learner(Checkpointable):
         # Resolve batch/episodes being ray object refs (instead of
         # actual batch/episodes objects).
         if isinstance(batch, ray.ObjectRef):
+            assert False
             batch = ray.get(batch)
+
+        print(f"Learner {self._learner_index} learns on batch ({batch.env_steps()} env steps)")
 
         if isinstance(episodes, ray.ObjectRef):
             assert False
