@@ -280,7 +280,7 @@ class Learner(Checkpointable):
     #  all Learner workers and then immediately builds them any ways? Unless there is
     #  a reason related to Train worker group setup.
     @OverrideToImplementCustomLogic_CallToSuperRecommended
-    def build(self, learner_index: Optional[int] = None) -> None:
+    def build(self, learner_index) -> None:
         """Builds the Learner.
 
         This method should be called before the learner is used. It is responsible for
