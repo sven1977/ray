@@ -98,10 +98,10 @@ class IMPALALearner(Learner):
         t1 = time.perf_counter()
         print(f"DELTA ray.get = {t1 - t0}")
         #with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
-        self.before_gradient_based_update(timesteps=timesteps or {})
+        #self.before_gradient_based_update(timesteps=timesteps or {})
 
         t2 = time.perf_counter()
-        print(f"DELTA before_gradient_based_update = {t2 - t1}")
+        #print(f"DELTA before_gradient_based_update = {t2 - t1}")
 
         #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
         if isinstance(self._learner_thread_in_queue, CircularBuffer):
@@ -110,7 +110,7 @@ class IMPALALearner(Learner):
             ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
 
             t3 = time.perf_counter()
-            print(f"DELTA batch.to_device = {t3 - t2}")
+            print(f"DELTA batch.to_device ({self._device}) = {t3 - t2}")
 
             ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
 
