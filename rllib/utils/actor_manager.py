@@ -516,7 +516,8 @@ class FaultTolerantActorManager:
                 for i in range(len(func))
             ]
             # Update our round-robin pointer.
-            self._current_actor_id += len(func) % self.num_actors()
+            self._current_actor_id += len(func)
+            self._current_actor_id %= self.num_actors()
             if _print:
                 print("remote_actor_ids", remote_actor_ids, "current_actor_id", self._current_actor_id)
 
