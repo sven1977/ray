@@ -188,8 +188,12 @@ class _LearnerThread(threading.Thread):
         self._in_queue: Union[deque, CircularBuffer] = in_queue
 
     def run(self) -> None:
+        import time
         while not self.stopped:
+            t0 = time.perf_counter()
             self.step()
+            t1 = time.perf_counter()
+            print(f"Stepped learner thread, delta={t1 - t0}")
 
     def step(self):
         global _CURRENT_GLOBAL_TIMESTEPS
