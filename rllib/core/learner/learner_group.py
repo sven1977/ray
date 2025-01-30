@@ -556,19 +556,19 @@ class LearnerGroup(Checkpointable):
                 tags_to_get = []
                 print(f"update_request_tags={self._update_request_tags}")
                 for tag, count in self._update_request_tags.items():
-                    print(f".. tag {tag} count={count}", end="")
+                    print(f".. tag {tag} outstanding={count} ", end="")
                     result = self._worker_manager.fetch_ready_async_reqs(
                         tags=[str(tag)], timeout_seconds=0.0
                     )
                     if tag not in self._update_request_results:
                         self._update_request_results[tag] = result
-                        print(f"(new results; num={len(self._update_request_results[tag].result_or_errors)}) ", end="")
+                        print(f"(new results; received={len(self._update_request_results[tag].result_or_errors)}) ", end="")
                     else:
                         for r in result:
                             self._update_request_results[tag].add_result(
                                 r.actor_id, r.result_or_error, tag
                             )
-                        print(f"(existing results; num={len(self._update_request_results[tag].result_or_errors)}) ", end="")
+                        print(f"(existing results; received={len(self._update_request_results[tag].result_or_errors)}) ", end="")
 
                     # Still not done with this `tag` -> skip out early.
                     if (
@@ -576,9 +576,9 @@ class LearnerGroup(Checkpointable):
                         > len(self._update_request_results[tag].result_or_errors)
                         > 0
                     ):
-                        print(f"(not complete -> break)")
+                        print(f"(some received AND some missing -> break)")
                         break
-                    print(f"(complete -> next tag)")
+                    print(f"(none received OR complete -> next tag)")
                     tags_to_get.append(tag)
 
                 # Send out new request(s), if there is still capacity on the actors
