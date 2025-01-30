@@ -70,12 +70,12 @@ class IMPALALearner(Learner):
             self._learner_thread_in_queue = deque(maxlen=self.config.learner_queue_size)
 
         # Create and start the Learner thread.
-        self._learner_thread = _LearnerThread(
-            update_method=self._update_from_batch_or_episodes,
-            in_queue=self._learner_thread_in_queue,
-            metrics_logger=self.metrics,
-        )
-        self._learner_thread.start()
+        #self._learner_thread = _LearnerThread(
+        #    update_method=self._update_from_batch_or_episodes,
+        #    in_queue=self._learner_thread_in_queue,
+        #    metrics_logger=self.metrics,
+        #)
+        #self._learner_thread.start()
 
     @override(Learner)
     def update_from_batch(
@@ -97,7 +97,7 @@ class IMPALALearner(Learner):
         self.before_gradient_based_update(timesteps=timesteps or {})
 
         #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
-        if isinstance(self._learner_thread_in_queue, CircularBuffer):
+        if False:#isinstance(self._learner_thread_in_queue, CircularBuffer):
             # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
             #  figured out GPU pre-loading.
             batch_on_gpu = batch.to_device(self._device, pin_memory=True)
@@ -119,8 +119,11 @@ class IMPALALearner(Learner):
             #    reduce="sum",
             #)
         # Enqueue to Learner thread's in-queue.
-        else:
+        elif False:
             _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
+
+        #TEST: remove when we re-add learner thread.
+        self._log_steps_trained_metrics(batch)
 
         #with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
         ret = self.metrics.reduce()
