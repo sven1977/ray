@@ -447,6 +447,7 @@ class LearnerGroup(Checkpointable):
             #  Then again, we might move into a world where Learner always
             #  receives Episodes, never batches.
             if isinstance(batch, list) and isinstance(batch[0], ray.data.DataIterator):
+                assert False
                 partials = [
                     partial(
                         _learner_update,
@@ -472,6 +473,7 @@ class LearnerGroup(Checkpointable):
                     for i, batch_shard in enumerate(batch)
                 ]
             elif batch is not None:
+                assert False
                 partials = [
                     partial(
                         _learner_update,
@@ -485,6 +487,7 @@ class LearnerGroup(Checkpointable):
                     )
                 ]
             elif isinstance(episodes, list) and isinstance(episodes[0], ObjectRef):
+                assert False
                 partials = [
                     partial(
                         _learner_update,
@@ -500,6 +503,7 @@ class LearnerGroup(Checkpointable):
             # Single- or MultiAgentEpisodes: Shard into equal pieces (only roughly equal
             # in case of multi-agent).
             else:
+                assert False
                 from ray.data.iterator import DataIterator
 
                 if isinstance(episodes[0], DataIterator):

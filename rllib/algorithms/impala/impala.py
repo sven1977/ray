@@ -620,6 +620,10 @@ class IMPALA(Algorithm):
             data_packages_for_aggregators = self._pre_queue_episode_refs(
                 episode_refs, package_size=self.config.train_batch_size_per_learner
             )
+            # TEST
+            print("num_data_packages_for_aggregators", len(data_packages_for_aggregators))
+            # END: TEST
+
             ma_batches_refs_remote_results = (
                 self._aggregator_actor_manager.fetch_ready_async_reqs(
                     timeout_seconds=0.0,
@@ -630,6 +634,7 @@ class IMPALA(Algorithm):
             ma_batches_refs = []
             for call_result in ma_batches_refs_remote_results:
                 ma_batches_refs.append((call_result.actor_id, call_result.get()))
+            print("ma_batches_refs", len(ma_batches_refs))
 
             while data_packages_for_aggregators:
 
@@ -651,6 +656,7 @@ class IMPALA(Algorithm):
             data_packages_for_learner_group = self._pre_queue_batch_refs(
                 ma_batches_refs
             )
+            print("num_data_packages_for_learner_group", len(data_packages_for_learner_group))
 
         else:
             data_packages_for_learner_group = self._pre_queue_episode_refs(
@@ -661,10 +667,10 @@ class IMPALA(Algorithm):
 
         # Call the LearnerGroup's `update_from_episodes` method.
         with self.metrics.log_time((TIMERS, LEARNER_UPDATE_TIMER)):
-            self.metrics.log_value(
-                key=MEAN_NUM_LEARNER_GROUP_UPDATE_CALLED,
-                value=len(data_packages_for_learner_group),
-            )
+            #self.metrics.log_value(
+            #    key=MEAN_NUM_LEARNER_GROUP_UPDATE_CALLED,
+            #    value=len(data_packages_for_learner_group),
+            #)
             rl_module_state = None
             num_learner_group_results_received = 0
 
@@ -686,6 +692,7 @@ class IMPALA(Algorithm):
                     ),
                 }
                 if self.config.num_aggregator_actors_per_learner > 0:
+                    assert len(batch_ref_or_episode_list_ref) == (self.config.num_learners or 1)
                     learner_results = self.learner_group.update_from_batch(
                         batch=batch_ref_or_episode_list_ref,
                         async_update=do_async_updates,
@@ -696,6 +703,7 @@ class IMPALA(Algorithm):
                         shuffle_batch_per_epoch=self.config.shuffle_batch_per_epoch,
                     )
                 else:
+                    assert False
                     learner_results = self.learner_group.update_from_episodes(
                         episodes=batch_ref_or_episode_list_ref,
                         async_update=do_async_updates,
