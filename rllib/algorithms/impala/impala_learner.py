@@ -107,7 +107,7 @@ class IMPALALearner(Learner):
         if isinstance(self._learner_thread_in_queue, CircularBuffer):
             # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
             #  figured out GPU pre-loading.
-            ma_batch_on_gpu = batch.to_device(self._device)#, pin_memory=True)
+            ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
 
             t3 = time.perf_counter()
             print(f"DELTA batch.to_device = {t3 - t2}")
@@ -124,6 +124,7 @@ class IMPALALearner(Learner):
             #)
         # Enqueue to Learner thread's in-queue.
         else:
+            assert False
             _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
         #TEST: remove when we re-add learner thread.
@@ -137,7 +138,7 @@ class IMPALALearner(Learner):
         ret = self.metrics.reduce()
 
         t5 = time.perf_counter()
-        print(f"FINAL DELTA time for Learner.update = {t5 - t0}")
+        print(f"DELTA metrics.reduce() = {t5 - t4}")
         return ret
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended

@@ -257,12 +257,6 @@ def convert_to_torch_tensor(
             # Torch has no representation for `None`, so we return None
             return item
 
-        # Special handling of "Repeated" values.
-        if isinstance(item, RepeatedValues):
-            return RepeatedValues(
-                tree.map_structure(mapping, item.values), item.lengths, item.max_len
-            )
-
         # Already torch tensor -> make sure it's on right device.
         if torch.is_tensor(item):
             tensor = item
@@ -292,7 +286,7 @@ def convert_to_torch_tensor(
         if pin_memory and torch.cuda.is_available():
             tensor.pin_memory()
 
-        return tensor if device is None else tensor.to(device)
+        return tensor if device is None else tensor.to(device, non_blocking=True)
 
     return tree.map_structure(mapping, x)
 
