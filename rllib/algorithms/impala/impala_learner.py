@@ -70,12 +70,12 @@ class IMPALALearner(Learner):
             self._learner_thread_in_queue = deque(maxlen=self.config.learner_queue_size)
 
         # Create and start the Learner thread.
-        #self._learner_thread = _LearnerThread(
-        #    update_method=self._update_from_batch_or_episodes,
-        #    in_queue=self._learner_thread_in_queue,
-        #    metrics_logger=self.metrics,
-        #)
-        #self._learner_thread.start()
+        self._learner_thread = _LearnerThread(
+            update_method=self._update_from_batch_or_episodes,
+            in_queue=self._learner_thread_in_queue,
+            metrics_logger=self.metrics,
+        )
+        self._learner_thread.start()
 
     @override(Learner)
     def update_from_batch(
@@ -85,6 +85,8 @@ class IMPALALearner(Learner):
         timesteps: Dict[str, Any],
         **kwargs,
     ) -> ResultDict:
+        import time
+        t0 = time.perf_counter()
         global _CURRENT_GLOBAL_TIMESTEPS
         _CURRENT_GLOBAL_TIMESTEPS = timesteps or {}
 
@@ -93,36 +95,37 @@ class IMPALALearner(Learner):
         else:
             assert False
 
-        #with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
-        self.before_gradient_based_update(timesteps=timesteps or {})
+        with self.metrics.log_time((ALL_MODULES, "before_gradient_based_update_timer")):
+            self.before_gradient_based_update(timesteps=timesteps or {})
 
-        #with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
-        if isinstance(self._learner_thread_in_queue, CircularBuffer):
-            # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
-            #  figured out GPU pre-loading.
-            ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
+        with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
+            if isinstance(self._learner_thread_in_queue, CircularBuffer):
+                # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
+                #  figured out GPU pre-loading.
+                ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
 
-            #ts_dropped = self._learner_thread_in_queue.add(batch_on_gpu)
+                ts_dropped = self._learner_thread_in_queue.add(ma_batch_on_gpu)
 
-            #self.metrics.log_value(
-            #    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
-            #    ts_dropped,
-            #    reduce="sum",
-            #)
-        # Enqueue to Learner thread's in-queue.
-        else:
-            _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
+                self.metrics.log_value(
+                    (ALL_MODULES, LEARNER_THREAD_ENV_STEPS_DROPPED),
+                    ts_dropped,
+                    reduce="sum",
+                )
+            # Enqueue to Learner thread's in-queue.
+            else:
+                _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
         #TEST: remove when we re-add learner thread.
         #self._log_steps_trained_metrics(batch)
-        self._update_from_batch_or_episodes(
-            batch=ma_batch_on_gpu,
-            timesteps=_CURRENT_GLOBAL_TIMESTEPS,
-        )
+        #self._update_from_batch_or_episodes(
+        #    batch=ma_batch_on_gpu,
+        #    timesteps=_CURRENT_GLOBAL_TIMESTEPS,
+        #)
 
         #with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
         ret = self.metrics.reduce()
 
+        print(f"DELTA time for Learner.update = {time.perf_counter() - t0}")
         return ret
 
     @OverrideToImplementCustomLogic_CallToSuperRecommended
@@ -134,11 +137,11 @@ class IMPALALearner(Learner):
             new_entropy_coeff = self.entropy_coeff_schedulers_per_module[
                 module_id
             ].update(timestep=timesteps.get(NUM_ENV_STEPS_SAMPLED_LIFETIME, 0))
-            #self.metrics.log_value(
-            #    (module_id, LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY),
-            #    new_entropy_coeff,
-            #    window=1,
-            #)
+            self.metrics.log_value(
+                (module_id, LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY),
+                new_entropy_coeff,
+                window=1,
+            )
 
     @override(Learner)
     def remove_module(self, module_id: str):
