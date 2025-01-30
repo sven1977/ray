@@ -27,6 +27,7 @@ from ray.rllib.policy.sample_batch import concat_samples
 from ray.rllib.utils.annotations import OldAPIStack, override
 from ray.rllib.utils.deprecation import DEPRECATED_VALUE, deprecation_warning
 from ray.rllib.utils.metrics import (
+    AGGREGATOR_ACTOR_RESULTS,
     ALL_MODULES,
     ENV_RUNNER_RESULTS,
     LEARNER_GROUP,
@@ -609,7 +610,10 @@ class IMPALA(Algorithm):
             )
 
             # Log the average number of sample results (list of episodes) received.
-            self.metrics.log_value(MEAN_NUM_EPISODE_LISTS_RECEIVED, len(episode_refs))
+            self.metrics.log_value(
+                (ENV_RUNNER_RESULTS, MEAN_NUM_EPISODE_LISTS_RECEIVED),
+                len(episode_refs),
+            )
 
         time.sleep(0.01)
 
@@ -620,9 +624,10 @@ class IMPALA(Algorithm):
             data_packages_for_aggregators = self._pre_queue_episode_refs(
                 episode_refs, package_size=self.config.train_batch_size_per_learner
             )
-            # TEST
-            print("num_data_packages_for_aggregators", len(data_packages_for_aggregators))
-            # END: TEST
+            self.metrics.log_value(
+                (AGGREGATOR_ACTOR_RESULTS, "mean_num_input_packages"),
+                len(episode_refs),
+            )
 
             ma_batches_refs_remote_results = (
                 self._aggregator_actor_manager.fetch_ready_async_reqs(
@@ -634,7 +639,10 @@ class IMPALA(Algorithm):
             ma_batches_refs = []
             for call_result in ma_batches_refs_remote_results:
                 ma_batches_refs.append((call_result.actor_id, call_result.get()))
-            print("ma_batches_refs", len(ma_batches_refs))
+            self.metrics.log_value(
+                (AGGREGATOR_ACTOR_RESULTS, "mean_num_output_batches"),
+                len(ma_batches_refs),
+            )
 
             while data_packages_for_aggregators:
 
@@ -651,11 +659,10 @@ class IMPALA(Algorithm):
                 sent = self._aggregator_actor_manager.foreach_actor_async(
                     func=[functools.partial(_func, p=p) for p in packs],
                     tag="batches",
-                    _print=True,
+                    #_print=True,
                 )
-                print(".. num dropped aggegator actor remote calls", len(packs) - sent)
                 self.metrics.log_value(
-                    "aggregator_actors_set_env_steps_dropped_lifetime",
+                    (AGGREGATOR_ACTOR_RESULTS, "env_steps_dropped_lifetime"),
                     self.config.train_batch_size_per_learner * (len(packs) - sent),
                     reduce="sum",
                 )
@@ -665,9 +672,8 @@ class IMPALA(Algorithm):
             data_packages_for_learner_group = self._pre_queue_batch_refs(
                 ma_batches_refs
             )
-            print("num_data_packages_for_learner_group", len(data_packages_for_learner_group))
             self.metrics.log_value(
-                "aggregator_actors_env_steps_processed_lifetime",
+                (AGGREGATOR_ACTOR_RESULTS, "env_steps_aggregated_lifetime"),
                 self.config.train_batch_size_per_learner * len(data_packages_for_learner_group),
                 reduce="sum",
             )
