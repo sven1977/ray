@@ -472,6 +472,7 @@ class FaultTolerantActorManager:
         *,
         healthy_only: bool = True,
         remote_actor_ids: List[int] = None,
+        _print=False,
     ) -> int:
         """Calls given functions against each actors without waiting for results.
 
@@ -516,6 +517,8 @@ class FaultTolerantActorManager:
             ]
             # Update our round-robin pointer.
             self._current_actor_id += len(func) % self.num_actors()
+            if _print:
+                print("remote_actor_ids", remote_actor_ids, "current_actor_id", self._current_actor_id)
 
         if healthy_only:
             func, remote_actor_ids = self._filter_func_and_remote_actor_id_by_state(

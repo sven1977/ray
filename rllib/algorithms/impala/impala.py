@@ -644,13 +644,16 @@ class IMPALA(Algorithm):
                 num_agg = self.config.num_aggregator_actors_per_learner * (
                     self.config.num_learners or 1
                 )
-                packs = data_packages_for_aggregators[:num_agg]
+                packs, data_packages_for_aggregators = (
+                    data_packages_for_aggregators[:num_agg],
+                    data_packages_for_aggregators[num_agg:],
+                )
                 sent = self._aggregator_actor_manager.foreach_actor_async(
                     func=[functools.partial(_func, p=p) for p in packs],
                     tag="batches",
+                    _print=True,
                 )
                 print(".. num dropped aggegator actor remote calls", num_agg - sent)
-                data_packages_for_aggregators = data_packages_for_aggregators[num_agg:]
 
             # Get n lists of m ObjRef[MABatch] (m=num_learners) to perform n calls to
             # all learner workers with the already GPU-located batches.
