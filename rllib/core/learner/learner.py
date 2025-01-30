@@ -1354,8 +1354,6 @@ class Learner(Checkpointable):
         # actual batch/episodes objects).
         if isinstance(batch, ray.ObjectRef):
             batch = ray.get(batch)
-        else:
-            assert False
 
         if isinstance(episodes, ray.ObjectRef):
             assert False

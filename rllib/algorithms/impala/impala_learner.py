@@ -122,7 +122,7 @@ class IMPALALearner(Learner):
             else:
                 _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
-        with self.metrics.log_time((ALL_MODULES, "batch_to_gpu_and_enqueue_timer")):
+        with self.metrics.log_time((ALL_MODULES, "metrics_reduce_timer")):
             ret = self.metrics.reduce()
 
         return ret
@@ -187,10 +187,11 @@ class _LearnerThread(threading.Thread):
             if isinstance(self._in_queue, CircularBuffer):
                 ma_batch_on_gpu = self._in_queue.sample()
             else:
+                assert False
                 # Queue is empty: Sleep a tiny bit to avoid CPU-thrashing.
-                if not self._in_queue:
+                while not self._in_queue:
                     time.sleep(0.001)
-                    return
+                    #return
                 # Consume from the left (oldest batches first).
                 # If we consumed from the right, we would run into the danger of
                 # learning from newer batches (left side) most times, BUT sometimes
