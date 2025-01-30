@@ -111,7 +111,6 @@ class IMPALALearner(Learner):
             #)
         # Enqueue to Learner thread's in-queue.
         else:
-            assert False
             _LearnerThread.enqueue(self._learner_thread_in_queue, batch, self.metrics)
 
         #TEST: remove when we re-add learner thread.
