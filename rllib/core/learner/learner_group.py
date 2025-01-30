@@ -442,6 +442,8 @@ class LearnerGroup(Checkpointable):
         # equal if multi-agent AND episodes) and send each Learner worker one of these
         # shards.
         else:
+            print(f"----- Inside LearnerGroup._update return_state={return_state} -----")
+
             # MultiAgentBatch: Shard into equal pieces.
             # TODO (sven): The sharder used here destroys - for multi-agent only -
             #  the relationship of the different agents' timesteps to each other.
@@ -552,6 +554,7 @@ class LearnerGroup(Checkpointable):
             if async_update:
                 # Retrieve all ready results (kicked off by prior calls to this method).
                 tags_to_get = []
+                print(f"update_request_tags={self._update_request_tags}")
                 for tag in self._update_request_tags.keys():
                     result = self._worker_manager.fetch_ready_async_reqs(
                         tags=[str(tag)], timeout_seconds=0.0
@@ -614,6 +617,7 @@ class LearnerGroup(Checkpointable):
                 results = self._get_async_results(tags_to_get)
 
             else:
+                assert False
                 results = self._get_results(
                     self._worker_manager.foreach_actor(partials)
                 )
