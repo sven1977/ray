@@ -107,7 +107,7 @@ class IMPALALearner(Learner):
         if isinstance(self._learner_thread_in_queue, CircularBuffer):
             # TODO (sven): Move GPU-loading back to aggregator actors once Ray has
             #  figured out GPU pre-loading.
-            ma_batch_on_gpu = batch.to_device(self._device, pin_memory=True)
+            ma_batch_on_gpu = batch.to_device(self._device)#, pin_memory=True)
 
             t3 = time.perf_counter()
             print(f"DELTA batch.to_device = {t3 - t2}")
