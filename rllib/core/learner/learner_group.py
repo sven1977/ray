@@ -555,17 +555,20 @@ class LearnerGroup(Checkpointable):
                 # Retrieve all ready results (kicked off by prior calls to this method).
                 tags_to_get = []
                 print(f"update_request_tags={self._update_request_tags}")
-                for tag in self._update_request_tags.keys():
+                for tag, count in self._update_request_tags.items():
+                    print(f".. tag {tag} count={count}", end="")
                     result = self._worker_manager.fetch_ready_async_reqs(
                         tags=[str(tag)], timeout_seconds=0.0
                     )
                     if tag not in self._update_request_results:
                         self._update_request_results[tag] = result
+                        print(f"(new results; num={len(self._update_request_results[tag].result_or_errors)}) ", end="")
                     else:
                         for r in result:
                             self._update_request_results[tag].add_result(
                                 r.actor_id, r.result_or_error, tag
                             )
+                        print(f"(existing results; num={len(self._update_request_results[tag].result_or_errors)}) ", end="")
 
                     # Still not done with this `tag` -> skip out early.
                     if (
@@ -573,7 +576,9 @@ class LearnerGroup(Checkpointable):
                         > len(self._update_request_results[tag].result_or_errors)
                         > 0
                     ):
+                        print(f"(not complete -> break)")
                         break
+                    print(f"(complete -> next tag)")
                     tags_to_get.append(tag)
 
                 # Send out new request(s), if there is still capacity on the actors
@@ -587,7 +592,7 @@ class LearnerGroup(Checkpointable):
                 )
                 if num_sent_requests:
                     self._update_request_tags[update_tag] = num_sent_requests
-                print(f"In LearnerGroup: num_sent_requests={num_sent_requests} tag={update_tag}")
+                print(f"update_tag={update_tag} -> set to num_sent_requests={num_sent_requests}")
 
                 # Some requests were dropped, record lost ts/data.
                 if num_sent_requests != len(self._workers):
