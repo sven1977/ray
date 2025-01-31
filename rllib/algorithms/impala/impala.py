@@ -662,7 +662,7 @@ class IMPALA(Algorithm):
                     #_print=True,
                 )
                 self.metrics.log_value(
-                    (AGGREGATOR_ACTOR_RESULTS, "env_steps_dropped_lifetime"),
+                    (AGGREGATOR_ACTOR_RESULTS, "num_env_steps_dropped_lifetime"),
                     self.config.train_batch_size_per_learner * (len(packs) - sent),
                     reduce="sum",
                 )
@@ -673,7 +673,7 @@ class IMPALA(Algorithm):
                 ma_batches_refs
             )
             self.metrics.log_value(
-                (AGGREGATOR_ACTOR_RESULTS, "env_steps_aggregated_lifetime"),
+                (AGGREGATOR_ACTOR_RESULTS, "num_env_steps_aggregated_lifetime"),
                 self.config.train_batch_size_per_learner * len(data_packages_for_learner_group),
                 reduce="sum",
             )
@@ -716,7 +716,7 @@ class IMPALA(Algorithm):
                     learner_results = self.learner_group.update_from_batch(
                         batch=batch_ref_or_episode_list_ref,
                         async_update=do_async_updates,
-                        return_state=return_state,
+                        return_state=False,#return_state,
                         timesteps=timesteps,
                         num_epochs=self.config.num_epochs,
                         minibatch_size=self.config.minibatch_size,
