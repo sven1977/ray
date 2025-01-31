@@ -192,7 +192,7 @@ class LearnerGroup(Checkpointable):
     def get_stats(self) -> Dict[str, Any]:
         """Returns the current stats for the input queue for this learner group."""
         return {
-            "learner_group_ts_dropped": self._ts_dropped,
+            "learner_group_ts_dropped_lifetime": self._ts_dropped,
             "actor_manager_num_outstanding_async_reqs": (
                 0
                 if self.is_local
