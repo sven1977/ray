@@ -88,40 +88,40 @@ class APPOLearner(IMPALALearner):
 
         # TODO (sven): Maybe we should have a `after_gradient_based_update`
         #  method per module?
-        curr_timestep = timesteps.get(NUM_ENV_STEPS_TRAINED_LIFETIME, 0)
-        for module_id, module in self.module._rl_modules.items():
-            config = self.config.get_config_for_module(module_id)
+        #curr_timestep = timesteps.get(NUM_ENV_STEPS_TRAINED_LIFETIME, 0)
+        #for module_id, module in self.module._rl_modules.items():
+        #    config = self.config.get_config_for_module(module_id)
 
-            last_update_ts_key = (module_id, LAST_TARGET_UPDATE_TS)
-            if isinstance(module.unwrapped(), TargetNetworkAPI) and (
-                curr_timestep - self.metrics.peek(last_update_ts_key, default=0)
-                >= (
-                    config.target_network_update_freq
-                    * config.circular_buffer_num_batches
-                    * config.circular_buffer_iterations_per_batch
-                    * config.train_batch_size_per_learner
-                )
-            ):
-                for (
-                    main_net,
-                    target_net,
-                ) in module.unwrapped().get_target_network_pairs():
-                    update_target_network(
-                        main_net=main_net,
-                        target_net=target_net,
-                        tau=config.tau,
-                    )
-                # Increase lifetime target network update counter by one.
-                self.metrics.log_value((module_id, NUM_TARGET_UPDATES), 1, reduce="sum")
-                # Update the (single-value -> window=1) last updated timestep metric.
-                self.metrics.log_value(last_update_ts_key, curr_timestep, window=1)
+        #    last_update_ts_key = (module_id, LAST_TARGET_UPDATE_TS)
+        #    if isinstance(module.unwrapped(), TargetNetworkAPI) and (
+        #        curr_timestep - self.metrics.peek(last_update_ts_key, default=0)
+        #        >= (
+        #            config.target_network_update_freq
+        #            * config.circular_buffer_num_batches
+        #            * config.circular_buffer_iterations_per_batch
+        #            * config.train_batch_size_per_learner
+        #        )
+        #    ):
+        #        for (
+        #            main_net,
+        #            target_net,
+        #        ) in module.unwrapped().get_target_network_pairs():
+        #            update_target_network(
+        #                main_net=main_net,
+        #                target_net=target_net,
+        #                tau=config.tau,
+        #            )
+        #        # Increase lifetime target network update counter by one.
+        #        self.metrics.log_value((module_id, NUM_TARGET_UPDATES), 1, reduce="sum")
+        #        # Update the (single-value -> window=1) last updated timestep metric.
+        #       self.metrics.log_value(last_update_ts_key, curr_timestep, window=1)
 
-            if (
-                config.use_kl_loss
-                and self.metrics.peek((module_id, NUM_MODULE_STEPS_TRAINED), default=0)
-                > 0
-            ):
-                self._update_module_kl_coeff(module_id=module_id, config=config)
+        #    if (
+        #        config.use_kl_loss
+        #        and self.metrics.peek((module_id, NUM_MODULE_STEPS_TRAINED), default=0)
+        #        > 0
+        #    ):
+        #        self._update_module_kl_coeff(module_id=module_id, config=config)
 
     @classmethod
     @override(Learner)
