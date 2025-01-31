@@ -139,8 +139,8 @@ class LearnerGroup(Checkpointable):
             #  https://github.com/ray-project/ray/issues/35409 for more details.
             num_cpus_per_learner = (
                 self.config.num_cpus_per_learner
-                if not self.config.num_gpus_per_learner
-                else 0
+                #if not self.config.num_gpus_per_learner
+                #else 0
             )
             num_gpus_per_learner = max(
                 0,

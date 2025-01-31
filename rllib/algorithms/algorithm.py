@@ -209,7 +209,7 @@ except ImportError:
                 {
                     "CPU": _num
                     * (
-                        (cf.num_cpus_per_learner if cf.num_gpus_per_learner == 0 else 0)
+                        cf.num_cpus_per_learner  # if cf.num_gpus_per_learner == 0 else 0)
                         + cf.num_aggregator_actors_per_learner
                     ),
                     "GPU": _num * max(0, cf.num_gpus_per_learner),
