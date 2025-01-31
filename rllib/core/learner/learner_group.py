@@ -133,15 +133,7 @@ class LearnerGroup(Checkpointable):
         else:
             backend_config = _get_backend_config(learner_class)
 
-            # TODO (sven): Can't set both `num_cpus_per_learner`>1 and
-            #  `num_gpus_per_learner`>0! Users must set one or the other due
-            #  to issues with placement group fragmentation. See
-            #  https://github.com/ray-project/ray/issues/35409 for more details.
-            num_cpus_per_learner = (
-                self.config.num_cpus_per_learner
-                #if not self.config.num_gpus_per_learner
-                #else 0
-            )
+            num_cpus_per_learner = self.config.num_cpus_per_learner
             num_gpus_per_learner = max(
                 0,
                 self.config.num_gpus_per_learner
@@ -183,9 +175,9 @@ class LearnerGroup(Checkpointable):
             # Counters for the tags for asynchronous update requests that are
             # in-flight. Used for keeping trakc of and grouping together the results of
             # requests that were sent to the workers at the same time.
-            self._update_request_tags = Counter()
-            self._update_request_tag = 0
-            self._update_request_results = {}
+            #self._update_request_tags = Counter()
+            #self._update_request_tag = 0
+            #self._update_request_results = {}
 
     # TODO (sven): Replace this with call to `self.metrics.peek()`?
     #  Currently LearnerGroup does not have a metrics object.
@@ -553,46 +545,47 @@ class LearnerGroup(Checkpointable):
 
             if async_update:
                 # Retrieve all ready results (kicked off by prior calls to this method).
-                tags_to_get = []
+                #tags_to_get = []
                 #print(f"update_request_tags={self._update_request_tags}")
-                for tag, count in self._update_request_tags.items():
-                    #print(f".. tag {tag} outstanding={count} ", end="")
-                    result = self._worker_manager.fetch_ready_async_reqs(
-                        tags=[str(tag)], timeout_seconds=0.0
-                    )
-                    if tag not in self._update_request_results:
-                        self._update_request_results[tag] = result
-                        #print(f"(new results; received={len(self._update_request_results[tag].result_or_errors)}) ", end="")
-                    else:
-                        for r in result:
-                            self._update_request_results[tag].add_result(
-                                r.actor_id, r.result_or_error, tag
-                            )
+                #for tag, count in self._update_request_tags.items():
+                #    #print(f".. tag {tag} outstanding={count} ", end="")
+                results = self._worker_manager.fetch_ready_async_reqs(
+                    #tags=[str(tag)],
+                    timeout_seconds=0.0
+                )
+                    #if tag not in self._update_request_results:
+                    #    self._update_request_results[tag] = result
+                    #    #print(f"(new results; received={len(self._update_request_results[tag].result_or_errors)}) ", end="")
+                    #else:
+                    #    for r in result:
+                    #        self._update_request_results[tag].add_result(
+                    #            r.actor_id, r.result_or_error, tag
+                    #        )
                         #print(f"(existing results; received={len(self._update_request_results[tag].result_or_errors)}) ", end="")
 
-                    # Still not done with this `tag` -> skip out early.
-                    if (
-                        self._update_request_tags[tag]
-                        > len(self._update_request_results[tag].result_or_errors)
-                        > 0
-                    ):
-                        #print(f"(some received AND some missing -> break)")
-                        break
-                    #print(f"(none received OR complete -> next tag)")
-                    tags_to_get.append(tag)
+                    ## Still not done with this `tag` -> skip out early.
+                    #if (
+                    #    self._update_request_tags[tag]
+                    #    > len(self._update_request_results[tag].result_or_errors)
+                    #    > 0
+                    #):
+                    #    #print(f"(some received AND some missing -> break)")
+                    #    break
+                    ##print(f"(none received OR complete -> next tag)")
+                    #tags_to_get.append(tag)
 
                 # Send out new request(s), if there is still capacity on the actors
                 # (each actor is allowed only some number of max in-flight requests
                 # at the same time).
-                update_tag = self._update_request_tag
-                assert update_tag not in self._update_request_tags
-                self._update_request_tag += 1
+                #update_tag = self._update_request_tag
+                #assert update_tag not in self._update_request_tags
+                #self._update_request_tag += 1
                 num_sent_requests = self._worker_manager.foreach_actor_async(
-                    partials, tag=str(update_tag)#, _print=True
+                    partials, #tag=str(update_tag)#, _print=True
                 )
-                if num_sent_requests:
-                    self._update_request_tags[update_tag] = num_sent_requests
-                    #print(f"update_tag={update_tag} -> set to num_sent_requests={num_sent_requests}")
+                #if num_sent_requests:
+                #    self._update_request_tags[update_tag] = num_sent_requests
+                #    #print(f"update_tag={update_tag} -> set to num_sent_requests={num_sent_requests}")
 
                 # Some requests were dropped, record lost ts/data.
                 if num_sent_requests != len(self._workers):
@@ -622,7 +615,7 @@ class LearnerGroup(Checkpointable):
                 # a list of lists where each inner list should be the length of the
                 # number of learner workers, if results from an non-blocking update are
                 # ready.
-                results = self._get_async_results(tags_to_get)
+                results = self._get_async_results(results)
 
             else:
                 assert False
@@ -643,7 +636,7 @@ class LearnerGroup(Checkpointable):
                 raise result_or_error
         return processed_results
 
-    def _get_async_results(self, tags_to_get):
+    def _get_async_results(self, results):
         """Get results from the worker manager and group them by tag.
 
         Returns:
@@ -651,32 +644,33 @@ class LearnerGroup(Checkpointable):
             for same tags.
 
         """
-        unprocessed_results = defaultdict(list)
-        for tag in tags_to_get:
-            results = self._update_request_results[tag]
-            for result in results:
-                result_or_error = result.get()
-                if result.ok:
-                    if result.tag is None:
-                        raise RuntimeError(
-                            "Cannot call `LearnerGroup._get_async_results()` on "
-                            "untagged async requests!"
-                        )
-                    tag = int(result.tag)
-                    unprocessed_results[tag].append(result_or_error)
+        ret = []
+        #unprocessed_results = defaultdict(list)
+        #for tag in tags_to_get:
+            #results = self._update_request_results[tag]
+        for result in results:
+            result_or_error = result.get()
+            if result.ok:
+                #if result.tag is None:
+                #    raise RuntimeError(
+                #        "Cannot call `LearnerGroup._get_async_results()` on "
+                #        "untagged async requests!"
+                #    )
+                #tag = int(result.tag)
+                #unprocessed_results[tag].append(result_or_error)
+                ret.append(result_or_error)
+                #if tag in self._update_request_tags:
+                #    self._update_request_tags[tag] -= 1
+                #    if self._update_request_tags[tag] == 0:
+                #        del self._update_request_tags[tag]
+                #        del self._update_request_results[tag]
+                #else:
+                #    assert False
 
-                    if tag in self._update_request_tags:
-                        self._update_request_tags[tag] -= 1
-                        if self._update_request_tags[tag] == 0:
-                            del self._update_request_tags[tag]
-                            del self._update_request_results[tag]
-                    else:
-                        assert False
-
-                else:
-                    raise result_or_error
-
-        return list(unprocessed_results.values())
+            else:
+                raise result_or_error
+        return ret
+        #return list(unprocessed_results.values())
 
     def add_module(
         self,

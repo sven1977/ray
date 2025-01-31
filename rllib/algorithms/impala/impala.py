@@ -692,7 +692,7 @@ class IMPALA(Algorithm):
                 value=len(data_packages_for_learner_group),
             )
             rl_module_state = None
-            num_learner_group_results_received = 0
+            #num_learner_group_results_received = 0
 
             for batch_ref_or_episode_list_ref in data_packages_for_learner_group:
                 return_state = (
@@ -743,22 +743,22 @@ class IMPALA(Algorithm):
                 if not do_async_updates:
                     learner_results = [learner_results]
 
-                for results_from_n_learners in learner_results:
-                    if not results_from_n_learners[0]:
-                        continue
-                    num_learner_group_results_received += 1
-                    for r in results_from_n_learners:
-                        rl_module_state = r.pop(
-                            "_rl_module_state_after_update", rl_module_state
-                        )
-                    self.metrics.merge_and_log_n_dicts(
-                        stats_dicts=results_from_n_learners,
-                        key=LEARNER_RESULTS,
+                for result_from_1_learner in learner_results:
+                    #if not results_from_n_learners[0]:
+                    #    continue
+                    #num_learner_group_results_received += 1
+                    #for r in results_from_n_learners:
+                    rl_module_state = result_from_1_learner.pop(
+                        "_rl_module_state_after_update", rl_module_state
                     )
-            self.metrics.log_value(
-                key=MEAN_NUM_LEARNER_GROUP_RESULTS_RECEIVED,
-                value=num_learner_group_results_received,
-            )
+                self.metrics.merge_and_log_n_dicts(
+                    stats_dicts=learner_results,
+                    key=LEARNER_RESULTS,
+                )
+            #self.metrics.log_value(
+            #    key=MEAN_NUM_LEARNER_GROUP_RESULTS_RECEIVED,
+            #    value=num_learner_group_results_received,
+            #)
 
         # Update LearnerGroup's own stats.
         self.metrics.log_dict(self.learner_group.get_stats(), key=LEARNER_GROUP)
@@ -925,7 +925,7 @@ class IMPALA(Algorithm):
                 {
                     "CPU": max(
                         cf.num_cpus_for_main_process,
-                        cf.num_cpus_per_learner if cf.num_gpus_per_learner == 0 else 0,
+                        cf.num_cpus_per_learner,
                     ),
                     "GPU": max(
                         0,
