@@ -4,11 +4,14 @@ import threading
 import time
 from typing import Any, Dict, Union
 
+import tree  # pip install dm_tree
+
 import ray
 from ray.rllib.algorithms.appo.utils import CircularBuffer
 from ray.rllib.algorithms.impala.impala import LEARNER_RESULTS_CURR_ENTROPY_COEFF_KEY
 from ray.rllib.core.learner.learner import Learner
 from ray.rllib.core.rl_module.apis import ValueFunctionAPI
+from ray.rllib.policy.sample_batch import MultiAgentBatch, SampleBatch
 from ray.rllib.utils.annotations import (
     override,
     OverrideToImplementCustomLogic_CallToSuperRecommended,
@@ -142,6 +145,58 @@ class IMPALALearner(Learner):
             return self.metrics.reduce()
         return {}
 
+    @override(Learner)
+    def update_from_episodes(
+        self,
+        episodes: Any,
+        *,
+        timesteps: Dict[str, Any],
+        **kwargs,
+    ) -> ResultDict:
+        global _CURRENT_GLOBAL_TIMESTEPS
+        _CURRENT_GLOBAL_TIMESTEPS = timesteps or {}
+
+        if isinstance(episodes, list) and isinstance(episodes[0], ray.ObjectRef):
+            try:
+                episodes = tree.flatten(ray.get(episodes))
+            except ray.exceptions.OwnerDiedError:
+                episode_refs = episodes
+                episodes = []
+                for ref in episode_refs:
+                    try:
+                        episodes.extend(ray.get(ref))
+                    except ray.exceptions.OwnerDiedError:
+                        pass
+
+        # Call the learner connector pipeline.
+        shared_data = {}
+        batch = self._learner_connector(
+            rl_module=self.module,
+            batch={},
+            episodes=episodes,
+            shared_data=shared_data,
+            metrics=self.metrics,
+        )
+        # Convert to a batch.
+        # TODO (sven): Try to not require MultiAgentBatch anymore.
+        batch = MultiAgentBatch(
+            {
+                module_id: (
+                    SampleBatch(module_data, _zero_padded=True)
+                    if shared_data.get(f"_zero_padded_for_mid={module_id}")
+                    else SampleBatch(module_data)
+                )
+                for module_id, module_data in batch.items()
+            },
+            env_steps=sum(len(e) for e in episodes),
+        )
+
+        return self.update_from_batch(
+            batch=batch,
+            timesteps=timesteps,
+            **kwargs,
+        )
+
     @OverrideToImplementCustomLogic_CallToSuperRecommended
     def before_gradient_based_update(self, *, timesteps: Dict[str, Any]) -> None:
         super().before_gradient_based_update(timesteps=timesteps)
@@ -249,7 +304,7 @@ class _LearnerThread(threading.Thread):
             else:
                 # Queue is empty: Sleep a tiny bit to avoid CPU-thrashing.
                 while not self._in_queue:
-                    time.sleep(0.001)
+                    time.sleep(0.0001)
                 # Consume from the left (oldest batches first).
                 # If we consumed from the right, we would run into the danger of
                 # learning from newer batches (left side) most times, BUT sometimes

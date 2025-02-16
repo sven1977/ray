@@ -580,11 +580,11 @@ class Learner(Checkpointable):
                             # Note, `tf.linalg.global_norm` needs a list of tensors.
                             list(grad_dict_to_clip.values()),
                         )
-                    self.metrics.log_value(
-                        key=(module_id, f"gradients_{optimizer_name}_global_norm"),
-                        value=global_norm,
-                        window=1,
-                    )
+                    #self.metrics.log_value(
+                    #    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
+                    #    value=global_norm,
+                    #    window=1,
+                    #)
                 postprocessed_grads.update(grad_dict_to_clip)
             # In the other case check, if we want to log gradients only.
             elif config.log_gradients:
@@ -593,11 +593,11 @@ class Learner(Checkpointable):
                     # Note, `tf.linalg.global_norm` needs a list of tensors.
                     list(grad_dict_to_clip.values()),
                 )
-                self.metrics.log_value(
-                    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
-                    value=global_norm,
-                    window=1,
-                )
+                #self.metrics.log_value(
+                #    key=(module_id, f"gradients_{optimizer_name}_global_norm"),
+                #    value=global_norm,
+                #    window=1,
+                #)
 
         return postprocessed_grads
 

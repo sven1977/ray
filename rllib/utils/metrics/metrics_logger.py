@@ -1,5 +1,6 @@
 import copy
 import logging
+import threading
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import tree  # pip install dm_tree
@@ -129,6 +130,9 @@ class MetricsLogger:
             Whether `key` could be found in self.stats.
         """
         return self._key_in_stats(key)
+
+    def thread_save(self, thread_save: bool):
+        self._thread_save = thread_save
 
     def peek(
         self,
@@ -966,6 +970,7 @@ class MetricsLogger:
 
     def tensors_to_numpy(self, tensor_metrics):
         """Converts all previously logged and returned tensors back to numpy values."""
+        assert not tensor_metrics, f"TENSORs logged! {tensor_metrics}"
         for key, values in tensor_metrics.items():
             assert self._key_in_stats(key)
             self._get_key(key).set_to_numpy_values(values)

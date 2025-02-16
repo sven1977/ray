@@ -399,7 +399,7 @@ class FaultTolerantActorManager:
     @DeveloperAPI
     def foreach_actor(
         self,
-        func: Union[Callable[[Any], Any], List[Callable[[Any], Any]], str, List[str]],
+        func: Union[Callable[[Any], Any], List[Callable[[Any], Any]]],
         *,
         healthy_only: bool = True,
         remote_actor_ids: Optional[List[int]] = None,
@@ -412,11 +412,8 @@ class FaultTolerantActorManager:
         Automatically marks actors unhealthy if they crash during the remote call.
 
         Args:
-            func: A single Callable applied to all specified remote actors or a list
-                of Callables, that get applied on the list of specified remote actors.
-                In the latter case, both list of Callables and list of specified actors
-                must have the same length. Alternatively, you can use the name of the
-                remote method to be called, instead, or a list of remote method names.
+            func: A single, or a list of Callables, that get applied on the list
+                of specified remote actors.
             healthy_only: If True, applies `func` only to actors currently tagged
                 "healthy", otherwise to all actors. If `healthy_only=False` and
                 `mark_healthy=True`, will send `func` to all actors and mark those
@@ -470,7 +467,7 @@ class FaultTolerantActorManager:
     @DeveloperAPI
     def foreach_actor_async(
         self,
-        func: Union[Callable[[Any], Any], List[Callable[[Any], Any]], str, List[str]],
+        func: Union[Callable[[Any], Any], List[Callable[[Any], Any]]],
         tag: str = None,
         *,
         healthy_only: bool = True,
@@ -482,8 +479,7 @@ class FaultTolerantActorManager:
             func: A single Callable applied to all specified remote actors or a list
                 of Callables, that get applied on the list of specified remote actors.
                 In the latter case, both list of Callables and list of specified actors
-                must have the same length. Alternatively, you can use the name of the
-                remote method to be called, instead, or a list of remote method names.
+                must have the same length.
             tag: A tag to identify the results from this async call.
             healthy_only: If True, applies `func` only to actors currently tagged
                 "healthy", otherwise to all actors. If `healthy_only=False` and
@@ -715,18 +711,15 @@ class FaultTolerantActorManager:
 
     def _call_actors(
         self,
-        func: Union[Callable[[Any], Any], List[Callable[[Any], Any]], str, List[str]],
+        func: Union[Callable[[Any], Any], List[Callable[[Any], Any]]],
         *,
         remote_actor_ids: List[int] = None,
     ) -> List[ray.ObjectRef]:
         """Apply functions on a list of remote actors.
 
         Args:
-            func: A single Callable applied to all specified remote actors or a list
-                of Callables, that get applied on the list of specified remote actors.
-                In the latter case, both list of Callables and list of specified actors
-                must have the same length. Alternatively, you can use the name of the
-                remote method to be called, instead, or a list of remote method names.
+            func: A single, or a list of Callables, that get applied on the list
+                of specified remote actors.
             remote_actor_ids: Apply func on this selected set of remote actors.
 
         Returns:
@@ -740,19 +733,12 @@ class FaultTolerantActorManager:
         if remote_actor_ids is None:
             remote_actor_ids = self.actor_ids()
 
-        calls = []
         if isinstance(func, list):
-            for i, f in zip(remote_actor_ids, func):
-                if isinstance(f, str):
-                    calls.append(getattr(self._actors[i], f).remote())
-                else:
-                    calls.append(self._actors[i].apply.remote(f))
-        elif isinstance(func, str):
-            for i in remote_actor_ids:
-                calls.append(getattr(self._actors[i], func).remote())
+            calls = [
+                self._actors[i].apply.remote(f) for i, f in zip(remote_actor_ids, func)
+            ]
         else:
-            for i in remote_actor_ids:
-                calls.append(self._actors[i].apply.remote(func))
+            calls = [self._actors[i].apply.remote(func) for i in remote_actor_ids]
 
         return calls
 
