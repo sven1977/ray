@@ -651,11 +651,10 @@ class Stats:
         return stats
 
     def _set_values(self, new_values):
-        with self._threading_lock:
-            if not self._inf_window:
-                self.values = deque(new_values, maxlen=self._window)
-            else:
-                self.values = new_values
+        if not self._inf_window:
+            self.values = deque(new_values, maxlen=self._window)
+        else:
+            self.values = new_values
 
     def _reduced_values(self, values=None) -> Tuple[Any, Any]:
         """Runs a non-commited reduction procedure on given values (or `self.values`).
