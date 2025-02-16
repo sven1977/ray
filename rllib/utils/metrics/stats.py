@@ -233,6 +233,12 @@ class Stats:
             assert self._inf_window
             self._throughput_last_time = -1
 
+        self._thread_save = thread_save
+        if thread_save:
+            self._threading_lock = threading.RLock()
+        else:
+            self._threading_lock = _DummyRLock()
+
         # The actual data in this Stats object.
         self.values = None
         self._set_values(force_list(init_value))
@@ -244,7 +250,8 @@ class Stats:
             value: The value item to be appended to the internal values list
                 (`self.values`).
         """
-        self.values.append(value)
+        with self._threading_lock:
+            self.values.append(value)
 
     def __enter__(self) -> "Stats":
         """Called when entering a context (with which users can measure a time delta).
@@ -288,13 +295,14 @@ class Stats:
             The result of reducing the internal values list (or the previously computed
             reduced result, if `previous` is True).
         """
-        # Return previously reduced value.
-        if previous is not None:
-            return self._hist[-abs(previous)]
-        # Return the last measured throughput.
-        elif throughput:
-            return self._throughput if self._throughput is not False else None
-        return self._reduced_values()[0]
+        with self._threading_lock:
+            # Return previously reduced value.
+            if previous is not None:
+                return self._hist[-abs(previous)]
+            # Return the last measured throughput.
+            elif throughput:
+                return self._throughput if self._throughput is not False else None
+            return self._reduced_values()[0]
 
     def reduce(self) -> "Stats":
         """Reduces the internal values list according to the constructor settings.
@@ -309,39 +317,40 @@ class Stats:
             Returns a new `Stats` object with an empty internal values list, but
             otherwise the same constructor settings (window, reduce, etc..) as `self`.
         """
-        reduced, values = self._reduced_values()
+        with (self._threading_lock):
+            reduced, values = self._reduced_values()
 
-        # Keep track and update underlying throughput metric.
-        if self._throughput is not False:
-            # Take the delta between the new (upcoming) reduced value and the most
-            # recently reduced value (one `reduce()` call ago).
-            delta_sum = reduced - self._hist[-1]
-            time_now = time.perf_counter()
-            # `delta_sum` may be < 0.0 if user overrides a metric through
-            # `.set_value()`.
-            if self._throughput_last_time == -1 or delta_sum < 0.0:
-                self._throughput = np.nan
+            # Keep track and update underlying throughput metric.
+            if self._throughput is not False:
+                # Take the delta between the new (upcoming) reduced value and the most
+                # recently reduced value (one `reduce()` call ago).
+                delta_sum = reduced - self._hist[-1]
+                time_now = time.perf_counter()
+                # `delta_sum` may be < 0.0 if user overrides a metric through
+                # `.set_value()`.
+                if self._throughput_last_time == -1 or delta_sum < 0.0:
+                    self._throughput = np.nan
+                else:
+                    delta_time = time_now - self._throughput_last_time
+                    assert delta_time >= 0.0
+                    self._throughput = delta_sum / delta_time
+                self._throughput_last_time = time_now
+
+            # Reduce everything to a single (init) value.
+            self._set_values(values)
+
+            # Shift historic reduced valued by one in our hist-tuple.
+            self._hist.append(reduced)
+
+            # `clear_on_reduce` -> Return an empty new Stats object with the same
+            # settings as `self`.
+            if self._clear_on_reduce:
+                values = self.values
+                self._set_values([])
+            # No reset required upon `reduce()` -> Return deepcopy of `self`.
             else:
-                delta_time = time_now - self._throughput_last_time
-                assert delta_time >= 0.0
-                self._throughput = delta_sum / delta_time
-            self._throughput_last_time = time_now
-
-        # Reduce everything to a single (init) value.
-        self._set_values(values)
-
-        # Shift historic reduced valued by one in our hist-tuple.
-        self._hist.append(reduced)
-
-        # `clear_on_reduce` -> Return an empty new Stats object with the same settings
-        # settings as `self`.
-        if self._clear_on_reduce:
-            values = self.values
-            self._set_values([])
-        # No reset required upon `reduce()` -> Return deepcopy of `self`.
-        else:
-            values = copy.deepcopy(self.values)
-        return Stats.similar_to(self, init_value=values)
+                values = copy.deepcopy(self.values)
+            return Stats.similar_to(self, init_value=values)
 
     def merge_on_time_axis(self, other: "Stats") -> None:
         # Make sure `others` have same reduction settings.
@@ -349,12 +358,13 @@ class Stats:
         assert self._window == other._window
         assert self._ema_coeff == other._ema_coeff
 
-        # Extend `self`'s values by `other`'s.
-        self.values.extend(other.values)
+        with self._threading_lock:
+            # Extend `self`'s values by `other`'s.
+            self.values.extend(other.values)
 
-        # Adopt `other`'s current throughput estimate (it's the newer one).
-        if self._throughput is not False:
-            self._throughput = other._throughput
+            # Adopt `other`'s current throughput estimate (it's the newer one).
+            if self._throughput is not False:
+                self._throughput = other._throughput
 
     def merge_in_parallel(self, *others: "Stats") -> None:
         """Merges all internal values of `others` into `self`'s internal values list.
@@ -505,33 +515,33 @@ class Stats:
         # Stop as soon as we reach the window size.
         new_values = []
         tmp_values = []
-        # Loop from index=-1 backward to index=start until our new_values list has
-        # at least a len of `win`.
-        for i in range(1, max(map(len, [self, *others])) + 1):
-            # Per index, loop through all involved stats, including `self` and add
-            # to `tmp_values`.
-            for stats in [self, *others]:
-                if len(stats) < i:
-                    continue
-                tmp_values.append(stats.values[-i])
+        with self._threading_lock:
+            # Loop from index=-1 backward to index=start until our new_values list has
+            # at least a len of `win`.
+            for i in range(1, max(map(len, [self, *others])) + 1):
+                # Per index, loop through all involved stats, including `self` and add
+                # to `tmp_values`.
+                for stats in [self, *others]:
+                    if len(stats) < i:
+                        continue
+                    tmp_values.append(stats.values[-i])
 
-            # Now reduce across `tmp_values` based on the reduce-settings of this
-            # Stats.
-            # TODO (sven) : explain why all this
-            if self._ema_coeff is not None:
-                new_values.extend([np.nanmean(tmp_values)] * len(tmp_values))
-            elif self._reduce_method in [None, "sum"]:
-                new_values.extend(tmp_values)
-            else:
-                new_values.extend(
-                    [self._reduced_values(values=tmp_values)[0]]
-                    * len(tmp_values)
-                )
-            tmp_values.clear()
-            if len(new_values) >= win:
-                break
+                # Now reduce across `tmp_values` based on the reduce-settings of this
+                # Stats.
+                # TODO (sven) : explain why all this
+                if self._ema_coeff is not None:
+                    new_values.extend([np.nanmean(tmp_values)] * len(tmp_values))
+                elif self._reduce_method in [None, "sum"]:
+                    new_values.extend(tmp_values)
+                else:
+                    new_values.extend(
+                        [self._reduced_values(values=tmp_values)[0]] * len(tmp_values)
+                    )
+                tmp_values.clear()
+                if len(new_values) >= win:
+                    break
 
-        self._set_values(list(reversed(new_values)))
+            self._set_values(list(reversed(new_values)))
 
     def set_to_numpy_values(self, values) -> None:
         """Converts `self.values` from tensors to actual numpy values.
@@ -540,16 +550,18 @@ class Stats:
             values: The (numpy) values to set `self.values` to.
         """
         numpy_values = convert_to_numpy(values)
-        if self._reduce_method is None:
-            assert isinstance(values, list) and len(self.values) >= len(values)
-            self.values = numpy_values
-        else:
-            assert len(self.values) > 0
-            self.values = [numpy_values]
+        with self._threading_lock:
+            if self._reduce_method is None:
+                assert isinstance(values, list) and len(self.values) >= len(values)
+                self.values = numpy_values
+            else:
+                assert len(self.values) > 0
+                self.values = [numpy_values]
 
     def __len__(self) -> int:
         """Returns the length of the internal values list."""
-        return len(self.values)
+        with self._threading_lock:
+            return len(self.values)
 
     def __repr__(self) -> str:
         win_or_ema = (
@@ -598,14 +610,15 @@ class Stats:
         return f"{float(self):{fmt}}"
 
     def get_state(self) -> Dict[str, Any]:
-        return {
-            "values": convert_to_numpy(self.values),
-            "reduce": self._reduce_method,
-            "window": self._window,
-            "ema_coeff": self._ema_coeff,
-            "clear_on_reduce": self._clear_on_reduce,
-            "_hist": list(self._hist),
-        }
+        with self._threading_lock:
+            return {
+                "values": convert_to_numpy(self.values),
+                "reduce": self._reduce_method,
+                "window": self._window,
+                "ema_coeff": self._ema_coeff,
+                "clear_on_reduce": self._clear_on_reduce,
+                "_hist": list(self._hist),
+            }
 
     @staticmethod
     def from_state(state: Dict[str, Any]) -> "Stats":
@@ -651,10 +664,11 @@ class Stats:
         return stats
 
     def _set_values(self, new_values):
-        if not self._inf_window:
-            self.values = deque(new_values, maxlen=self._window)
-        else:
-            self.values = new_values
+        with self._threading_lock:
+            if not self._inf_window:
+                self.values = deque(new_values, maxlen=self._window)
+            else:
+                self.values = new_values
 
     def _reduced_values(self, values=None) -> Tuple[Any, Any]:
         """Runs a non-commited reduction procedure on given values (or `self.values`).
@@ -748,3 +762,17 @@ class Stats:
             # operation.
             else:
                 return reduced, values
+
+
+class _DummyRLock:
+    def acquire(self, blocking=True, timeout=-1):
+        return True
+
+    def release(self):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
