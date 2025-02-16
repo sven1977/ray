@@ -1,4 +1,5 @@
 from collections import defaultdict, deque
+import copy
 import time
 import threading
 from typing import Any, Callable, Dict, Optional, Tuple, Union
@@ -136,8 +137,8 @@ class Stats:
         window: Optional[Union[int, float]] = None,
         ema_coeff: Optional[float] = None,
         clear_on_reduce: bool = False,
-        on_exit: Optional[Callable] = None,
         throughput: Union[bool, float] = False,
+        thread_save: bool = False,
     ):
         """Initializes a Stats instance.
 
@@ -184,6 +185,7 @@ class Stats:
                 `peeked_val, throughput_per_sec = Stats.peek([key], throughput=True)`.
                 If a float, track throughput and also set current throughput estimate
                 to the given value.
+            thread_save: Whether to make this object thread save.
         """
         # Thus far, we only support mean, max, min, and sum.
         if reduce not in [None, "mean", "min", "max", "sum"]:
@@ -210,11 +212,9 @@ class Stats:
         if reduce == "mean" and window is None and ema_coeff is None:
             ema_coeff = 0.01
 
-        # The actual data in this Stats object.
-        self.values = force_list(init_value)
-
         self._reduce_method = reduce
         self._window = window
+        self._inf_window = self._window in [None, float("inf")]
         self._ema_coeff = ema_coeff
 
         # Timing functionality (keep start times per thread).
@@ -223,9 +223,6 @@ class Stats:
         # Simply store ths flag for the user of this class.
         self._clear_on_reduce = clear_on_reduce
 
-        # Code to execute when exiting a with-context.
-        self._on_exit = on_exit
-
         # On each `.reduce()` call, we store the result of this call in hist[0] and the
         # previous `reduce()` result in hist[1].
         self._hist = deque([0, 0, 0], maxlen=3)
@@ -233,8 +230,12 @@ class Stats:
         self._throughput = throughput if throughput is not True else 0.0
         if self._throughput is not False:
             assert self._reduce_method == "sum"
-            assert self._window in [None, float("inf")]
+            assert self._inf_window
             self._throughput_last_time = -1
+
+        # The actual data in this Stats object.
+        self.values = None
+        self._set_values(force_list(init_value))
 
     def push(self, value) -> None:
         """Appends a new value into the internal values list.
@@ -259,7 +260,6 @@ class Stats:
         # In case another thread already is measuring this Stats (timing), simply ignore
         # the "enter request" and return a clone of `self`.
         thread_id = threading.get_ident()
-        # assert self._start_times[thread_id] is None
         self._start_times[thread_id] = time.perf_counter()
         return self
 
@@ -269,10 +269,6 @@ class Stats:
         assert self._start_times[thread_id] is not None
         time_delta_s = time.perf_counter() - self._start_times[thread_id]
         self.push(time_delta_s)
-
-        # Call the on_exit handler.
-        if self._on_exit:
-            self._on_exit(time_delta_s)
 
         del self._start_times[thread_id]
 
@@ -332,18 +328,20 @@ class Stats:
             self._throughput_last_time = time_now
 
         # Reduce everything to a single (init) value.
-        self.values = values
+        self._set_values(values)
 
         # Shift historic reduced valued by one in our hist-tuple.
         self._hist.append(reduced)
 
         # `clear_on_reduce` -> Return an empty new Stats object with the same settings
-        # as `self`.
+        # settings as `self`.
         if self._clear_on_reduce:
-            return Stats.similar_to(self)
-        # No reset required upon `reduce()` -> Return `self`.
+            values = self.values
+            self._set_values([])
+        # No reset required upon `reduce()` -> Return deepcopy of `self`.
         else:
-            return self
+            values = copy.deepcopy(self.values)
+        return Stats.similar_to(self, init_value=values)
 
     def merge_on_time_axis(self, other: "Stats") -> None:
         # Make sure `others` have same reduction settings.
@@ -353,10 +351,6 @@ class Stats:
 
         # Extend `self`'s values by `other`'s.
         self.values.extend(other.values)
-
-        # Slice by window size, if provided.
-        if self._window not in [None, float("inf")]:
-            self.values = self.values[-self._window :]
 
         # Adopt `other`'s current throughput estimate (it's the newer one).
         if self._throughput is not False:
@@ -521,7 +515,8 @@ class Stats:
                     continue
                 tmp_values.append(stats.values[-i])
 
-            # Now reduce across `tmp_values` based on the reduce-settings of this Stats.
+            # Now reduce across `tmp_values` based on the reduce-settings of this
+            # Stats.
             # TODO (sven) : explain why all this
             if self._ema_coeff is not None:
                 new_values.extend([np.nanmean(tmp_values)] * len(tmp_values))
@@ -529,14 +524,14 @@ class Stats:
                 new_values.extend(tmp_values)
             else:
                 new_values.extend(
-                    [self._reduced_values(values=tmp_values, window=float("inf"))[0]]
+                    [self._reduced_values(values=tmp_values)[0]]
                     * len(tmp_values)
                 )
             tmp_values.clear()
             if len(new_values) >= win:
                 break
 
-        self.values = list(reversed(new_values))
+        self._set_values(list(reversed(new_values)))
 
     def set_to_numpy_values(self, values) -> None:
         """Converts `self.values` from tensors to actual numpy values.
@@ -655,7 +650,14 @@ class Stats:
         stats._hist = other._hist
         return stats
 
-    def _reduced_values(self, values=None, window=None) -> Tuple[Any, Any]:
+    def _set_values(self, new_values):
+        with self._threading_lock:
+            if not self._inf_window:
+                self.values = deque(new_values, maxlen=self._window)
+            else:
+                self.values = new_values
+
+    def _reduced_values(self, values=None) -> Tuple[Any, Any]:
         """Runs a non-commited reduction procedure on given values (or `self.values`).
 
         Note that this method does NOT alter any state of `self` or the possibly
@@ -664,20 +666,12 @@ class Stats:
 
         Args:
             values: The list of values to reduce. If not None, use `self.values`
-            window: A possible override window setting to use (instead of
-                `self._window`). Use float('inf') here for an infinite window size.
 
         Returns:
             A tuple containing 1) the reduced value and 2) the new internal values list
             to be used.
         """
         values = values if values is not None else self.values
-        window = window if window is not None else self._window
-        inf_window = window in [None, float("inf")]
-
-        # Apply the window (if provided and not inf).
-        values = values if inf_window else values[-window:]
-
         # No reduction method. Return list as-is OR reduce list to len=window.
         if self._reduce_method is None:
             return values, values
@@ -695,7 +689,7 @@ class Stats:
             mean_value = values[0]
             for v in values[1:]:
                 mean_value = self._ema_coeff * v + (1.0 - self._ema_coeff) * mean_value
-            if inf_window:
+            if self._inf_window:
                 return mean_value, [mean_value]
             else:
                 return mean_value, values
@@ -745,7 +739,7 @@ class Stats:
 
             # For window=None|inf (infinite window) and reduce != mean, we don't have to
             # keep any values, except the last (reduced) one.
-            if inf_window and self._reduce_method != "mean":
+            if self._inf_window and self._reduce_method != "mean":
                 # TODO (sven): What if values are torch tensors? In this case, we
                 #  would have to do reduction using `torch` above (not numpy) and only
                 #  then return the python primitive AND put the reduced new torch
