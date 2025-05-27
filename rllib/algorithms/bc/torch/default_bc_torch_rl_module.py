@@ -1,45 +1,51 @@
 import abc
 from typing import Any, Dict
 
-from ray.rllib.algorithms.bc.bc_catalog import BCCatalog
 from ray.rllib.core.columns import Columns
-from ray.rllib.core.models.base import ENCODER_OUT
 from ray.rllib.core.rl_module.rl_module import RLModule
 from ray.rllib.core.rl_module.torch.torch_rl_module import TorchRLModule
+from ray.rllib.core.rl_module.torch.primitives.encoder import build_encoder
+from ray.rllib.core.rl_module.torch.primitives.mlp_head import build_mlp_head
 from ray.rllib.utils.annotations import override
 from ray.util.annotations import DeveloperAPI
 
 
 @DeveloperAPI
 class DefaultBCTorchRLModule(TorchRLModule, abc.ABC):
-    """The default TorchRLModule used, if no custom RLModule is provided.
+    """The default TorchRLModule used for BC, if no custom RLModule is provided.
 
     Builds an encoder net based on the observation space.
     Builds a pi head based on the action space.
 
-    Passes observations from the input batch through the encoder, then the pi head to
-    compute action logits.
+    obs-batch -> encoder -> 1D latent -> pi-head -> action dist. parameters
     """
-
-    def __init__(self, *args, **kwargs):
-        catalog_class = kwargs.pop("catalog_class", None)
-        if catalog_class is None:
-            catalog_class = BCCatalog
-        super().__init__(*args, **kwargs, catalog_class=catalog_class)
 
     @override(RLModule)
     def setup(self):
-        # Build model components (encoder and pi head) from catalog.
         super().setup()
-        self._encoder = self.catalog.build_encoder(framework=self.framework)
-        self._pi_head = self.catalog.build_pi_head(framework=self.framework)
+
+        # Build the encoder.
+        self._encoder, output_dims = build_encoder(
+            self.observation_space,
+            self.model_config,
+        )
+        # Build the policy-head.
+        self._pi_head = build_mlp_head(
+            input_dim=output_dims[0],
+            model_config=self.model_config,
+            action_dist_class=self.get_inference_action_dist_cls(),
+            action_space=self.action_space,
+        )
 
     @override(TorchRLModule)
     def _forward(self, batch: Dict, **kwargs) -> Dict[str, Any]:
         """Generic BC forward pass (for all phases of training/evaluation)."""
+
         # Encoder embeddings.
         encoder_outs = self._encoder(batch)
-        # Action dist inputs.
+        # Pi-output.
+        logits = self._pi_head(encoder_outs)
+
         return {
-            Columns.ACTION_DIST_INPUTS: self._pi_head(encoder_outs[ENCODER_OUT]),
+            Columns.ACTION_DIST_INPUTS: logits,
         }

@@ -23,14 +23,9 @@ torch, nn = try_import_torch()
 class DefaultSACTorchRLModule(TorchRLModule, DefaultSACRLModule):
     framework: str = "torch"
 
-    def __init__(self, *args, **kwargs):
-        catalog_class = kwargs.pop("catalog_class", None)
-        if catalog_class is None:
-            catalog_class = SACCatalog
-        super().__init__(*args, **kwargs, catalog_class=catalog_class)
-
     @override(RLModule)
-    def _forward_inference(self, batch: Dict) -> Dict[str, Any]:
+    def _forward(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        """Default forward pass (used for inference and exploration)."""
         output = {}
 
         # Pi encoder forward pass.
@@ -42,11 +37,7 @@ class DefaultSACTorchRLModule(TorchRLModule, DefaultSACRLModule):
         return output
 
     @override(RLModule)
-    def _forward_exploration(self, batch: Dict, **kwargs) -> Dict[str, Any]:
-        return self._forward_inference(batch)
-
-    @override(RLModule)
-    def _forward_train(self, batch: Dict) -> Dict[str, Any]:
+    def _forward_train(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         if self.inference_only:
             raise RuntimeError(
                 "Trying to train a module that is not a learner module. Set the "

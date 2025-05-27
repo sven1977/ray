@@ -13,7 +13,7 @@ torch, nn = try_import_torch()
 logger = logging.getLogger(__name__)
 
 
-class TorchModel(nn.Module, Model, abc.ABC):
+class DEPRECATED_TorchModel(nn.Module, Model, abc.ABC):
     """Base class for RLlib's PyTorch models.
 
     This class defines the interface for RLlib's PyTorch models and checks

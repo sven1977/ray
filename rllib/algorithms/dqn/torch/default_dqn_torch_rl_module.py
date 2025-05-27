@@ -29,12 +29,6 @@ torch, nn = try_import_torch()
 class DefaultDQNTorchRLModule(TorchRLModule, DefaultDQNRLModule):
     framework: str = "torch"
 
-    def __init__(self, *args, **kwargs):
-        catalog_class = kwargs.pop("catalog_class", None)
-        if catalog_class is None:
-            catalog_class = DQNCatalog
-        super().__init__(*args, **kwargs, catalog_class=catalog_class)
-
     @override(RLModule)
     def _forward_inference(self, batch: Dict[str, TensorType]) -> Dict[str, TensorType]:
         # Q-network forward pass.

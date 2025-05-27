@@ -12,6 +12,11 @@ from ray.util.annotations import DeveloperAPI
 logger = logging.getLogger("ray.rllib")
 
 
+# For Actor-Critic algorithms, these signify data related to the actor and critic
+ACTOR: str = "actor"
+CRITIC: str = "critic"
+
+
 @DeveloperAPI
 def validate_module_id(policy_id: str, error: bool = False) -> None:
     """Makes sure the given `policy_id` is valid.

@@ -63,10 +63,6 @@ class BCTfRLModuleWithSharedGlobalEncoder(TfRLModule):
 
         return {Columns.ACTION_DIST_INPUTS: action_logits}
 
-    @override(RLModule)
-    def _default_input_specs(self):
-        return [("obs", "global"), ("obs", "local")]
-
 
 class BCTfMultiAgentModuleWithSharedEncoder(MultiRLModule):
     def setup(self):

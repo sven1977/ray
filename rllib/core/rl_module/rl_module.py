@@ -7,8 +7,6 @@ from typing import Any, Collection, Dict, Optional, Type, TYPE_CHECKING, Union
 import gymnasium as gym
 
 from ray.rllib.core import DEFAULT_MODULE_ID
-from ray.rllib.core.columns import Columns
-from ray.rllib.core.models.specs.typing import SpecType
 from ray.rllib.core.rl_module.default_model_config import DefaultModelConfig
 from ray.rllib.models.distributions import Distribution
 from ray.rllib.utils.annotations import (
@@ -593,8 +591,7 @@ class RLModule(Checkpointable, abc.ABC):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            The output of the forward pass. This output should comply with the
-            output_specs_exploration().
+            The output of the forward pass.
         """
         return self._forward_exploration(batch, **kwargs)
 
@@ -623,8 +620,7 @@ class RLModule(Checkpointable, abc.ABC):
             **kwargs: Additional keyword arguments.
 
         Returns:
-            The output of the forward pass. This output should comply with the
-            output_specs_train().
+            The output of the forward pass.
         """
         if self.inference_only:
             raise RuntimeError(
@@ -735,32 +731,6 @@ class RLModule(Checkpointable, abc.ABC):
             The underlying module.
         """
         return self
-
-    def output_specs_inference(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
-
-    def output_specs_exploration(self) -> SpecType:
-        return [Columns.ACTION_DIST_INPUTS]
-
-    def output_specs_train(self) -> SpecType:
-        """Returns the output specs of the forward_train method."""
-        return {}
-
-    def input_specs_inference(self) -> SpecType:
-        """Returns the input specs of the forward_inference method."""
-        return self._default_input_specs()
-
-    def input_specs_exploration(self) -> SpecType:
-        """Returns the input specs of the forward_exploration method."""
-        return self._default_input_specs()
-
-    def input_specs_train(self) -> SpecType:
-        """Returns the input specs of the forward_train method."""
-        return self._default_input_specs()
-
-    def _default_input_specs(self) -> SpecType:
-        """Returns the default input specs."""
-        return [Columns.OBS]
 
 
 @Deprecated(

@@ -15,7 +15,7 @@ from ray.rllib.utils.framework import try_import_torch
 torch, nn = try_import_torch()
 
 
-class TorchMLPHead(TorchModel):
+class DEPRECATED_TorchMLPHead(TorchModel):
     def __init__(self, config: MLPHeadConfig) -> None:
         super().__init__(config)
 
@@ -68,7 +68,7 @@ class TorchMLPHead(TorchModel):
             return self.net(inputs)
 
 
-class TorchFreeLogStdMLPHead(TorchModel):
+class DEPRECATED_TorchFreeLogStdMLPHead(TorchModel):
     """An MLPHead that implements floating log stds for Gaussian distributions."""
 
     def __init__(self, config: FreeLogStdMLPHeadConfig) -> None:
@@ -135,7 +135,7 @@ class TorchFreeLogStdMLPHead(TorchModel):
         return torch.cat([mean, log_std.unsqueeze(0).repeat([len(mean), 1])], axis=1)
 
 
-class TorchCNNTransposeHead(TorchModel):
+class DEPRECATED_TorchCNNTransposeHead(TorchModel):
     def __init__(self, config: CNNTransposeHeadConfig) -> None:
         super().__init__(config)
 
