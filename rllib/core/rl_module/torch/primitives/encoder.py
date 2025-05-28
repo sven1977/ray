@@ -40,9 +40,7 @@ def build_encoder(observation_space, model_config):
                     input_dims=observation_space.shape,
                     cnn_filter_specifiers=model_config["conv_filters"],
                     cnn_activation=model_config["conv_activation"],
-                    cnn_kernel_initializer=(
-                        model_config["conv_kernel_initializer"]
-                    ),
+                    cnn_kernel_initializer=(model_config["conv_kernel_initializer"]),
                     cnn_kernel_initializer_config=(
                         model_config["conv_kernel_initializer_kwargs"]
                     ),
@@ -98,7 +96,6 @@ class TorchEncoder(nn.Module):
 
 
 class TorchLSTMEncoder(nn.Module):
-
     def __init__(self, input_dim: int, model_config, base_net):
         super().__init__()
         self._base_net = base_net

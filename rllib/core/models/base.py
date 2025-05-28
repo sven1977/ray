@@ -1,14 +1,14 @@
-#import abc
-#from typing import List, Optional, Tuple, Union
+# import abc
+# from typing import List, Optional, Tuple, Union
 #
 #
-#from ray.rllib.core.columns import Columns
-#from ray.rllib.core.models.configs import ModelConfig
-#from ray.rllib.core.models.specs.specs_base import Spec
-#from ray.rllib.policy.rnn_sequencing import get_fold_unfold_fns
-#from ray.rllib.utils.annotations import ExperimentalAPI, override
-#from ray.rllib.utils.typing import TensorType
-#from ray.util.annotations import DeveloperAPI
+# from ray.rllib.core.columns import Columns
+# from ray.rllib.core.models.configs import ModelConfig
+# from ray.rllib.core.models.specs.specs_base import Spec
+# from ray.rllib.policy.rnn_sequencing import get_fold_unfold_fns
+# from ray.rllib.utils.annotations import ExperimentalAPI, override
+# from ray.rllib.utils.typing import TensorType
+# from ray.util.annotations import DeveloperAPI
 #
 ## Top level keys that unify model i/o.
 ##ENCODER_OUT: str = "encoder_out"
@@ -17,7 +17,7 @@
 ##CRITIC: str = "critic"
 #
 #
-#class DEPRECATED_Model(abc.ABC):
+# class DEPRECATED_Model(abc.ABC):
 #    """Framework-agnostic base class for RLlib models.
 #
 #    Models are low-level neural network components that offer input- and
@@ -185,7 +185,7 @@
 #        """
 #
 #
-#class DEPRECATED_Encoder(Model, abc.ABC):
+# class DEPRECATED_Encoder(Model, abc.ABC):
 #    """The framework-agnostic base class for all RLlib encoders.
 #
 #    Encoders are used to transform observations to a latent space.
@@ -285,7 +285,7 @@
 #        """
 #
 #
-#class DEPRECATED_ActorCriticEncoder(Encoder):
+# class DEPRECATED_ActorCriticEncoder(Encoder):
 #    """An encoder that potentially holds two stateless encoders.
 #
 #    This is a special case of Encoder that can either enclose a single,
@@ -343,7 +343,7 @@
 #            }
 #
 #
-#class DEPRECATED_StatefulActorCriticEncoder(Encoder):
+# class DEPRECATED_StatefulActorCriticEncoder(Encoder):
 #    """An encoder that potentially holds two potentially stateful encoders.
 #
 #    This is a special case of Encoder that can either enclose a single,
@@ -416,7 +416,7 @@
 #        return outputs
 #
 #
-#def DEPRECATED_tokenize(tokenizer: Encoder, inputs: dict, framework: str) -> dict:
+# def DEPRECATED_tokenize(tokenizer: Encoder, inputs: dict, framework: str) -> dict:
 #    """Tokenizes the observations from the input dict.
 #
 #    Args:

@@ -19,7 +19,6 @@ torch, nn = try_import_torch()
 
 
 class DefaultCQLTorchRLModule(DefaultSACTorchRLModule):
-
     @override(DefaultSACTorchRLModule)
     def _forward_train(self, batch: Dict) -> Dict[str, Any]:
         # Call the super method.

@@ -1,10 +1,11 @@
 import abc
 from typing import List
 
-#from ray.rllib.core.models.configs import RecurrentEncoderConfig
+# from ray.rllib.core.models.configs import RecurrentEncoderConfig
 from ray.rllib.core.rl_module import ACTOR, CRITIC
 from ray.rllib.core.rl_module.apis import InferenceOnlyAPI, ValueFunctionAPI
-#from ray.rllib.core.rl_module.primitives import RecurrentEncoderConfig
+
+# from ray.rllib.core.rl_module.primitives import RecurrentEncoderConfig
 from ray.rllib.core.rl_module.rl_module import RLModule
 from ray.rllib.core.rl_module.torch.primitives import build_encoder, build_mlp_head
 from ray.rllib.utils.annotations import (
@@ -49,14 +50,14 @@ class DefaultPPORLModule(RLModule, InferenceOnlyAPI, ValueFunctionAPI, abc.ABC):
             )
 
         # __sphinx_doc_begin__
-        #is_stateful = isinstance(
+        # is_stateful = isinstance(
         #    self.catalog.actor_critic_encoder_config.base_encoder_config,
         #    RecurrentEncoderConfig,
-        #)
+        # )
 
         ## If this is an `inference_only` Module, we'll have to pass this information
         ## to the encoder config as well.
-        #if self.inference_only and self.framework == "torch":
+        # if self.inference_only and self.framework == "torch":
         #    self.catalog.actor_critic_encoder_config.inference_only = True
 
         self._pi_head = build_mlp_head(

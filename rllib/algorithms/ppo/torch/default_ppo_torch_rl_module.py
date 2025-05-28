@@ -16,7 +16,6 @@ torch, nn = try_import_torch()
 
 @DeveloperAPI
 class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
-
     @override(RLModule)
     def _forward(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """Default forward pass (used for inference and exploration)."""
@@ -27,7 +26,7 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
         else:
             pi_encoder_outs = self._pi_encoder(batch)
         # Stateful encoder?
-        #if Columns.STATE_OUT in encoder_outs:
+        # if Columns.STATE_OUT in encoder_outs:
         #    output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
         # Pi head.
         output[Columns.ACTION_DIST_INPUTS] = self._pi_head(
@@ -45,10 +44,10 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
             pi_encoder_outs = self._pi_encoder(batch)
             vf_encoder_outs = self._vf_encoder(batch)
         output[Columns.EMBEDDINGS] = vf_encoder_outs[Columns.EMBEDDINGS]
-        #if Columns.STATE_OUT in encoder_outs:
+        # if Columns.STATE_OUT in encoder_outs:
         #    output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
-        output[Columns.ACTION_DIST_INPUTS] = (
-            self._pi_head(pi_encoder_outs[Columns.EMBEDDINGS])
+        output[Columns.ACTION_DIST_INPUTS] = self._pi_head(
+            pi_encoder_outs[Columns.EMBEDDINGS]
         )
         return output
 
@@ -60,7 +59,7 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
     ) -> TensorType:
         if embeddings is None:
             # Separate vf-encoder.
-            if self._vf_encoder: 
+            if self._vf_encoder:
                 batch_ = batch
                 if self.is_stateful():
                     # The recurrent encoders expect a `(state_in, h)`  key in the

@@ -33,7 +33,9 @@ class DEPRECATED_TorchActorCriticEncoder(TorchModel, ActorCriticEncoder):
         ActorCriticEncoder.__init__(self, config)
 
 
-class DEPRECATED_TorchStatefulActorCriticEncoder(TorchModel, StatefulActorCriticEncoder):
+class DEPRECATED_TorchStatefulActorCriticEncoder(
+    TorchModel, StatefulActorCriticEncoder
+):
     """A stateful actor-critic encoder for torch."""
 
     framework = "torch"

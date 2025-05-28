@@ -13,8 +13,8 @@ def build_mlp_head(
     model_config,
     *,
     output_dim: int = None,
-    action_dist_class = None,
-    action_space = None,
+    action_dist_class=None,
+    action_space=None,
 ):
     is_diag_gaussian = False
 
@@ -30,9 +30,9 @@ def build_mlp_head(
             space=action_space, model_config=model_config
         )
     else:
-        assert output_dim is not None, (
-            "`output_dim` must be provided, if `action_dist_class` is not!"
-        )
+        assert (
+            output_dim is not None
+        ), "`output_dim` must be provided, if `action_dist_class` is not!"
     return TorchMLPHead(
         input_dim=input_dim,
         model_config=model_config,
