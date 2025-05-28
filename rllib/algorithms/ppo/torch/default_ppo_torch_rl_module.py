@@ -16,7 +16,6 @@ torch, nn = try_import_torch()
 
 @DeveloperAPI
 class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
-    framework: str = "torch"
 
     @override(RLModule)
     def _forward(self, batch: Dict[str, Any], **kwargs) -> Dict[str, Any]:
@@ -31,7 +30,9 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
         #if Columns.STATE_OUT in encoder_outs:
         #    output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
         # Pi head.
-        output[Columns.ACTION_DIST_INPUTS] = self._pi_head(pi_encoder_outs)
+        output[Columns.ACTION_DIST_INPUTS] = self._pi_head(
+            pi_encoder_outs[Columns.EMBEDDINGS]
+        )
         return output
 
     @override(RLModule)
@@ -39,14 +40,16 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
         """Train forward pass (keep embeddings for possible shared value func. call)."""
         output = {}
         if self._encoder:
-            pi_encoder_outs = vf_encoder_outs = self._encoder(batch[Columns.OBS])
+            pi_encoder_outs = vf_encoder_outs = self._encoder(batch)
         else:
             pi_encoder_outs = self._pi_encoder(batch)
             vf_encoder_outs = self._vf_encoder(batch)
-        output[Columns.EMBEDDINGS] = vf_encoder_outs
+        output[Columns.EMBEDDINGS] = vf_encoder_outs[Columns.EMBEDDINGS]
         #if Columns.STATE_OUT in encoder_outs:
         #    output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
-        output[Columns.ACTION_DIST_INPUTS] = self._pi_head(pi_encoder_outs)
+        output[Columns.ACTION_DIST_INPUTS] = (
+            self._pi_head(pi_encoder_outs[Columns.EMBEDDINGS])
+        )
         return output
 
     @override(ValueFunctionAPI)
@@ -64,10 +67,10 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
                     # input dict while the key returned is `(state_in, critic, h)`.
                     batch_ = batch.copy()
                     batch_[Columns.STATE_IN] = batch[Columns.STATE_IN][CRITIC]
-                embeddings = self._vf_encoder(batch_)
+                embeddings = self._vf_encoder(batch_)[Columns.EMBEDDINGS]
             # Shared encoder.
             else:
-                embeddings = self._encoder(batch)
+                embeddings = self._encoder(batch)[Columns.EMBEDDINGS]
 
         # Value head.
         vf_out = self._vf_head(embeddings)

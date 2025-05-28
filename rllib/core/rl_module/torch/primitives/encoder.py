@@ -90,8 +90,8 @@ class TorchEncoder(nn.Module):
         super().__init__()
         self._base_net = base_net
 
-    def forward(self, inputs):
-        return {Columns.EMBEDDINGS: self._base_net(inputs)}
+    def forward(self, batch):
+        return {Columns.EMBEDDINGS: self._base_net(batch[Columns.OBS])}
 
     def get_initial_state(self):
         return {}
@@ -142,15 +142,15 @@ class TorchLSTMEncoder(nn.Module):
                     **self._model_config["lstm_bias_initializer_kwargs"] or {},
                 )
 
-    def forward(self, inputs: dict, **kwargs):
+    def forward(self, batch: dict, **kwargs):
         outputs = {}
 
         # Push observations through the tokenizer encoder if we built one.
-        out = self._base_net(inputs[Columns.OBS])
+        out = self._base_net(batch[Columns.OBS])
 
         # States are batch-first when coming in. Make them layers-first.
         states_in = tree.map_structure(
-            lambda s: s.transpose(0, 1), inputs[Columns.STATE_IN]
+            lambda s: s.transpose(0, 1), batch[Columns.STATE_IN]
         )
 
         out, states_out = self._lstm(out, (states_in["h"], states_in["c"]))

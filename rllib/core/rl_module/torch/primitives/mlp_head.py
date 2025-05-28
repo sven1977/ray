@@ -12,9 +12,9 @@ def build_mlp_head(
     input_dim,
     model_config,
     *,
+    output_dim: int = None,
     action_dist_class = None,
     action_space = None,
-    output_dim: int = None,
 ):
     is_diag_gaussian = False
 
@@ -29,19 +29,16 @@ def build_mlp_head(
         output_dim = action_dist_class.required_input_dim(
             space=action_space, model_config=model_config
         )
+    else:
+        assert output_dim is not None, (
+            "`output_dim` must be provided, if `action_dist_class` is not!"
+        )
     return TorchMLPHead(
         input_dim=input_dim,
         model_config=model_config,
         output_dim=output_dim,
         clip_log_std=is_diag_gaussian,
     )
-    # With the action distribution class and the number of outputs defined,
-    # we can build the config for the policy head.
-    # pi_head_cls = (
-    #    FreeLogStdMLPHeadConfig
-    #    if self.model_config["free_log_std"]
-    #    else MLPHeadConfig
-    # )
 
 
 class TorchMLPHead(torch.nn.Module):
@@ -67,8 +64,6 @@ class TorchMLPHead(torch.nn.Module):
             input_dim=input_dim,
             hidden_layer_dims=model_config["head_fcnet_hiddens"],
             hidden_layer_activation=model_config["head_fcnet_activation"],
-            #hidden_layer_use_layernorm=config.hidden_layer_use_layernorm,
-            #hidden_layer_use_bias=config.hidden_layer_use_bias,
             hidden_layer_weights_initializer=(
                 model_config["head_fcnet_kernel_initializer"]
             ),
@@ -81,7 +76,6 @@ class TorchMLPHead(torch.nn.Module):
             ),
             output_dim=self._half_output_dim if self._free_log_std else output_dim,
             output_activation="linear",
-            #output_use_bias=config.output_layer_use_bias,
             # TODO (sven): Does the output layer need its own initialization settings?
             output_weights_initializer=model_config["head_fcnet_kernel_initializer"],
             output_weights_initializer_config=(
@@ -116,8 +110,8 @@ class TorchMLPHead(torch.nn.Module):
                 mean, log_std = torch.chunk(output, chunks=2, dim=-1)
             log_std = torch.clamp(
                 log_std,
-                -self._log_std_clip_param_const,
-                self._log_std_clip_param_const,
+                -self._log_std_clip_param,
+                self._log_std_clip_param,
             )
             if self._free_log_std:
                 return torch.cat(
