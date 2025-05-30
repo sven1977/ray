@@ -454,14 +454,15 @@ class RLModule(Checkpointable, abc.ABC):
                 framework=self.framework
             )
 
+        self._cached_is_stateful = None
+
         # Make sure, `setup()` is only called once, no matter what.
         if hasattr(self, "_is_setup") and self._is_setup:
             raise RuntimeError(
                 "`RLModule.setup()` called twice within your RLModule implementation "
                 f"{self}! Make sure you are using the proper inheritance order "
-                "(TorchRLModule before [Algo]RLModule) or (TfRLModule before "
-                "[Algo]RLModule) and that you are NOT overriding the constructor, but "
-                "only the `setup()` method of your subclass."
+                "(TorchRLModule before [Algo]RLModule) and that you are NOT overriding "
+                "the constructor, but only the `setup()` method of your subclass."
             )
         try:
             self.setup()
@@ -660,12 +661,15 @@ class RLModule(Checkpointable, abc.ABC):
         state is an empty dict and recurrent otherwise.
         This behavior can be customized by overriding this method.
         """
-        initial_state = self.get_initial_state()
-        assert isinstance(initial_state, dict), (
-            "The initial state of an RLModule must be a dict, but is "
-            f"{type(initial_state)} instead."
-        )
-        return bool(initial_state)
+        if self._cached_is_stateful is None:
+            initial_state = self.get_initial_state()
+            assert isinstance(initial_state, dict), (
+                "The initial state of an RLModule must be a dict, but is "
+                f"{type(initial_state)} instead."
+            )
+            self._cached_is_stateful = bool(initial_state)
+
+        return self._cached_is_stateful
 
     @OverrideToImplementCustomLogic
     @override(Checkpointable)

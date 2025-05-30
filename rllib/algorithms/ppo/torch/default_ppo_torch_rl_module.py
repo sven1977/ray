@@ -24,10 +24,10 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
         if self._encoder:
             pi_encoder_outs = self._encoder(batch)
         else:
-            pi_encoder_outs = self._pi_encoder(batch)
+            pi_encoder_outs = self._separate_encoder_forward(batch, vf=False)
         # Stateful encoder?
-        # if Columns.STATE_OUT in encoder_outs:
-        #    output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
+        if Columns.STATE_OUT in pi_encoder_outs:
+            output[Columns.STATE_OUT] = pi_encoder_outs[Columns.STATE_OUT]
         # Pi head.
         output[Columns.ACTION_DIST_INPUTS] = self._pi_head(
             pi_encoder_outs[Columns.EMBEDDINGS]
@@ -41,8 +41,8 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
         if self._encoder:
             pi_encoder_outs = vf_encoder_outs = self._encoder(batch)
         else:
-            pi_encoder_outs = self._pi_encoder(batch)
-            vf_encoder_outs = self._vf_encoder(batch)
+            pi_encoder_outs = self._separate_encoder_forward(batch, vf=False)
+            vf_encoder_outs = self._separate_encoder_forward(batch, vf=True)
         output[Columns.EMBEDDINGS] = vf_encoder_outs[Columns.EMBEDDINGS]
         # if Columns.STATE_OUT in encoder_outs:
         #    output[Columns.STATE_OUT] = encoder_outs[Columns.STATE_OUT]
@@ -60,18 +60,31 @@ class DefaultPPOTorchRLModule(TorchRLModule, DefaultPPORLModule):
         if embeddings is None:
             # Separate vf-encoder.
             if self._vf_encoder:
-                batch_ = batch
-                if self.is_stateful():
-                    # The recurrent encoders expect a `(state_in, h)`  key in the
-                    # input dict while the key returned is `(state_in, critic, h)`.
-                    batch_ = batch.copy()
-                    batch_[Columns.STATE_IN] = batch[Columns.STATE_IN][CRITIC]
-                embeddings = self._vf_encoder(batch_)[Columns.EMBEDDINGS]
+                encoder_outs = self._separate_encoder_forward(batch, vf=True)
             # Shared encoder.
             else:
-                embeddings = self._encoder(batch)[Columns.EMBEDDINGS]
+                encoder_outs = self._encoder(batch)
+            embeddings = encoder_outs[Columns.EMBEDDINGS]
 
         # Value head.
         vf_out = self._vf_head(embeddings)
         # Squeeze out last dimension (single node value head).
         return vf_out.squeeze(-1)
+
+    def _separate_encoder_forward(self, batch, *, vf=False):
+        batch_ = batch
+        if self.is_stateful():
+            # The recurrent encoders expect a `(state_in, h)`  key in the
+            # input dict while the key returned is `(state_in, critic, h)`.
+            batch_ = batch.copy()
+            key = CRITIC if vf else ACTOR
+            if (
+                isinstance(batch[Columns.STATE_IN], dict)
+                and key in batch[Columns.STATE_IN]
+            ):
+                batch_[Columns.STATE_IN] = batch[Columns.STATE_IN][key]
+
+        if vf:
+            return self._vf_encoder(batch_)
+        else:
+            return self._pi_encoder(batch_)
